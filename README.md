@@ -4,15 +4,15 @@
 Ensure MongoDB is running locally
 
 ### Frontend (1 Terminal)
-```bash```
-cd frontend
-npm install
-npm start
+- ```bash```
+- **cd frontend**
+- **npm install**
+- **npm start**
 
 ### Backend (1 Terminal)
-cd backend
-npm install
-node src/index.js
+- **cd backend**
+- **npm install**
+- **node src/index.js**
 
 
 
