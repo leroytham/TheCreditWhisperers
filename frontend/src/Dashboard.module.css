@@ -1,0 +1,136 @@
+/* Root layout */
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr 320px;
+  background: var(--bg, #f7f7fb);
+  color: var(--fg, #0f172a);
+}
+
+/* Dark mode via module-scoped class on <html> */
+.darkRoot :global(body) { background: #0b1020; }
+.darkRoot :global(#root) { color-scheme: dark; }
+.darkRoot .app { --bg: #0b1020; --fg: #e5e7eb; --card: #0f152b; --muted: #9aa4b2; --border: #20283e; }
+.app { --card:#fff; --muted:#6b7280; --border:#e5e7eb; }
+
+/* Sidebar */
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: 16px;
+}
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.brandIcon { width: 36px; height: 36px; border-radius: 12px; background: #e6eeff; display:grid; place-items:center; }
+.brandText { font-weight: 600; }
+.nav { display: grid; gap: 6px; }
+.navItem {
+  text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid transparent;
+  color: var(--muted); background: transparent; cursor: pointer;
+}
+.navItem:hover { background: rgba(100,100,255,0.06); color: inherit; }
+.navActive { background: rgba(100,100,255,0.12); color: inherit; border-color: var(--border); }
+.shortcuts { margin-top: 16px; }
+.shortcutTitle { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.badgeRow { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge { font-size: 12px; padding: 6px 10px; background: rgba(0,0,0,0.06); border-radius: 999px; }
+
+/* Right panel */
+.right { border-left: 1px solid var(--border); padding: 16px; display: grid; gap: 16px; }
+
+/* Main column */
+.main { display: grid; grid-template-rows: auto 1fr; }
+.header {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+  padding: 16px; border-bottom: 1px solid var(--border);
+}
+.hLeft { display: flex; align-items: center; gap: 10px; }
+.hLogo { width: 36px; height: 36px; border-radius: 12px; background: #e6ffef; display:grid; place-items:center; }
+.hTitle { font-weight: 600; }
+.hSubtitle { font-size: 12px; color: var(--muted); }
+.hSearchRow { display: none; gap: 8px; }
+@media (min-width: 900px) { .hSearchRow { display: flex; } }
+.searchWrap { flex: 1; }
+.search {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: transparent; color: inherit;
+}
+.hRight { display: flex; align-items: center; gap: 8px; }
+.iconBtn { position: relative; border: 1px solid var(--border); border-radius: 12px; background: transparent; padding: 8px 10px; }
+.pill { position: absolute; top: -6px; right: -6px; background: #2563eb; color: #fff; font-size: 10px; border-radius: 999px; width: 16px; height: 16px; display:grid; place-items:center; }
+.userChip { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 14px; padding: 6px 8px; }
+.avatar { width: 28px; height: 28px; border-radius: 999px; background: #dbeafe; display:grid; place-items:center; font-size: 12px; }
+.userName { font-size: 12px; }
+.userRole { font-size: 11px; color: var(--muted); }
+
+/* Buttons, tabs */
+.btnPrimary, .btnOutline, .btnGhost {
+  border-radius: 12px; padding: 8px 12px; font-size: 14px; cursor: pointer; background: transparent;
+}
+.btnPrimary { background: #2563eb; color: #fff; border: 1px solid #2563eb; }
+.btnPrimary:hover { filter: brightness(1.05); }
+.btnOutline { border: 1px solid var(--border); color: inherit; }
+.btnOutline:hover { background: rgba(0,0,0,0.05); }
+.btnGhost { border: 1px solid transparent; color: inherit; }
+.btnGhost:hover { background: rgba(0,0,0,0.05); }
+
+.tabs { display: flex; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 4px; }
+.tab {
+  border: 1px solid transparent; border-radius: 999px; padding: 6px 10px; font-size: 13px; color: var(--muted); background: transparent;
+}
+.tabActive { background: rgba(37,99,235,0.1); color: inherit; }
+
+/* Content area */
+.content { padding: 16px; display: grid; gap: 16px; }
+.kpiGrid { display: grid; grid-template-columns: repeat(1,1fr); gap: 16px; }
+@media (min-width: 640px){ .kpiGrid { grid-template-columns: repeat(2,1fr); } }
+@media (min-width: 1200px){ .kpiGrid { grid-template-columns: repeat(4,1fr); } }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+.cardRow { display: flex; align-items: center; justify-content: space-between; }
+.cardTitle { font-weight: 600; margin-bottom: 8px; }
+
+.kpiLabel { font-size: 12px; color: var(--muted); }
+.kpiValue { margin-top: 6px; font-size: 22px; font-weight: 600; }
+.delta { font-size: 12px; border-radius: 999px; padding: 4px 8px; }
+.deltaUp { background: rgba(16,185,129,0.2); color: #047857; }
+.deltaDown { background: rgba(239,68,68,0.2); color: #b91c1c; }
+
+.chartGrid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 1200px){ .chartGrid { grid-template-columns: 1fr 1fr; } }
+.chartPlaceholder {
+  height: 250px; border: 1px dashed var(--border); border-radius: 12px; display:grid; place-items:center; color: var(--muted);
+}
+
+/* Table */
+.tableHeader {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.tableWrap { overflow-x: auto; }
+.table {
+  width: 100%; border-collapse: collapse; font-size: 14px;
+}
+.table thead th { text-align: left; color: var(--muted); padding: 10px 0; }
+.table tbody tr { border-top: 1px solid var(--border); }
+.table tbody td { padding: 12px 0; }
+.tdRight { text-align: right; }
+
+.projectCell { display: flex; align-items: center; gap: 8px; }
+.projectIcon { width: 32px; height: 32px; border-radius: 10px; background: rgba(0,0,0,0.06); display:grid; place-items:center; }
+.projectName { font-weight: 500; }
+.projectSub { font-size: 12px; color: var(--muted); }
+
+.status { font-size: 12px; padding: 4px 8px; border-radius: 999px; }
+.stOk { background: rgba(16,185,129,0.15); color: #047857; }
+.stWarn { background: rgba(239,68,68,0.15); color: #b91c1c; }
+
+.gUp { color: #047857; }
+.gDown { color: #b91c1c; }
+
+/* Small screens: collapse right panel */
+@media (max-width: 1400px) {
+  .app { grid-template-columns: 240px 1fr; }
+  .right { display: none; }
+}
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+}

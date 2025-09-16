@@ -1,0 +1,17 @@
+{
+  "Information Technology": {
+    "yahoo": "Technology",
+    "finnhub": "Information Technology",
+    "alpha_vantage": "Tech"
+  },
+  "Healthcare": {
+    "yahoo": "Healthcare",
+    "finnhub": "Health Care",
+    "alpha_vantage": "Pharma"
+  },
+  "Financials": {
+    "yahoo": "Financial Services",
+    "finnhub": "Banks",
+    "alpha_vantage": "Finance"
+  }
+}
