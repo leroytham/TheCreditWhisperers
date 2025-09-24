@@ -1,0 +1,16 @@
+
+
+
+# LOGIC - categorise the article based on article titles based on event types like acquisition or earnings 
+# Here pipeline = a ready-made wrapper that strings together the steps of:
+# Tokenizing text,
+# Running it through a model,
+# Decoding the output,
+# Returning human-friendly results.
+
+
+# can do entity check - check if article is jusst mentioned in passing or the main subject 
+# maybe can extract the tone of the article 
+# #yahoo queries for > 3 months
+
+
