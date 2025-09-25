@@ -1,0 +1,6 @@
+cd in frontend 
+npm start 
+
+
+cd in backend 
+node index.js 

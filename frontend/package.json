@@ -1,4 +1,7 @@
+ 
+
 {
+  "proxy": "http://127.0.0.1:8000",
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
@@ -11,6 +14,7 @@
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2",
     "react-scripts": "5.0.1",
+    "recharts": "^3.2.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

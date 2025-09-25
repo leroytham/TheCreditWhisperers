@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import SignupCard from "./SignupCard";
 import LoginCard from "./LoginPage";
 import Dashboard from "./new_dashboard";
+import Dashboardnew from "./Dashboard";
 
 function App() {
   return (
@@ -14,6 +15,8 @@ function App() {
         <Route path="/signup" element={<SignupCard />} />
         <Route path="/login" element={<LoginCard />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard_new" element={<Dashboardnew />} />
+
         <Route path="/" element={<SignupCard />} /> 
       </Routes>
     </Router>
