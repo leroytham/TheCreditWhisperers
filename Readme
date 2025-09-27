@@ -1,16 +1,48 @@
+# The Credit Whisperers
 
+A full-stack project for financial news and sentiment analysis.
 
+## Tech Stack
 
-# LOGIC - categorise the article based on article titles based on event types like acquisition or earnings 
-# Here pipeline = a ready-made wrapper that strings together the steps of:
-# Tokenizing text,
-# Running it through a model,
-# Decoding the output,
-# Returning human-friendly results.
+- **Frontend:** React (Vite), JavaScript, CSS
+- **Backend:** Node.js, Express, MongoDB
+- **API:** RESTful endpoints for authentication, news, sentiment, and entity search
+- **Other:** Axios (API calls), JWT (auth), Mongoose (MongoDB ODM)
 
+## Project Structure
 
-# can do entity check - check if article is jusst mentioned in passing or the main subject 
-# maybe can extract the tone of the article 
-# #yahoo queries for > 3 months
+- `frontend/` — React + Vite app for UI, charts, filters, search, and news
+- `backend/` — Express API with MongoDB for authentication, news, and data
 
+## Quick Start
 
+1. **Clone the repository**
+2. **Install dependencies**
+   - In `frontend/`: `npm install`
+   - In `backend/`: `npm install`
+3. **Set up environment variables**
+   - In `backend/.env`:
+     ```
+     MONGO_URI=mongodb://localhost:27017
+     JWT_SECRET=your_super_secret_key
+     ```
+4. **Start the backend**
+   - `cd backend`
+   - `node index.js`
+5. **Start the frontend**
+   - `cd frontend`
+   - `npm run dev`
+6. **Open the app**
+   - Visit [http://localhost:5173](http://localhost:5173)
+
+## Features
+- User registration and login
+- Entity search with autocomplete
+- News section with sentiment scores
+- Sentiment and price charts
+- Industry comparison chart
+- Filters for sector, region, and time window
+
+---
+
+See `frontend/README.md` and `backend/README.md` for more details on each part.
