@@ -2,8 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import SignupCard from "./SignupCard";
 import LoginCard from "./LoginPage";
-import Dashboard from "./new_dashboard";
-import Dashboardnew from "./Dashboard";
+import FinancialDashboard from "./pages/FinancialDashboard";
 
 function App() {
   return (
@@ -14,8 +13,7 @@ function App() {
       <Routes>
         <Route path="/signup" element={<SignupCard />} />
         <Route path="/login" element={<LoginCard />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dashboard_new" element={<Dashboardnew />} />
+        <Route path="/financial_dashboard" element={<FinancialDashboard />} />
 
         <Route path="/" element={<SignupCard />} /> 
       </Routes>

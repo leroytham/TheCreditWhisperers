@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import './LoginCard.css'; 
+import './index.css'; 
 import { Link } from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
 
@@ -28,7 +28,7 @@ export default function LoginCard() {
       if (data.success) {
         setMessage("Login successful!");
         sessionStorage.setItem("user", JSON.stringify(data.user));
-        navigate("/dashboard");
+        navigate("/financial_dashboard");
 
         if (remember) {
           localStorage.setItem("user", JSON.stringify(data.user));

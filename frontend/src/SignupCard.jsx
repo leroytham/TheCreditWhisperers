@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import "./SignupCard.css"; // make sure you style here
+import "./index.css"; // make sure you style here
 
 export default function SignupCard() {
   const [username, setUsername] = useState("");
