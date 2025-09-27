@@ -1,13 +1,57 @@
 # data_processing.py
+import sys
+import os
+import warnings
+
+# Suppress ML library outputs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # For TensorFlow
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'  # For Transformers
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Suppress tokenizers warnings
+warnings.filterwarnings('ignore')
+
+# Set logging levels before importing transformers
+import logging
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR)
+
+# Redirect stdout temporarily if needed
+import io
+from contextlib import redirect_stdout
+
+# Your other imports here...
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from collections import defaultdict
+
+# Capture any output from transformers import
+old_stdout = sys.stdout
+sys.stdout = io.StringIO()
+
 from transformers import pipeline
+
+# Restore stdout after import
+sys.stdout = old_stdout
+
+# Load FinBERT pipeline once (so it's not reloaded every call)
+# Wrap this in a function to control when it loads
+def get_finbert_pipeline():
+    """Initialize FinBERT pipeline with suppressed output"""
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    
+    try:
+        pipeline_obj = pipeline("text-classification", model="ProsusAI/finbert")
+        return pipeline_obj
+    finally:
+        sys.stdout = old_stdout
+
+# Initialize the pipeline
+finbert = get_finbert_pipeline()
 
 
 # Load FinBERT pipeline once (so it’s not reloaded every call)
-finbert = pipeline("text-classification", model="ProsusAI/finbert")
+# finbert = pipeline("text-classification", model="ProsusAI/finbert")
 
 # -------------------------------
 # 1. Download 1-year daily ticker data
@@ -20,12 +64,12 @@ def get_data(ticker, period="1y", interval="1d"):
     try:
         data = yf.Ticker(ticker).history(period=period, interval=interval)
         if data.empty:
-            print(f"Warning: No data returned for ticker {ticker}")
+            print(f"Warning: No data returned for ticker {ticker}", file=sys.stderr)
             return None
         data.index = data.index.tz_localize(None)
         return data
     except Exception as e:
-        print(f"Error downloading data for {ticker}: {e}")
+        print(f"Error downloading data for {ticker}: {e}", file=sys.stderr)
         return None
 
 
@@ -97,8 +141,8 @@ def get_ticker_news(ticker, count=5, tab="news"):
         return news_list
 
     except Exception as e:
-        print(f"Error fetching news for {ticker}: {e}")
-        return []
+        print(f"Error fetching news for {ticker}: {e}", file=sys.stderr)
+        return None
 
 
 # -------------------------------
@@ -152,8 +196,8 @@ def get_ticker_press_releases_news(ticker, count=100, tab="press releases"):
         return news_list
 
     except Exception as e:
-        print(f"Error fetching news for {ticker}: {e}")
-        return []
+        print(f"Error fetching news for {ticker}: {e}", file=sys.stderr)
+        return None
     
 
 # # -------------------------------
@@ -383,8 +427,8 @@ def fetch_news_around_date(ticker, target_date, window=3, count=200):
         return news_list
 
     except Exception as e:
-        print(f"Error fetching news around {target_date} for {ticker}: {e}")
-        return []
+        print(f"Error fetching news around {target_date} for {ticker}: {e}", file=sys.stderr)
+        return None
 
 
 

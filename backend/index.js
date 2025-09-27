@@ -5,8 +5,8 @@ const { MongoClient, ObjectId } = require('mongodb');
 const bcrypt = require('bcrypt');
 const { spawn } = require('child_process');  
 const msal = require('@azure/msal-node'); 
-const PORT = process.env.PORT || 5050;
-
+const PORT = process.env.PORT || 8000;
+// const { spawn } = require('child_process');
 
 
 
@@ -168,6 +168,203 @@ app.get('/articles', (req, res) => {
       console.error("JSON parse error:", err);
       res.status(500).json({ success: false, message: "Failed to parse Python output" });
     }
+  });
+});
+
+
+
+
+app.get('/api/price', async (req, res) => {
+  const { ticker = 'AAPL', timeframe = '1M' } = req.query;
+  const py = spawn('python', ['app.py', 'price', ticker, timeframe]);
+  let data = '';
+  let error = '';
+  
+  py.stdout.on('data', chunk => {
+    data += chunk.toString();
+  });
+  
+  py.stderr.on('data', chunk => { 
+    error += chunk.toString(); 
+  });
+  
+  py.on('close', code => {
+    console.log('=== DEBUG OUTPUT ===');
+    console.log('Exit code:', code);
+    console.log('Raw stdout:', JSON.stringify(data));
+    console.log('Raw stderr:', JSON.stringify(error));
+    console.log('First 100 chars:', data.substring(0, 100));
+    console.log('==================');
+    
+    if (code !== 0) {
+      return res.status(500).json({ 
+        success: false, 
+        error: `Script failed with code ${code}`,
+        stderr: error,
+        stdout: data
+      });
+    }
+    
+    try {
+      // Clean the data more aggressively
+      let cleanData = data.trim();
+      
+      // Remove everything before the first {
+      const jsonStart = cleanData.indexOf('{');
+      if (jsonStart === -1) {
+        throw new Error('No JSON object found in output');
+      }
+      cleanData = cleanData.substring(jsonStart);
+      
+      // Find the end of the JSON object
+      let braceCount = 0;
+      let jsonEnd = -1;
+      for (let i = 0; i < cleanData.length; i++) {
+        if (cleanData[i] === '{') braceCount++;
+        if (cleanData[i] === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            jsonEnd = i + 1;
+            break;
+          }
+        }
+      }
+      
+      if (jsonEnd > 0) {
+        cleanData = cleanData.substring(0, jsonEnd);
+      }
+      
+      console.log('Cleaned data:', JSON.stringify(cleanData));
+      const result = JSON.parse(cleanData);
+      res.json(result);
+      
+    } catch (err) {
+      console.error('JSON parse error:', err.message);
+      res.status(500).json({ 
+        success: false, 
+        error: `Failed to parse JSON: ${err.message}`, 
+        raw: data,
+        stderr: error,
+        firstChar: data.length > 0 ? data.charCodeAt(0) : 'empty'
+      });
+    }
+  });
+});
+
+// --- API endpoint: Get news with sentiment ---
+app.get('/api/news', async (req, res) => {
+  const { ticker = 'AAPL' } = req.query;
+  const py = spawn('python', ['app.py', 'news', ticker]);
+  let data = '';
+  let error = '';
+  
+  py.stdout.on('data', chunk => {
+    data += chunk.toString();
+  });
+  
+  py.stderr.on('data', chunk => { 
+    error += chunk.toString(); 
+  });
+  
+  py.on('close', code => {
+    console.log('=== NEWS DEBUG ===');
+    console.log('Raw output:', JSON.stringify(data));
+    console.log('=================');
+    
+    if (code !== 0) {
+      return res.status(500).json({ success: false, error, stderr: error, stdout: data });
+    }
+    
+    try {
+      let cleanData = data.trim();
+      const jsonStart = cleanData.indexOf('{');
+      if (jsonStart !== -1) {
+        cleanData = cleanData.substring(jsonStart);
+      }
+      
+      const result = JSON.parse(cleanData);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ 
+        success: false, 
+        error: err.message, 
+        raw: data,
+        stderr: error
+      });
+    }
+  });
+});
+
+// --- API endpoint: Get significant price moves ---
+app.get('/api/large_moves', async (req, res) => {
+  const { ticker = 'AAPL', timeframe = '1M' } = req.query;
+  const py = spawn('python', ['app.py', 'large_moves', ticker, timeframe]);
+  let data = '';
+  let error = '';
+  py.stdout.on('data', chunk => {
+  data += chunk.toString();
+  });
+  py.stderr.on('data', chunk => { error += chunk.toString(); });
+  py.on('close', code => {
+    // Filter out lines before the JSON
+    const jsonStart = data.indexOf('{');
+    if (jsonStart !== -1) {
+      data = data.slice(jsonStart);
+    }
+    try {
+      res.json(JSON.parse(data));
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message, raw: data });
+    }
+  });
+});
+
+// --- API endpoint: Get daily sentiment ---
+app.get('/api/daily_sentiment', async (req, res) => {
+  const { ticker = 'AAPL' } = req.query;
+  const py = spawn('python', ['app.py', 'daily_sentiment', ticker]);
+  let data = '';
+  let error = '';
+  py.stdout.on('data', chunk => {
+  data += chunk.toString();
+  });
+  py.stderr.on('data', chunk => { error += chunk.toString(); });
+  py.on('close', code => {
+    // Filter out lines before the JSON
+    const jsonStart = data.indexOf('{');
+    if (jsonStart !== -1) {
+      data = data.slice(jsonStart);
+    }
+    try {
+      res.json(JSON.parse(data));
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message, raw: data });
+    }
+  });
+});
+
+// --- API endpoint: Get news around a date ---
+app.get('/api/news_around_date', async (req, res) => {
+  const { ticker = 'AAPL', date } = req.query;
+  if (!date) return res.status(400).json({ success: false, error: 'Missing date' });
+  const py = spawn('python', ['app.py', 'news_around_date', ticker, date]);
+  let data = '';
+  let error = '';
+  py.stdout.on('data', chunk => {
+  data += chunk.toString();
+  });
+  py.stderr.on('data', chunk => { error += chunk.toString(); });
+  py.on('close', code => {
+  // Filter out lines before the JSON
+  const jsonStart = data.indexOf('{');
+  if (jsonStart !== -1) {
+    data = data.slice(jsonStart);
+  }
+  try {
+    res.json(JSON.parse(data));
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, raw: data });
+  }
   });
 });
 
