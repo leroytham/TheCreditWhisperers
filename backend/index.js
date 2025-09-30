@@ -122,7 +122,7 @@ app.get('/auth/callback', async (req, res) => {
     console.log("Azure Login Success:", response.account);
 
     res.redirect(
-      `http://localhost:3000/article?user=${encodeURIComponent(response.account.username)}`
+      `http://localhost:3000/financial_dashboard?user=${encodeURIComponent(response.account.username)}`
     );
   } catch (err) {
     console.error("Azure login error:", err);
