@@ -263,14 +263,24 @@ const FinancialDashboard = () => {
                 <span className="text-4xl font-bold">
                   {currentPrice ? currentPrice.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'}
                 </span>
-                <span className={`flex items-center ${
+                <span className={`flex items-center text-xl ${
                   priceChange >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
                   {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} 
                   <span className="ml-1">{priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%</span>
                 </span>
               </div>
-              <p className="text-gray-600 text-sm">As of {currentPrice ? currentPrice.date : 'Loading...'}</p>
+              <p className="text-gray-600 text-sm">
+                As of {currentPrice ? new Date(currentPrice.date).toLocaleString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  year: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
+                  timeZoneName: 'short'
+                }) : 'Loading...'}
+              </p>
             </div>
 
             {/* Chart Controls */}
