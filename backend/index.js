@@ -176,46 +176,82 @@ app.get('/articles', (req, res) => {
 
 app.get('/api/price', async (req, res) => {
   const { ticker = 'AAPL', timeframe = '1M' } = req.query;
-  // Link to app.py for price endpoint
-  const py = spawn('python', ['app.py', 'price', ticker, timeframe], { cwd: __dirname });
-  let data = '';
-  let error = '';
-  py.stdout.on('data', chunk => {
-    data += chunk.toString();
-  });
-  py.stderr.on('data', chunk => { error += chunk.toString(); });
-  py.on('close', code => {
-    if (code !== 0) {
-      return res.status(500).json({ success: false, error: `Script failed with code ${code}`, stderr: error, stdout: data });
-    }
-    try {
-      const result = JSON.parse(data.trim());
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ success: false, error: `Failed to parse JSON: ${err.message}`, raw: data, stderr: error });
-    }
-  });
+  // Only pass Python code as a string to spawn. Do not call get_data/filter_data in Node.js.
+    const pyCode = [
+      "import sys",
+      "from data_processing import get_data, filter_data",
+      "import json",
+      "ticker = sys.argv[1]",
+      "timeframe = sys.argv[2]",
+      "df = get_data(ticker)",
+      "if df is None:",
+      "    print(json.dumps({'error': 'Failed to get data'}))",
+      "    sys.exit(1)",
+      "df_filtered = filter_data(df, timeframe)",
+      "prices = [{'date': str(idx.date()), 'close': float(row['Close'])} for idx, row in df_filtered.iterrows()]",
+      "print(json.dumps({'prices': prices}))"
+    ].join('\n');
+    const py = spawn('python', ['-c', pyCode, ticker, timeframe], { cwd: __dirname });
+    let data = '';
+    let error = '';
+    py.stdout.on('data', chunk => { data += chunk.toString(); });
+    py.stderr.on('data', chunk => { error += chunk.toString(); });
+    py.on('error', err => {
+      console.error('Failed to start Python process:', err);
+      return res.status(500).json({ success: false, error: 'Failed to start Python process', details: err.message });
+    });
+    py.on('close', code => {
+      if (code !== 0) {
+        console.error('Python process exited with code', code, 'stderr:', error, 'stdout:', data);
+        return res.status(500).json({ success: false, error: error, stdout: data });
+      }
+      try {
+        const result = JSON.parse(data.trim());
+        res.json(result);
+      } catch (err) {
+        console.error('JSON parse error:', err, 'Raw output:', data);
+        res.status(500).json({ success: false, error: err.message, raw: data, stderr: error });
+      }
+    });
 });
 
 // --- API endpoint: Get news with sentiment ---
 app.get('/api/news', async (req, res) => {
   const { ticker = 'AAPL' } = req.query;
-  // Link to app.py for news endpoint
-  const py = spawn('python', ['app.py', 'news', ticker], { cwd: __dirname });
+  const pyCode = [
+    "import sys",
+    "from data_processing import get_ticker_news, analyze_sentiment",
+    "import json",
+    "ticker = sys.argv[1]",
+    "news_articles = get_ticker_news(ticker, count=50)",
+    "if news_articles is None:",
+    "    print(json.dumps({'error': 'Failed to get news'}))",
+    "    sys.exit(1)",
+    "results, avg_score, _, _ = analyze_sentiment(news_articles)",
+    "for article in results:",
+    "    article['sentiment_label'] = article.get('sentiment_label', '')",
+    "    article['sentiment_score'] = float(article.get('sentiment_score', 0))",
+    "print(json.dumps({'news': results, 'avg_score': float(avg_score)}))"
+  ].join('\n');
+  const py = spawn('python', ['-c', pyCode, ticker], { cwd: __dirname });
   let data = '';
   let error = '';
-  py.stdout.on('data', chunk => {
-    data += chunk.toString();
-  });
+  py.stdout.on('data', chunk => { data += chunk.toString(); });
   py.stderr.on('data', chunk => { error += chunk.toString(); });
+  py.on('error', err => {
+    console.error('Failed to start Python process:', err);
+    return res.status(500).json({ success: false, error: 'Failed to start Python process', details: err.message });
+  });
   py.on('close', code => {
     if (code !== 0) {
-      return res.status(500).json({ success: false, error, stderr: error, stdout: data });
+      console.error('Python process exited with code', code, 'stderr:', error, 'stdout:', data);
+      return res.status(500).json({ success: false, error: error, stdout: data });
     }
     try {
       const result = JSON.parse(data.trim());
       res.json(result);
     } catch (err) {
+      console.error('JSON parse error:', err, 'Raw output:', data);
       res.status(500).json({ success: false, error: err.message, raw: data, stderr: error });
     }
   });

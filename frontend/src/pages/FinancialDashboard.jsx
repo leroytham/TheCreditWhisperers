@@ -6,7 +6,7 @@ const TIMEFRAMES = ['1D', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
 const FinancialDashboard = () => {
   // Backend integration state
   const [ticker, setTicker] = useState('AAPL');
-  const [timeframe, setTimeframe] = useState('1D');
+  const [timeframe, setTimeframe] = useState('1Y');
   const [priceData, setPriceData] = useState([]);
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
@@ -170,16 +170,17 @@ function getEndDate(timeframe) {
       };
 
       setRecentlyViewed(prev => {
-        // Remove if already exists and add to beginning
+        // Only update if ticker is not already the first item
+        if (prev[0]?.symbol === ticker) return prev;
         const filtered = prev.filter(item => item.symbol !== ticker);
-        const updated = [newItem, ...filtered].slice(0, 6); // Keep only 6 most recent
-        
-        // Save to localStorage
+        const updated = [newItem, ...filtered].slice(0, 6);
         localStorage.setItem('recentlyViewed', JSON.stringify(updated));
         return updated;
       });
     }
-  }, [ticker, currentPrice, priceChange, priceChangePercent]);
+    // Only run when ticker changes
+    // eslint-disable-next-line
+  }, [ticker]);
 
   const handleTickerSubmit = (e) => {
     e.preventDefault();
