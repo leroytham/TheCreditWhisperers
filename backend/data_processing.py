@@ -50,9 +50,6 @@ def get_finbert_pipeline():
 finbert = get_finbert_pipeline()
 
 
-# Load FinBERT pipeline once (so it’s not reloaded every call)
-# finbert = pipeline("text-classification", model="ProsusAI/finbert")
-
 # -------------------------------
 # 1. Download 1-year daily ticker data
 # -------------------------------
@@ -78,15 +75,40 @@ def get_data(ticker, period="1y", interval="1d"):
 # -------------------------------
 def filter_data(df, timeframe):
     """
-    Filter dataframe based on timeframe string: '1M', '3M', '6M', '1Y'
+    Filter dataframe based on timeframe string: '5D', '1M', '3M', '6M', 'YTD', '1Y'
+    
+    Timeframe options:
+    - 5D: Last 5 days
+    - 1M: Last 30 days (approximately 1 month)
+    - 3M: Last 90 days (approximately 3 months)
+    - 6M: Last 180 days (approximately 6 months)
+    - YTD: Year-to-date (from January 1st of current year to today)
+    - 1Y: Last 365 days (1 year)
     """
-    time_map = {"1M": 30, "3M": 90, "6M": 180, "1Y": 365}
-    if timeframe not in time_map:
-        raise ValueError(f"Invalid timeframe: {timeframe}")
+    if df is None or df.empty:
+        return df
     
     end_date = datetime.today()
-    start_date = end_date - timedelta(days=time_map[timeframe])
+    
+    if timeframe == "5D":
+        start_date = end_date - timedelta(days=5)
+    elif timeframe == "1M":
+        start_date = end_date - timedelta(days=30)
+    elif timeframe == "3M":
+        start_date = end_date - timedelta(days=90)
+    elif timeframe == "6M":
+        start_date = end_date - timedelta(days=180)
+    elif timeframe == "YTD":
+        # Year-to-date: from January 1st of current year to today
+        start_date = datetime(end_date.year, 1, 1)
+    elif timeframe == "1Y":
+        start_date = end_date - timedelta(days=365)
+    else:
+        raise ValueError(f"Invalid timeframe: {timeframe}. Must be one of: 5D, 1M, 3M, 6M, YTD, 1Y")
+    
+    # Filter the dataframe
     filtered = df[(df.index >= start_date) & (df.index <= end_date)]
+    
     return filtered
 
 
@@ -146,7 +168,7 @@ def get_ticker_news(ticker, count=5, tab="news"):
 
 
 # -------------------------------
-# 4. Get news using yf.Ticker().get_news()
+# 4. Get press releases news using yf.Ticker().get_news()
 # -------------------------------
 def get_ticker_press_releases_news(ticker, count=100, tab="press releases"):
     """
@@ -165,7 +187,7 @@ def get_ticker_press_releases_news(ticker, count=100, tab="press releases"):
 
         news_list = []
         today = datetime.utcnow()
-        seven_days_ago = today - timedelta(days=14)
+        fourteen_days_ago = today - timedelta(days=14)
 
         for article in raw_news:
             content = article.get("content", {})
@@ -176,8 +198,8 @@ def get_ticker_press_releases_news(ticker, count=100, tab="press releases"):
             # Convert pubDate to datetime object
             pub_date = datetime.strptime(pub_date_str[:10], "%Y-%m-%d").date()
 
-            # Stop loop if we reach news older than 7 days
-            if pub_date < seven_days_ago.date():
+            # Stop loop if we reach news older than 14 days
+            if pub_date < fourteen_days_ago.date():
                 break
 
             # Get thumbnail if it exists
@@ -198,81 +220,11 @@ def get_ticker_press_releases_news(ticker, count=100, tab="press releases"):
     except Exception as e:
         print(f"Error fetching news for {ticker}: {e}", file=sys.stderr)
         return None
-    
-
-# # -------------------------------
-# # 5. Analyze sentiments with finBERT
-# # -------------------------------
-# def analyze_sentiment(news_articles):
-#     """
-#     Passes in a list of articles for FinBERT to read Title + Summary.
-#     Appends the sentiment label, confidence score, and raw numeric score.
-#     Computes:
-#       - overall average of the raw scores
-#       - average sentiment per day over the past 7 days
-#     Returns a tuple: (results, avg_score, sentiment_counts, daily_avg_sentiment)
-#     """
-#     results = []
-#     total_score = 0
-#     sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
-
-#     # Collect sentiment scores per day
-#     daily_scores = defaultdict(list)
-#     today = datetime.utcnow().date()
-#     seven_days_ago = today - timedelta(days=6)  # past 7 days including today
-
-#     for article in news_articles:
-#         title = article.get("title", "")
-#         summary = article.get("summary", "")
-#         pub_date_str = article.get("publish_date")  # expects 'YYYY-MM-DD'
-#         combined_text = f"{title}. {summary}"
-
-#         # Get all class scores from FinBERT
-#         sentiment_scores = finbert(combined_text, truncation=True, return_all_scores=True)[0]
-#         scores_dict = {r['label'].lower(): r['score'] for r in sentiment_scores}
-
-#         # Determine top label
-#         label = max(scores_dict, key=scores_dict.get)
-#         confidence = scores_dict[label]
-
-#         # Compute raw numeric score
-#         if label == "positive":
-#             raw_score = scores_dict["positive"]
-#         elif label == "negative":
-#             raw_score = -scores_dict["negative"]
-#         else:  # neutral
-#             raw_score = scores_dict["positive"] - scores_dict["negative"]
-
-#         # Update totals
-#         total_score += raw_score
-#         sentiment_counts[label] += 1
-
-#         # Attach sentiment info to the article
-#         article["sentiment_label"] = label
-#         article["sentiment_confidence"] = confidence
-#         article["sentiment_score"] = raw_score
-#         results.append(article)
-
-#         # Add to daily scores if within the past 7 days
-#         if pub_date_str:
-#             pub_date = datetime.strptime(pub_date_str, "%Y-%m-%d").date()
-#             if seven_days_ago <= pub_date <= today:
-#                 daily_scores[pub_date].append(raw_score)
-
-#     # Compute daily average sentiment
-#     daily_avg_sentiment = {}
-#     for i in range(7):
-#         date = seven_days_ago + timedelta(days=i)
-#         scores = daily_scores.get(date, [])
-#         daily_avg_sentiment[date.strftime("%Y-%m-%d")] = sum(scores) / len(scores) if scores else 0
-
-#     # Compute overall numeric sentiment score
-#     avg_score = total_score / len(results) if results else 0
-
-#     return results, avg_score, sentiment_counts, daily_avg_sentiment
 
 
-
+# -------------------------------
+# 5. Analyze sentiments with finBERT
+# -------------------------------
 def analyze_sentiment(news_articles, max_weight=1.0, min_weight=0.5):
     """
     Sentiment analysis with recency weighting.
@@ -335,7 +287,7 @@ def analyze_sentiment(news_articles, max_weight=1.0, min_weight=0.5):
         article["sentiment_confidence"] = confidence
         article["sentiment_score"] = raw_score
         article["sentiment_weight"] = weight
-        article["sentiment_weighted_score"] = weighted_score  # NEW
+        article["sentiment_weighted_score"] = weighted_score
         results.append(article)
 
     # Compute weighted daily averages
@@ -356,11 +308,8 @@ def analyze_sentiment(news_articles, max_weight=1.0, min_weight=0.5):
     return results, weighted_avg_score, sentiment_counts, daily_avg_sentiment
 
 
-
-
-
 # -------------------------------
-# 7. Detect large daily moves and fetch related news
+# 6. Detect large daily moves and fetch related news
 # -------------------------------
 def detect_large_moves(df, top_n=3, threshold=None):
     """
@@ -429,114 +378,3 @@ def fetch_news_around_date(ticker, target_date, window=3, count=200):
     except Exception as e:
         print(f"Error fetching news around {target_date} for {ticker}: {e}", file=sys.stderr)
         return None
-
-
-
-
-# 5.2 Analyze sentiments with finBERT
-# -------------------------------
-# from collections import defaultdict
-# from datetime import datetime, timedelta
-
-# def analyze_sentiment(news_articles, max_weight=1.0, min_weight=0.5):
-#     """
-#     Sentiment analysis with recency weighting.
-#     Recent articles have higher weight but older ones (up to 7 days) still contribute.
-#     Returns: (results, weighted_avg_score, sentiment_counts, daily_avg_sentiment)
-#     """
-#     results = []
-#     total_score = 0
-#     total_weight = 0
-#     sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
-
-#     # Collect sentiment scores per day
-#     daily_scores = defaultdict(list)
-#     today = datetime.utcnow().date()
-#     seven_days_ago = today - timedelta(days=6)
-
-#     for article in news_articles:
-#         title = article.get("title", "")
-#         summary = article.get("summary", "")
-#         pub_date_str = article.get("publish_date")
-#         combined_text = f"{title}. {summary}"
-
-#         # Get sentiment from FinBERT
-#         sentiment_scores = finbert(combined_text, truncation=True, return_all_scores=True)[0]
-#         scores_dict = {r['label'].lower(): r['score'] for r in sentiment_scores}
-
-#         label = max(scores_dict, key=scores_dict.get)
-#         confidence = scores_dict[label]
-
-#         if label == "positive":
-#             raw_score = scores_dict["positive"]
-#         elif label == "negative":
-#             raw_score = -scores_dict["negative"]
-#         else:  # neutral
-#             raw_score = scores_dict["positive"] - scores_dict["negative"]
-
-#         sentiment_counts[label] += 1
-
-#         # Default weight = 1
-#         weight = 1.0
-
-#         if pub_date_str:
-#             pub_date = datetime.strptime(pub_date_str, "%Y-%m-%d").date()
-#             if seven_days_ago <= pub_date <= today:
-#                 day_diff = (today - pub_date).days
-#                 # Linear decay weight
-#                 weight = min_weight + (max_weight - min_weight) * (1 - day_diff / 6)
-
-#                 daily_scores[pub_date].append((raw_score, weight))
-
-#         # Weighted totals
-#         total_score += raw_score * weight
-#         total_weight += weight
-
-#         # Attach sentiment info to the article
-#         article["sentiment_label"] = label
-#         article["sentiment_confidence"] = confidence
-#         article["sentiment_score"] = raw_score
-#         article["sentiment_weight"] = weight
-#         results.append(article)
-
-#     # Compute weighted daily averages
-#     daily_avg_sentiment = {}
-#     for i in range(7):
-#         date = seven_days_ago + timedelta(days=i)
-#         scores_weights = daily_scores.get(date, [])
-#         if scores_weights:
-#             weighted_sum = sum(s * w for s, w in scores_weights)
-#             weight_sum = sum(w for _, w in scores_weights)
-#             daily_avg_sentiment[date.strftime("%Y-%m-%d")] = weighted_sum / weight_sum
-#         else:
-#             daily_avg_sentiment[date.strftime("%Y-%m-%d")] = 0
-
-#     # Compute overall weighted average sentiment
-#     weighted_avg_score = total_score / total_weight if total_weight else 0
-
-#     return results, weighted_avg_score, sentiment_counts, daily_avg_sentiment
-
-
-
-
-#Finbert - misinterpreted the scoring - pass summary and news headline, return 3 scores, + - or neutral 
-#how it determines is through probability - overall sentiment based on aggregation of probability 
-# if the news is neutral the logic is take positive minus negative to see whether its a positive number
-#198 most recent news - most likely 7 days but can be more or less 
-# this is the max number of news the API can retrieve - yahoo finance 
-#if there is more than 7 days there is a breakpoint, else all the news is within 7 days 
-
-#news can be released at any time of the day . .. ... daily price is only the closing price so how does price movement works 
-
-
-# get sentiment based on timeframe 
-# nearer time frame gets larger weightage?
-
-
-
-
-# news_articles = get_ticker_news('AAPL')
-# results, avg_score = analyze_sentiment(news_articles)
-# print("results of articicles: ", results)
-# print('\n')
-# print("avg sentiment score: ", avg_score)

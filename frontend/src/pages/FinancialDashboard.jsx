@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Bell, User, Menu } from 'lucide-react';
 
-const TIMEFRAMES = ['1D', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
+const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
+// COMMENTED OUT: ['1D', '5Y']
 
 const FinancialDashboard = () => {
   // Backend integration state
@@ -142,11 +143,11 @@ const FinancialDashboard = () => {
 
   const timelinePoints = generateTimelinePoints();
 
-  // Current price info from latest data point
+  // Current price info - calculate based on timeframe (start to end of selected period)
   const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
-  const previousPrice = chartData.length > 1 ? chartData[chartData.length - 2] : null;
-  const priceChange = currentPrice && previousPrice ? (currentPrice.y - previousPrice.y) : 0;
-  const priceChangePercent = previousPrice ? ((priceChange / previousPrice.y) * 100) : 0;
+  const startPrice = chartData.length > 0 ? chartData[0] : null;
+  const priceChange = currentPrice && startPrice ? (currentPrice.y - startPrice.y) : 0;
+  const priceChangePercent = startPrice ? ((priceChange / startPrice.y) * 100) : 0;
 
   const handleTickerSubmit = (e) => {
     e.preventDefault();
