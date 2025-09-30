@@ -28,7 +28,7 @@ export default function LoginCard() {
       if (data.success) {
         setMessage("Login successful!");
         sessionStorage.setItem("user", JSON.stringify(data.user));
-        navigate("/dashboard");
+        navigate("/financial_dashboard");
 
         if (remember) {
           localStorage.setItem("user", JSON.stringify(data.user));
