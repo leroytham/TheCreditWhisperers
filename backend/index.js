@@ -102,7 +102,7 @@ app.post('/LoginAdmin', async (req, res) => {
 app.get('/login', (req, res) => {
   const authCodeUrlParameters = {
     scopes: ["user.read"], 
-    redirectUri: "http://localhost:5050/auth/callback", 
+    redirectUri: "http://localhost:8000/auth/callback", 
   };
 
   cca.getAuthCodeUrl(authCodeUrlParameters)
@@ -114,7 +114,7 @@ app.get('/auth/callback', async (req, res) => {
   const tokenRequest = {
     code: req.query.code,
     scopes: ["user.read"],
-    redirectUri: "http://localhost:5050/auth/callback",
+    redirectUri: "http://localhost:8000/auth/callback",
   };
 
   try {

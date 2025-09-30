@@ -28,7 +28,7 @@ export default function LoginCard() {
       if (data.success) {
         setMessage("Login successful!");
         sessionStorage.setItem("user", JSON.stringify(data.user));
-        navigate("/financial_dashboard");
+        navigate("/dashboard");
 
         if (remember) {
           localStorage.setItem("user", JSON.stringify(data.user));
@@ -102,6 +102,17 @@ export default function LoginCard() {
               </button>
             </div>
           </form>
+
+
+          <div className="row center" style={{ marginTop: "1rem" }}>
+            <button
+              type="button"
+              className="btn microsoft-btn"
+              onClick={() => window.location.replace("http://localhost:8000/login")}              >
+              Sign in with Microsoft
+            </button>
+          </div>
+
 
           {message && <p className="message">{message}</p>}
 
