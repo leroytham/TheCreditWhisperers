@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Bell, User, Menu } from 'lucide-react';
 
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
-// COMMENTED OUT: ['1D', '5Y']
+// COMMENTED OUT timeframes: '1D', '5Y'
 
 const FinancialDashboard = () => {
   // Backend integration state

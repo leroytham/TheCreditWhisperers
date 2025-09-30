@@ -84,12 +84,19 @@ def filter_data(df, timeframe):
     - 6M: Last 180 days (approximately 6 months)
     - YTD: Year-to-date (from January 1st of current year to today)
     - 1Y: Last 365 days (1 year)
+    
+    COMMENTED OUT timeframes:
+    - 1D: Last 1 day (intraday data)
+    - 5Y: Last 5 years (1825 days)
     """
     if df is None or df.empty:
         return df
     
     end_date = datetime.today()
     
+    # COMMENTED OUT: 1D timeframe
+    # if timeframe == "1D":
+    #     start_date = end_date - timedelta(days=1)
     if timeframe == "5D":
         start_date = end_date - timedelta(days=5)
     elif timeframe == "1M":
@@ -103,6 +110,9 @@ def filter_data(df, timeframe):
         start_date = datetime(end_date.year, 1, 1)
     elif timeframe == "1Y":
         start_date = end_date - timedelta(days=365)
+    # COMMENTED OUT: 5Y timeframe
+    # elif timeframe == "5Y":
+    #     start_date = end_date - timedelta(days=1825)
     else:
         raise ValueError(f"Invalid timeframe: {timeframe}. Must be one of: 5D, 1M, 3M, 6M, YTD, 1Y")
     
