@@ -6,13 +6,6 @@ const bcrypt = require('bcrypt');
 const { spawn } = require('child_process');  
 const msal = require('@azure/msal-node'); 
 const PORT = process.env.PORT || 8000;
-// const { spawn } = require('child_process');
-
-
-
-
-// const pythonProcess = spawn("/opt/anaconda3/bin/python", ["ArticleCategorisation.py", ticker, startDate, endDate]);
-
 
 const app = express();
 app.use(cors());
@@ -21,18 +14,14 @@ app.use(express.json());
 const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri);
 
-
 const msalConfig = {
   auth: {
     clientId: process.env.Application_ID,
-    // authority: `https://login.microsoftonline.com/${process.env.Directory_ID}`,
     authority: "https://login.microsoftonline.com/common", 
     clientSecret: process.env.CLIENT_SECRET,
   },
 };
 const cca = new msal.ConfidentialClientApplication(msalConfig);
-
-
 
 app.get('/', (req, res) => {
   res.send('Backend connected 🚀');
@@ -97,8 +86,6 @@ app.post('/LoginAdmin', async (req, res) => {
   }
 });
 
-
-
 app.get('/login', (req, res) => {
   const authCodeUrlParameters = {
     scopes: ["user.read"], 
@@ -130,12 +117,6 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
-
-
-
-
-
-
 app.get('/articles', (req, res) => {
   const { ticker, start_date, end_date } = req.query;
 
@@ -143,7 +124,7 @@ app.get('/articles', (req, res) => {
     return res.status(400).json({ success: false, message: "ticker, start_date, and end_date are required" });
   }
 
-  const py = spawn('/opt/anaconda3/bin/python', ['ArticleCategorisation.py', ticker, start_date, end_date]);
+  const py = spawn('C:\\Users\\User\\anaconda3\\python.exe', ['ArticleCategorisation.py', ticker, start_date, end_date]);
 
   let data = "";
   let error = "";
@@ -171,181 +152,225 @@ app.get('/articles', (req, res) => {
   });
 });
 
-
-
-
+// --- API endpoint: Get price data ---
 app.get('/api/price', async (req, res) => {
   const { ticker = 'AAPL', timeframe = '1M' } = req.query;
-  // Only pass Python code as a string to spawn. Do not call get_data/filter_data in Node.js.
-    const pyCode = [
-      "import sys",
-      "from data_processing import get_data, filter_data",
-      "import json",
-      "ticker = sys.argv[1]",
-      "timeframe = sys.argv[2]",
-      "df = get_data(ticker)",
-      "if df is None:",
-      "    print(json.dumps({'error': 'Failed to get data'}))",
-      "    sys.exit(1)",
-      "df_filtered = filter_data(df, timeframe)",
-      "prices = [{'date': str(idx.date()), 'close': float(row['Close'])} for idx, row in df_filtered.iterrows()]",
-      "print(json.dumps({'prices': prices}))"
-    ].join('\n');
-    const py = spawn('python', ['-c', pyCode, ticker, timeframe], { cwd: __dirname });
-    let data = '';
-    let error = '';
-    py.stdout.on('data', chunk => { data += chunk.toString(); });
-    py.stderr.on('data', chunk => { error += chunk.toString(); });
-    py.on('error', err => {
-      console.error('Failed to start Python process:', err);
-      return res.status(500).json({ success: false, error: 'Failed to start Python process', details: err.message });
-    });
-    py.on('close', code => {
-      if (code !== 0) {
-        console.error('Python process exited with code', code, 'stderr:', error, 'stdout:', data);
-        return res.status(500).json({ success: false, error: error, stdout: data });
+  
+  console.log('=== PRICE REQUEST ===');
+  console.log('Ticker:', ticker);
+  console.log('Timeframe:', timeframe);
+  
+  const pyCode = `
+import sys
+import os
+import json
+import warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+from data_processing import get_data, filter_data
+
+ticker = "${ticker}"
+timeframe = "${timeframe}"
+
+try:
+    df = get_data(ticker)
+    if df is None:
+        print(json.dumps({"error": "Failed to get data"}))
+        sys.exit(1)
+    
+    df_filtered = filter_data(df, timeframe)
+    prices = [{"date": str(idx.date()), "close": float(row["Close"])} for idx, row in df_filtered.iterrows()]
+    print(json.dumps({"prices": prices}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+    sys.exit(1)
+`;
+
+  const py = spawn('C:\\Users\\User\\anaconda3\\python.exe', ['-c', pyCode], { 
+    cwd: __dirname,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
+  
+  let data = '';
+  let error = '';
+  let responseSent = false;
+  
+  py.stdout.on('data', chunk => {
+    data += chunk.toString();
+  });
+  
+  py.stderr.on('data', chunk => { 
+    error += chunk.toString();
+  });
+  
+  py.on('error', err => {
+    console.error('Failed to start Python process:', err);
+    if (!responseSent) {
+      responseSent = true;
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to start Python process', 
+        details: err.message 
+      });
+    }
+  });
+  
+  py.on('close', code => {
+    if (responseSent) return;
+    responseSent = true;
+    
+    console.log('Exit code:', code);
+    console.log('Has data:', data.length > 0);
+    
+    if (code !== 0) {
+      console.error('Python stderr:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: error || 'Script failed',
+        stdout: data
+      });
+    }
+    
+    try {
+      let cleanData = data.trim();
+      const jsonStart = cleanData.indexOf('{');
+      if (jsonStart !== -1) {
+        cleanData = cleanData.substring(jsonStart);
       }
-      try {
-        const result = JSON.parse(data.trim());
-        res.json(result);
-      } catch (err) {
-        console.error('JSON parse error:', err, 'Raw output:', data);
-        res.status(500).json({ success: false, error: err.message, raw: data, stderr: error });
+      
+      let braceCount = 0;
+      let jsonEnd = -1;
+      for (let i = 0; i < cleanData.length; i++) {
+        if (cleanData[i] === '{') braceCount++;
+        if (cleanData[i] === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            jsonEnd = i + 1;
+            break;
+          }
+        }
       }
-    });
+      
+      if (jsonEnd > 0) {
+        cleanData = cleanData.substring(0, jsonEnd);
+      }
+      
+      const result = JSON.parse(cleanData);
+      res.json(result);
+    } catch (err) {
+      console.error('JSON parse error:', err.message);
+      console.error('Raw data:', data);
+      res.status(500).json({ 
+        success: false, 
+        error: `Failed to parse JSON: ${err.message}`, 
+        raw: data
+      });
+    }
+  });
 });
 
 // --- API endpoint: Get news with sentiment ---
 app.get('/api/news', async (req, res) => {
   const { ticker = 'AAPL' } = req.query;
-  const pyCode = [
-    "import sys",
-    "from data_processing import get_ticker_news, analyze_sentiment",
-    "import json",
-    "ticker = sys.argv[1]",
-    "news_articles = get_ticker_news(ticker, count=50)",
-    "if news_articles is None:",
-    "    print(json.dumps({'error': 'Failed to get news'}))",
-    "    sys.exit(1)",
-    "results, avg_score, _, _ = analyze_sentiment(news_articles)",
-    "for article in results:",
-    "    article['sentiment_label'] = article.get('sentiment_label', '')",
-    "    article['sentiment_score'] = float(article.get('sentiment_score', 0))",
-    "print(json.dumps({'news': results, 'avg_score': float(avg_score)}))"
-  ].join('\n');
-  const py = spawn('python', ['-c', pyCode, ticker], { cwd: __dirname });
+  
+  console.log('=== NEWS REQUEST ===');
+  console.log('Ticker:', ticker);
+  
+  const pyCode = `
+import sys
+import os
+import json
+import warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+from data_processing import get_ticker_news, analyze_sentiment
+
+ticker = "${ticker}"
+
+try:
+    news_articles = get_ticker_news(ticker, count=50)
+    if news_articles is None:
+        print(json.dumps({"error": "Failed to get news"}))
+        sys.exit(1)
+    
+    results, avg_score, _, _ = analyze_sentiment(news_articles)
+    
+    for article in results:
+        article['sentiment_label'] = article.get('sentiment_label', '')
+        article['sentiment_score'] = float(article.get('sentiment_score', 0))
+    
+    print(json.dumps({"news": results, "avg_score": float(avg_score)}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+    sys.exit(1)
+`;
+
+  const py = spawn('C:\\Users\\User\\anaconda3\\python.exe', ['-c', pyCode], { 
+    cwd: __dirname,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
+  
   let data = '';
   let error = '';
-  py.stdout.on('data', chunk => { data += chunk.toString(); });
-  py.stderr.on('data', chunk => { error += chunk.toString(); });
+  let responseSent = false;
+  
+  py.stdout.on('data', chunk => {
+    data += chunk.toString();
+  });
+  
+  py.stderr.on('data', chunk => { 
+    error += chunk.toString();
+  });
+  
   py.on('error', err => {
     console.error('Failed to start Python process:', err);
-    return res.status(500).json({ success: false, error: 'Failed to start Python process', details: err.message });
-  });
-  py.on('close', code => {
-    if (code !== 0) {
-      console.error('Python process exited with code', code, 'stderr:', error, 'stdout:', data);
-      return res.status(500).json({ success: false, error: error, stdout: data });
+    if (!responseSent) {
+      responseSent = true;
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to start Python process', 
+        details: err.message 
+      });
     }
+  });
+  
+  py.on('close', code => {
+    if (responseSent) return;
+    responseSent = true;
+    
+    console.log('Exit code:', code);
+    console.log('Has data:', data.length > 0);
+    
+    if (code !== 0) {
+      console.error('Python stderr:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: error || 'Script failed', 
+        stdout: data 
+      });
+    }
+    
     try {
-      const result = JSON.parse(data.trim());
+      let cleanData = data.trim();
+      const jsonStart = cleanData.indexOf('{');
+      if (jsonStart !== -1) {
+        cleanData = cleanData.substring(jsonStart);
+      }
+      
+      const result = JSON.parse(cleanData);
       res.json(result);
     } catch (err) {
-      console.error('JSON parse error:', err, 'Raw output:', data);
-      res.status(500).json({ success: false, error: err.message, raw: data, stderr: error });
+      console.error('JSON parse error:', err.message);
+      console.error('Raw data:', data);
+      res.status(500).json({ 
+        success: false, 
+        error: err.message, 
+        raw: data
+      });
     }
   });
 });
 
-
-// --- API endpoint: Get daily sentiment ---
-// app.get('/api/daily_sentiment', async (req, res) => {
-//   const { ticker = 'AAPL' } = req.query;
-//   // Spawn the Python script for daily sentiment
-//   const py = spawn('python', ['daily_sentiment.py', ticker], { cwd: __dirname });
-//   let dailyData = '';
-//   let dailyError = '';
-//   py.stdout.on('data', chunk => {
-//     dailyData += chunk.toString();
-//   });
-//   py.stderr.on('data', chunk => { dailyError += chunk.toString(); });
-//   py.on('close', code => {
-//     // Filter out lines before the JSON
-//     const jsonStart = dailyData.indexOf('{');
-//     if (jsonStart !== -1) {
-//       dailyData = dailyData.slice(jsonStart);
-//     }
-//     try {
-//       res.json(JSON.parse(dailyData));
-//     } catch (err) {
-//       res.status(500).json({ success: false, error: err.message, raw: dailyData });
-//     }
-//   });
-// });
-
-// --- API endpoint: Get news around a date ---
-// app.get('/api/news_around_date', async (req, res) => {
-//   const { ticker = 'AAPL', date } = req.query;
-//   if (!date) return res.status(400).json({ success: false, error: 'Missing date' });
-//   // Spawn the Python script for news around a date
-//   const py = spawn('python', ['news_around_date.py', ticker, date], { cwd: __dirname });
-//   let newsDateData = '';
-//   let newsDateError = '';
-//   py.stdout.on('data', chunk => {
-//     newsDateData += chunk.toString();
-//   });
-//   py.stderr.on('data', chunk => { newsDateError += chunk.toString(); });
-//   py.on('close', code => {
-//     // Filter out lines before the JSON
-//     const jsonStart = newsDateData.indexOf('{');
-//     if (jsonStart !== -1) {
-//       newsDateData = newsDateData.slice(jsonStart);
-//     }
-//     try {
-//       res.json(JSON.parse(newsDateData));
-//     } catch (err) {
-//       res.status(500).json({ success: false, error: err.message, raw: newsDateData });
-//     }
-//   });
-// });
-// New endpoint: /api/press_releases (calls ArticleCategorisation.py directly)
-// app.get('/api/press_releases', async (req, res) => {
-//   const { ticker, start_date, end_date } = req.query;
-//   if (!ticker || !start_date || !end_date) {
-//     return res.status(400).json({ error: 'ticker, start_date, end_date required' });
-//   }
-//   const py = spawn('python', ['ArticleCategorisation.py', ticker, start_date, end_date], { cwd: __dirname });
-//   let data = '';
-//   py.stdout.on('data', chunk => data += chunk);
-//   py.stderr.on('data', err => console.error('PYTHON ERROR:', err.toString()));
-//   py.on('close', code => {
-//     try {
-//       const result = JSON.parse(data);
-//       res.json(result);
-//     } catch (e) {
-//       res.status(500).json({ error: 'Python script error', details: e.message });
-//     }
-//   });
-// });
-//   let data = '';
-//   let error = '';
-//   py.stdout.on('data', chunk => {
-//   data += chunk.toString();
-//   });
-//   py.stderr.on('data', chunk => { error += chunk.toString(); });
-//   py.on('close', code => {
-//   // Filter out lines before the JSON
-//   const jsonStart = data.indexOf('{');
-//   if (jsonStart !== -1) {
-//     data = data.slice(jsonStart);
-//   }
-//   try {
-//     res.json(JSON.parse(data));
-//   } catch (err) {
-//     res.status(500).json({ success: false, error: err.message, raw: data });
-//   }
-//   });
-// });
-
-// const PORT = 5050;
 app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));

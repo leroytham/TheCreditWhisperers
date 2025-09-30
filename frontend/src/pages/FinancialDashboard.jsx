@@ -558,21 +558,18 @@ const FinancialDashboard = () => {
                         {article.title}
                       </a>
                     </h4>
-                    {article.sentiment_label && (
-                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
-                        article.sentiment_label === 'positive' ? 'bg-green-100 text-green-800' : 
-                        article.sentiment_label === 'negative' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
+                    {article.sentiment_score !== undefined && article.sentiment_score !== null && (
+                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold whitespace-nowrap border ${
+                        article.sentiment_score > 0 ? 'text-green-600 border-green-600 bg-green-50' : 
+                        article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
+                        'text-gray-600 border-gray-600 bg-gray-50'
                       }`}>
-                        {article.sentiment_label}
+                        Sentiment Score: {article.sentiment_score.toFixed(2)}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-gray-600">
                     {article.publish_date} | {article.provider}
-                    {article.sentiment_score && (
-                      <span className="ml-2">Score: {article.sentiment_score.toFixed(2)}</span>
-                    )}
                   </p>
                 </div>
               ))
