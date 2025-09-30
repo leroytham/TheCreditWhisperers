@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, User, Menu, TrendingUp, TrendingDown } from 'lucide-react';
+import { Search, Bell, User, Menu } from 'lucide-react';
 
 const TIMEFRAMES = ['1D', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
 
@@ -10,30 +10,26 @@ const FinancialDashboard = () => {
   const [priceData, setPriceData] = useState([]);
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
-  // const [largeMoves, setLargeMoves] = useState([]);
-  // const [dailySentiment, setDailySentiment] = useState({});
-  // const [selectedDate, setSelectedDate] = useState(null);
-  // const [relatedNews, setRelatedNews] = useState([]);
   
   // UI state
-  const [showNews, setShowNews] = useState(true);
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // COMMENTED OUT: News toggle state
+  // const [showNews, setShowNews] = useState(true);
 
-  // Recently viewed state
-  const [recentlyViewed, setRecentlyViewed] = useState(() => {
-    // Load from localStorage on component mount
-    const saved = localStorage.getItem('recentlyViewed');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // COMMENTED OUT: Recently viewed functionality
+  // const [recentlyViewed, setRecentlyViewed] = useState(() => {
+  //   const saved = localStorage.getItem('recentlyViewed');
+  //   return saved ? JSON.parse(saved) : [];
+  // });
 
-  // Mock top securities for ticker (you can replace with API call)
-  const topSecurities = [
-    { name: 'S&P 500', symbol: 'SPX', price: '6,584.29', change: '0.05%', changeType: 'positive' },
-    { name: 'Nasdaq', symbol: 'NDX', price: '22,141.10', change: '0.44%', changeType: 'positive' },
-    { name: 'BSOO', symbol: 'BSOO', price: '2,386.16', change: '0.04%', changeType: 'positive' },
-    { name: 'US 10 Yr', symbol: 'US10Y', price: '4.06', change: '0.35%', changeType: 'negative' }
-  ];
+  // COMMENTED OUT: Top securities (black bar)
+  // const topSecurities = [
+  //   { name: 'S&P 500', symbol: 'SPX', price: '6,584.29', change: '0.05%', changeType: 'positive' },
+  //   { name: 'Nasdaq', symbol: 'NDX', price: '22,141.10', change: '0.44%', changeType: 'positive' },
+  //   { name: 'BSOO', symbol: 'BSOO', price: '2,386.16', change: '0.04%', changeType: 'positive' },
+  //   { name: 'US 10 Yr', symbol: 'US10Y', price: '4.06', change: '0.35%', changeType: 'negative' }
+  // ];
 
   // Backend API calls
   useEffect(() => {
@@ -49,28 +45,27 @@ const FinancialDashboard = () => {
         setSentiment({ avg_score: data.avg_score });
       })
       .catch(err => console.error('Error fetching news:', err));
-// Helper functions to get start/end date for API calls
-function getStartDate(timeframe) {
-  // Implement logic to calculate start date based on timeframe
-  // Example: return '2025-09-01';
-  // You may want to use a date library for real implementation
-  return '2025-09-01';
-}
-function getEndDate(timeframe) {
-  // Implement logic to calculate end date based on timeframe
-  // Example: return '2025-09-30';
-  return '2025-09-30';
-}
   }, [ticker, timeframe]);
 
+  // COMMENTED OUT: Recently viewed update effect
   // useEffect(() => {
-  //   if (selectedDate) {
-  //     fetch(`/api/news_around_date?ticker=${ticker}&date=${selectedDate}`)
-  //       .then(res => res.json())
-  //       .then(data => setRelatedNews(data.news || []))
-  //       .catch(err => console.error('Error fetching related news:', err));
+  //   if (ticker && currentPrice) {
+  //     const newItem = {
+  //       symbol: ticker,
+  //       price: `${currentPrice.y.toFixed(2)} USD`,
+  //       change: `${priceChangePercent.toFixed(2)}%`,
+  //       changeType: priceChange >= 0 ? 'positive' : 'negative',
+  //       timestamp: Date.now()
+  //     };
+  //     setRecentlyViewed(prev => {
+  //       if (prev[0]?.symbol === ticker) return prev;
+  //       const filtered = prev.filter(item => item.symbol !== ticker);
+  //       const updated = [newItem, ...filtered].slice(0, 6);
+  //       localStorage.setItem('recentlyViewed', JSON.stringify(updated));
+  //       return updated;
+  //     });
   //   }
-  // }, [selectedDate, ticker]);
+  // }, [ticker]);
 
   // Generate chart coordinates from backend data
   const generateChartData = () => {
@@ -105,30 +100,26 @@ function getEndDate(timeframe) {
   const generateTimelinePoints = () => {
     if (chartData.length === 0) return [];
     
-    // Use 6 points for better spacing, but extend chart to full width
     const numPoints = 6;
     const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
-    const chartWidth = 660; // Extended width from x=60 to x=720
+    const chartWidth = 660;
     
-    // Get evenly distributed points including first and last
     const selectedIndices = [];
     for (let i = 0; i < numPoints - 1; i++) {
       selectedIndices.push(i * step);
     }
-    selectedIndices.push(chartData.length - 1); // Always include last point
+    selectedIndices.push(chartData.length - 1);
     
     const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
     
     return selectedPoints.map((point, i, arr) => {
       const xPosition = 60 + (i * (chartWidth / Math.max(1, arr.length - 1)));
       
-      // Format label based on actual data structure
       let label = '';
       
       if (point.date) {
         const date = new Date(point.date);
         
-        // For YTD and longer timeframes, show month abbreviations for better readability
         if (timeframe === 'YTD' || timeframe === '1Y' || timeframe === '5Y') {
           label = date.toLocaleDateString('en-US', { month: 'short' });
         } else if (timeframe === '1D' && point.time) {
@@ -136,7 +127,6 @@ function getEndDate(timeframe) {
         } else if (timeframe === '1D') {
           label = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         } else {
-          // For 1M, 3M, 6M use M/D format
           label = `${date.getMonth() + 1}/${date.getDate()}`;
         }
       } else {
@@ -157,30 +147,6 @@ function getEndDate(timeframe) {
   const previousPrice = chartData.length > 1 ? chartData[chartData.length - 2] : null;
   const priceChange = currentPrice && previousPrice ? (currentPrice.y - previousPrice.y) : 0;
   const priceChangePercent = previousPrice ? ((priceChange / previousPrice.y) * 100) : 0;
-
-  // Add ticker to recently viewed when it changes
-  useEffect(() => {
-    if (ticker && currentPrice) {
-      const newItem = {
-        symbol: ticker,
-        price: `${currentPrice.y.toFixed(2)} USD`,
-        change: `${priceChangePercent.toFixed(2)}%`,
-        changeType: priceChange >= 0 ? 'positive' : 'negative',
-        timestamp: Date.now()
-      };
-
-      setRecentlyViewed(prev => {
-        // Only update if ticker is not already the first item
-        if (prev[0]?.symbol === ticker) return prev;
-        const filtered = prev.filter(item => item.symbol !== ticker);
-        const updated = [newItem, ...filtered].slice(0, 6);
-        localStorage.setItem('recentlyViewed', JSON.stringify(updated));
-        return updated;
-      });
-    }
-    // Only run when ticker changes
-    // eslint-disable-next-line
-  }, [ticker]);
 
   const handleTickerSubmit = (e) => {
     e.preventDefault();
@@ -222,8 +188,8 @@ function getEndDate(timeframe) {
         </div>
       </header>
 
-      {/* Top Securities Ticker */}
-      <div className="bg-black text-white px-4 py-2">
+      {/* COMMENTED OUT: Top Securities Ticker (Black Bar) */}
+      {/* <div className="bg-black text-white px-4 py-2">
         <div className="flex space-x-6 overflow-x-auto">
           {topSecurities.map((security, index) => (
             <div key={index} className="flex items-center space-x-2 whitespace-nowrap">
@@ -238,11 +204,11 @@ function getEndDate(timeframe) {
             </div>
           ))}
         </div>
-      </div>
+      </div> */}
 
       <div className="flex">
-        {/* Left Sidebar - Recently Viewed */}
-        <div className="w-64 bg-white border-r border-gray-200 p-4">
+        {/* COMMENTED OUT: Left Sidebar - Recently Viewed */}
+        {/* <div className="w-64 bg-white border-r border-gray-200 p-4">
           <div className="mb-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -278,7 +244,7 @@ function getEndDate(timeframe) {
               ))
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* Main Content */}
         <div className="flex-1 p-6">
@@ -325,7 +291,8 @@ function getEndDate(timeframe) {
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center space-x-4">
+                {/* COMMENTED OUT: News Toggle */}
+                {/* <div className="flex items-center space-x-4">
                   <label className="flex items-center space-x-2">
                     <span className="text-gray-600 text-sm">News</span>
                     <button
@@ -341,7 +308,7 @@ function getEndDate(timeframe) {
                       />
                     </button>
                   </label>
-                </div>
+                </div> */}
               </div>
             </div>
 
@@ -562,10 +529,6 @@ function getEndDate(timeframe) {
                     {sentiment.avg_score ? sentiment.avg_score.toFixed(2) : '--'}
                   </div>
                 </div>
-                {/* <div>
-                  <div className="text-sm text-gray-600">Large Moves Detected</div>
-                  <div className="text-lg font-semibold">{largeMoves.length}</div>
-                </div> */}
                 <div>
                   <div className="text-sm text-gray-600">News Articles</div>
                   <div className="text-lg font-semibold">{news.length}</div>
@@ -575,55 +538,50 @@ function getEndDate(timeframe) {
           </div>
         </div>
 
-        {/* Right Sidebar - Related News */}
-        {showNews && (
-          <div className="w-80 bg-white border-l border-gray-200 p-4">
-            <h3 className="text-lg font-semibold mb-4">Related News</h3>
-            <div className="space-y-4 max-h-screen overflow-y-auto">
-              {news.length === 0 ? (
-                <div className="text-gray-400">No news found for {ticker}</div>
-              ) : (
-                news.map((article, index) => (
-                  <div key={index} className="border-b border-gray-100 pb-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
-                        <a 
-                          href={article.link} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="hover:text-blue-600"
-                        >
-                          {article.title}
-                        </a>
-                      </h4>
-                      {article.sentiment_label && (
-                        <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
-                          article.sentiment_label === 'positive' ? 'bg-green-100 text-green-800' : 
-                          article.sentiment_label === 'negative' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {article.sentiment_label}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-600">
-                      {article.publish_date} | {article.provider}
-                      {article.sentiment_score && (
-                        <span className="ml-2">Score: {article.sentiment_score}</span>
-                      )}
-                    </p>
+        {/* Right Sidebar - Related News (Always visible) */}
+        <div className="w-80 bg-white border-l border-gray-200 p-4">
+          <h3 className="text-lg font-semibold mb-4">Related News</h3>
+          <div className="space-y-4 max-h-screen overflow-y-auto">
+            {news.length === 0 ? (
+              <div className="text-gray-400">No news found for {ticker}</div>
+            ) : (
+              news.map((article, index) => (
+                <div key={index} className="border-b border-gray-100 pb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
+                      <a 
+                        href={article.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="hover:text-blue-600"
+                      >
+                        {article.title}
+                      </a>
+                    </h4>
+                    {article.sentiment_label && (
+                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
+                        article.sentiment_label === 'positive' ? 'bg-green-100 text-green-800' : 
+                        article.sentiment_label === 'negative' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {article.sentiment_label}
+                      </span>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
-
-
+                  <p className="text-xs text-gray-600">
+                    {article.publish_date} | {article.provider}
+                    {article.sentiment_score && (
+                      <span className="ml-2">Score: {article.sentiment_score.toFixed(2)}</span>
+                    )}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
 };
 
 export default FinancialDashboard;
-
