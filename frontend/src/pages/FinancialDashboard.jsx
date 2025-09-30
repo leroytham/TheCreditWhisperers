@@ -10,10 +10,10 @@ const FinancialDashboard = () => {
   const [priceData, setPriceData] = useState([]);
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
-  const [largeMoves, setLargeMoves] = useState([]);
-  const [dailySentiment, setDailySentiment] = useState({});
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [relatedNews, setRelatedNews] = useState([]);
+  // const [largeMoves, setLargeMoves] = useState([]);
+  // const [dailySentiment, setDailySentiment] = useState({});
+  // const [selectedDate, setSelectedDate] = useState(null);
+  // const [relatedNews, setRelatedNews] = useState([]);
   
   // UI state
   const [showNews, setShowNews] = useState(true);
@@ -41,7 +41,7 @@ const FinancialDashboard = () => {
       .then(res => res.json())
       .then(data => setPriceData(data.prices || []))
       .catch(err => console.error('Error fetching price data:', err));
-    
+
     fetch(`/api/news?ticker=${ticker}`)
       .then(res => res.json())
       .then(data => {
@@ -49,26 +49,28 @@ const FinancialDashboard = () => {
         setSentiment({ avg_score: data.avg_score });
       })
       .catch(err => console.error('Error fetching news:', err));
-    
-    fetch(`/api/large_moves?ticker=${ticker}&timeframe=${timeframe}`)
-      .then(res => res.json())
-      .then(data => setLargeMoves(data.moves || []))
-      .catch(err => console.error('Error fetching large moves:', err));
-    
-    fetch(`/api/daily_sentiment?ticker=${ticker}`)
-      .then(res => res.json())
-      .then(data => setDailySentiment(data.daily || {}))
-      .catch(err => console.error('Error fetching daily sentiment:', err));
+// Helper functions to get start/end date for API calls
+function getStartDate(timeframe) {
+  // Implement logic to calculate start date based on timeframe
+  // Example: return '2025-09-01';
+  // You may want to use a date library for real implementation
+  return '2025-09-01';
+}
+function getEndDate(timeframe) {
+  // Implement logic to calculate end date based on timeframe
+  // Example: return '2025-09-30';
+  return '2025-09-30';
+}
   }, [ticker, timeframe]);
 
-  useEffect(() => {
-    if (selectedDate) {
-      fetch(`/api/news_around_date?ticker=${ticker}&date=${selectedDate}`)
-        .then(res => res.json())
-        .then(data => setRelatedNews(data.news || []))
-        .catch(err => console.error('Error fetching related news:', err));
-    }
-  }, [selectedDate, ticker]);
+  // useEffect(() => {
+  //   if (selectedDate) {
+  //     fetch(`/api/news_around_date?ticker=${ticker}&date=${selectedDate}`)
+  //       .then(res => res.json())
+  //       .then(data => setRelatedNews(data.news || []))
+  //       .catch(err => console.error('Error fetching related news:', err));
+  //   }
+  // }, [selectedDate, ticker]);
 
   // Generate chart coordinates from backend data
   const generateChartData = () => {
@@ -559,10 +561,10 @@ const FinancialDashboard = () => {
                     {sentiment.avg_score ? sentiment.avg_score.toFixed(2) : '--'}
                   </div>
                 </div>
-                <div>
+                {/* <div>
                   <div className="text-sm text-gray-600">Large Moves Detected</div>
                   <div className="text-lg font-semibold">{largeMoves.length}</div>
-                </div>
+                </div> */}
                 <div>
                   <div className="text-sm text-gray-600">News Articles</div>
                   <div className="text-lg font-semibold">{news.length}</div>

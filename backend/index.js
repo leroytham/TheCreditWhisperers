@@ -176,77 +176,23 @@ app.get('/articles', (req, res) => {
 
 app.get('/api/price', async (req, res) => {
   const { ticker = 'AAPL', timeframe = '1M' } = req.query;
-  const py = spawn('python', ['app.py', 'price', ticker, timeframe]);
+  // Link to app.py for price endpoint
+  const py = spawn('python', ['app.py', 'price', ticker, timeframe], { cwd: __dirname });
   let data = '';
   let error = '';
-  
   py.stdout.on('data', chunk => {
     data += chunk.toString();
   });
-  
-  py.stderr.on('data', chunk => { 
-    error += chunk.toString(); 
-  });
-  
+  py.stderr.on('data', chunk => { error += chunk.toString(); });
   py.on('close', code => {
-    console.log('=== DEBUG OUTPUT ===');
-    console.log('Exit code:', code);
-    console.log('Raw stdout:', JSON.stringify(data));
-    console.log('Raw stderr:', JSON.stringify(error));
-    console.log('First 100 chars:', data.substring(0, 100));
-    console.log('==================');
-    
     if (code !== 0) {
-      return res.status(500).json({ 
-        success: false, 
-        error: `Script failed with code ${code}`,
-        stderr: error,
-        stdout: data
-      });
+      return res.status(500).json({ success: false, error: `Script failed with code ${code}`, stderr: error, stdout: data });
     }
-    
     try {
-      // Clean the data more aggressively
-      let cleanData = data.trim();
-      
-      // Remove everything before the first {
-      const jsonStart = cleanData.indexOf('{');
-      if (jsonStart === -1) {
-        throw new Error('No JSON object found in output');
-      }
-      cleanData = cleanData.substring(jsonStart);
-      
-      // Find the end of the JSON object
-      let braceCount = 0;
-      let jsonEnd = -1;
-      for (let i = 0; i < cleanData.length; i++) {
-        if (cleanData[i] === '{') braceCount++;
-        if (cleanData[i] === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            jsonEnd = i + 1;
-            break;
-          }
-        }
-      }
-      
-      if (jsonEnd > 0) {
-        cleanData = cleanData.substring(0, jsonEnd);
-      }
-      
-      console.log('Cleaned data:', JSON.stringify(cleanData));
-      const result = JSON.parse(cleanData);
+      const result = JSON.parse(data.trim());
       res.json(result);
-      
     } catch (err) {
-      console.error('JSON parse error:', err.message);
-      res.status(500).json({ 
-        success: false, 
-        error: `Failed to parse JSON: ${err.message}`, 
-        raw: data,
-        stderr: error,
-        firstChar: data.length > 0 ? data.charCodeAt(0) : 'empty'
-      });
+      res.status(500).json({ success: false, error: `Failed to parse JSON: ${err.message}`, raw: data, stderr: error });
     }
   });
 });
@@ -254,119 +200,116 @@ app.get('/api/price', async (req, res) => {
 // --- API endpoint: Get news with sentiment ---
 app.get('/api/news', async (req, res) => {
   const { ticker = 'AAPL' } = req.query;
-  const py = spawn('python', ['app.py', 'news', ticker]);
+  // Link to app.py for news endpoint
+  const py = spawn('python', ['app.py', 'news', ticker], { cwd: __dirname });
   let data = '';
   let error = '';
-  
   py.stdout.on('data', chunk => {
     data += chunk.toString();
   });
-  
-  py.stderr.on('data', chunk => { 
-    error += chunk.toString(); 
-  });
-  
+  py.stderr.on('data', chunk => { error += chunk.toString(); });
   py.on('close', code => {
-    console.log('=== NEWS DEBUG ===');
-    console.log('Raw output:', JSON.stringify(data));
-    console.log('=================');
-    
     if (code !== 0) {
       return res.status(500).json({ success: false, error, stderr: error, stdout: data });
     }
-    
     try {
-      let cleanData = data.trim();
-      const jsonStart = cleanData.indexOf('{');
-      if (jsonStart !== -1) {
-        cleanData = cleanData.substring(jsonStart);
-      }
-      
-      const result = JSON.parse(cleanData);
+      const result = JSON.parse(data.trim());
       res.json(result);
     } catch (err) {
-      res.status(500).json({ 
-        success: false, 
-        error: err.message, 
-        raw: data,
-        stderr: error
-      });
+      res.status(500).json({ success: false, error: err.message, raw: data, stderr: error });
     }
   });
 });
 
-// --- API endpoint: Get significant price moves ---
-app.get('/api/large_moves', async (req, res) => {
-  const { ticker = 'AAPL', timeframe = '1M' } = req.query;
-  const py = spawn('python', ['app.py', 'large_moves', ticker, timeframe]);
-  let data = '';
-  let error = '';
-  py.stdout.on('data', chunk => {
-  data += chunk.toString();
-  });
-  py.stderr.on('data', chunk => { error += chunk.toString(); });
-  py.on('close', code => {
-    // Filter out lines before the JSON
-    const jsonStart = data.indexOf('{');
-    if (jsonStart !== -1) {
-      data = data.slice(jsonStart);
-    }
-    try {
-      res.json(JSON.parse(data));
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message, raw: data });
-    }
-  });
-});
 
 // --- API endpoint: Get daily sentiment ---
-app.get('/api/daily_sentiment', async (req, res) => {
-  const { ticker = 'AAPL' } = req.query;
-  const py = spawn('python', ['app.py', 'daily_sentiment', ticker]);
-  let data = '';
-  let error = '';
-  py.stdout.on('data', chunk => {
-  data += chunk.toString();
-  });
-  py.stderr.on('data', chunk => { error += chunk.toString(); });
-  py.on('close', code => {
-    // Filter out lines before the JSON
-    const jsonStart = data.indexOf('{');
-    if (jsonStart !== -1) {
-      data = data.slice(jsonStart);
-    }
-    try {
-      res.json(JSON.parse(data));
-    } catch (err) {
-      res.status(500).json({ success: false, error: err.message, raw: data });
-    }
-  });
-});
+// app.get('/api/daily_sentiment', async (req, res) => {
+//   const { ticker = 'AAPL' } = req.query;
+//   // Spawn the Python script for daily sentiment
+//   const py = spawn('python', ['daily_sentiment.py', ticker], { cwd: __dirname });
+//   let dailyData = '';
+//   let dailyError = '';
+//   py.stdout.on('data', chunk => {
+//     dailyData += chunk.toString();
+//   });
+//   py.stderr.on('data', chunk => { dailyError += chunk.toString(); });
+//   py.on('close', code => {
+//     // Filter out lines before the JSON
+//     const jsonStart = dailyData.indexOf('{');
+//     if (jsonStart !== -1) {
+//       dailyData = dailyData.slice(jsonStart);
+//     }
+//     try {
+//       res.json(JSON.parse(dailyData));
+//     } catch (err) {
+//       res.status(500).json({ success: false, error: err.message, raw: dailyData });
+//     }
+//   });
+// });
 
 // --- API endpoint: Get news around a date ---
-app.get('/api/news_around_date', async (req, res) => {
-  const { ticker = 'AAPL', date } = req.query;
-  if (!date) return res.status(400).json({ success: false, error: 'Missing date' });
-  const py = spawn('python', ['app.py', 'news_around_date', ticker, date]);
-  let data = '';
-  let error = '';
-  py.stdout.on('data', chunk => {
-  data += chunk.toString();
-  });
-  py.stderr.on('data', chunk => { error += chunk.toString(); });
-  py.on('close', code => {
-  // Filter out lines before the JSON
-  const jsonStart = data.indexOf('{');
-  if (jsonStart !== -1) {
-    data = data.slice(jsonStart);
-  }
-  try {
-    res.json(JSON.parse(data));
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, raw: data });
-  }
-  });
-});
+// app.get('/api/news_around_date', async (req, res) => {
+//   const { ticker = 'AAPL', date } = req.query;
+//   if (!date) return res.status(400).json({ success: false, error: 'Missing date' });
+//   // Spawn the Python script for news around a date
+//   const py = spawn('python', ['news_around_date.py', ticker, date], { cwd: __dirname });
+//   let newsDateData = '';
+//   let newsDateError = '';
+//   py.stdout.on('data', chunk => {
+//     newsDateData += chunk.toString();
+//   });
+//   py.stderr.on('data', chunk => { newsDateError += chunk.toString(); });
+//   py.on('close', code => {
+//     // Filter out lines before the JSON
+//     const jsonStart = newsDateData.indexOf('{');
+//     if (jsonStart !== -1) {
+//       newsDateData = newsDateData.slice(jsonStart);
+//     }
+//     try {
+//       res.json(JSON.parse(newsDateData));
+//     } catch (err) {
+//       res.status(500).json({ success: false, error: err.message, raw: newsDateData });
+//     }
+//   });
+// });
+// New endpoint: /api/press_releases (calls ArticleCategorisation.py directly)
+// app.get('/api/press_releases', async (req, res) => {
+//   const { ticker, start_date, end_date } = req.query;
+//   if (!ticker || !start_date || !end_date) {
+//     return res.status(400).json({ error: 'ticker, start_date, end_date required' });
+//   }
+//   const py = spawn('python', ['ArticleCategorisation.py', ticker, start_date, end_date], { cwd: __dirname });
+//   let data = '';
+//   py.stdout.on('data', chunk => data += chunk);
+//   py.stderr.on('data', err => console.error('PYTHON ERROR:', err.toString()));
+//   py.on('close', code => {
+//     try {
+//       const result = JSON.parse(data);
+//       res.json(result);
+//     } catch (e) {
+//       res.status(500).json({ error: 'Python script error', details: e.message });
+//     }
+//   });
+// });
+//   let data = '';
+//   let error = '';
+//   py.stdout.on('data', chunk => {
+//   data += chunk.toString();
+//   });
+//   py.stderr.on('data', chunk => { error += chunk.toString(); });
+//   py.on('close', code => {
+//   // Filter out lines before the JSON
+//   const jsonStart = data.indexOf('{');
+//   if (jsonStart !== -1) {
+//     data = data.slice(jsonStart);
+//   }
+//   try {
+//     res.json(JSON.parse(data));
+//   } catch (err) {
+//     res.status(500).json({ success: false, error: err.message, raw: data });
+//   }
+//   });
+// });
 
 // const PORT = 5050;
 app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
