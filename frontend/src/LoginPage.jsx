@@ -47,11 +47,7 @@ export default function LoginCard() {
   return (
     <div className="login-page">
       <header className="header">
-        <img
-        //   src="/ubs-logo.png" // UBS LOGO
-          alt="UBS Logo"
-          className="ubs-logo"
-        />
+        {/* REMOVED: UBS Logo */}
         <span className="notif">Notification</span>
       </header>
 
