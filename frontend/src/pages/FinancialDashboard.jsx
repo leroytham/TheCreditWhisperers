@@ -359,7 +359,14 @@ const FinancialDashboard = () => {
                   <div
                     className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
                     style={{
-                      left: `${Math.min(Math.max(hoveredPoint.x - 60, 10), 400)}px`,
+                      /* Tooltip width is 160px, chart left edge is at 60px, chart width is 660px */
+                      left: `${Math.max(
+                        60, // chart left edge
+                        Math.min(
+                          hoveredPoint.x - 80, // center tooltip above point
+                          60 + 660 - 160 // chart right edge minus tooltip width
+                        )
+                      )}px`,
                       top: `${hoveredPoint.y - 100}px`,
                       minWidth: '120px'
                     }}
