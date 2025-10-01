@@ -59,15 +59,19 @@ def get_data(ticker, period="1y", interval="1d"):
     Returns a DataFrame with OHLCV and timezone-naive datetime index.
     """
     try:
-        data = yf.Ticker(ticker).history(period=period, interval=interval)
+        ticker_obj = yf.Ticker(ticker)
+        data = ticker_obj.history(period=period, interval=interval)
         if data.empty:
             print(f"Warning: No data returned for ticker {ticker}", file=sys.stderr)
-            return None
+            return None, None, None
         data.index = data.index.tz_localize(None)
-        return data
+        info = ticker_obj.info
+        company_name = info.get('shortName') or info.get('longName') or ticker
+        currency = info.get('currency', 'USD')
+        return data, company_name, currency
     except Exception as e:
         print(f"Error downloading data for {ticker}: {e}", file=sys.stderr)
-        return None
+        return None, None, None
 
 
 # -------------------------------

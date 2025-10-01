@@ -181,17 +181,16 @@ ticker = "${ticker}"
 timeframe = "${timeframe}"
 
 try:
-    df = get_data(ticker)
-    if df is None:
-        print(json.dumps({"error": "Failed to get data"}))
-        sys.exit(1)
-    
-    df_filtered = filter_data(df, timeframe)
-    prices = [{"date": str(idx.date()), "close": float(row["Close"])} for idx, row in df_filtered.iterrows()]
-    print(json.dumps({"prices": prices}))
-except Exception as e:
-    print(json.dumps({"error": str(e)}))
+  df, company_name, currency = get_data(ticker)
+  if df is None:
+    print(json.dumps({"error": "Failed to get data"}))
     sys.exit(1)
+  df_filtered = filter_data(df, timeframe)
+  prices = [{"date": str(idx.date()), "close": float(row["Close"])} for idx, row in df_filtered.iterrows()]
+  print(json.dumps({"prices": prices, "company_name": company_name, "currency": currency}))
+except Exception as e:
+  print(json.dumps({"error": str(e)}))
+  sys.exit(1)
 `;
 
   const py = spawn(PYTHON_PATH, ['-c', pyCode], { 

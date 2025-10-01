@@ -10,9 +10,11 @@ const FinancialDashboard = () => {
   const [ticker, setTicker] = useState('AAPL');
   const [timeframe, setTimeframe] = useState('1Y');
   const [priceData, setPriceData] = useState([]);
+  const [companyName, setCompanyName] = useState('');
+  const [currency, setCurrency] = useState('USD');
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
-  
+
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,7 +23,11 @@ const FinancialDashboard = () => {
   useEffect(() => {
     fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`)
       .then(res => res.json())
-      .then(data => setPriceData(data.prices || []))
+      .then(data => {
+        setPriceData(data.prices || []);
+        setCompanyName(data.company_name || '');
+        setCurrency(data.currency || 'USD');
+      })
       .catch(err => console.error('Error fetching price data:', err));
 
     fetch(`/api/news?ticker=${ticker}`)
@@ -144,9 +150,11 @@ const FinancialDashboard = () => {
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h1 className="text-2xl font-bold">{ticker} INDEX</h1>
-                  <p className="text-gray-600">{ticker}:IND</p>
-                  <p className="text-gray-600">(USD)</p>
+                  <h1 className="text-2xl font-bold">
+                    {companyName ? `${companyName}` : `${ticker} `}
+                  </h1>
+                  <p className="text-gray-600">{ticker}</p>
+                  <p className="text-gray-600">({currency})</p>
                 </div>
               </div>
 

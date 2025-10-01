@@ -45,7 +45,7 @@ def main():
         with redirect_stderr(io.StringIO()):
             if command == "price":
                 timeframe = sys.argv[3] if len(sys.argv) > 3 else "1M"
-                df = get_data(ticker)
+                df, company_name, currency = get_data(ticker)
                 if df is None:
                     output_json({"error": "Failed to get data"})
                     return
@@ -54,7 +54,7 @@ def main():
                     {"date": str(idx.date()), "close": float(row["Close"])}
                     for idx, row in df_filtered.iterrows()
                 ]
-                output_json({"prices": prices})
+                output_json({"prices": prices, "company_name": company_name, "currency": currency})
 
             elif command == "news":
                 news_articles = get_ticker_news(ticker, count=50)
