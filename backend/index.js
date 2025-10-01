@@ -14,6 +14,12 @@ app.use(express.json());
 const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri);
 
+// PYTHON_PATH=/'opt/anaconda3/bin/python';
+const PYTHON_PATH = '/opt/anaconda3/bin/python';
+
+// const PYTHON_PATH = 'C:\\Users\\User\\anaconda3\\python.exe';
+
+
 const msalConfig = {
   auth: {
     clientId: process.env.Application_ID,
@@ -124,7 +130,7 @@ app.get('/articles', (req, res) => {
     return res.status(400).json({ success: false, message: "ticker, start_date, and end_date are required" });
   }
 
-  const py = spawn('C:\\Users\\User\\anaconda3\\python.exe', ['ArticleCategorisation.py', ticker, start_date, end_date]);
+  const py = spawn(PYTHON_PATH, ['ArticleCategorisation.py', ticker, start_date, end_date]);
 
   let data = "";
   let error = "";
@@ -187,7 +193,7 @@ except Exception as e:
     sys.exit(1)
 `;
 
-  const py = spawn('C:\\Users\\User\\anaconda3\\python.exe', ['-c', pyCode], { 
+  const py = spawn(PYTHON_PATH, ['-c', pyCode], { 
     cwd: __dirname,
     env: { ...process.env, PYTHONUNBUFFERED: '1' }
   });
@@ -307,7 +313,7 @@ except Exception as e:
     sys.exit(1)
 `;
 
-  const py = spawn('C:\\Users\\User\\anaconda3\\python.exe', ['-c', pyCode], { 
+  const py = spawn(PYTHON_PATH, ['-c', pyCode], { 
     cwd: __dirname,
     env: { ...process.env, PYTHONUNBUFFERED: '1' }
   });
@@ -373,4 +379,10 @@ except Exception as e:
   });
 });
 
-app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+// app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+}
+
+module.exports = app;
