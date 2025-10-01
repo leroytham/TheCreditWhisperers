@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Bell, User, Menu } from 'lucide-react';
-
+// Standardize number of x-axis points
+const NUM_X_AXIS_POINTS = 6;
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
 // COMMENTED OUT timeframes: '1D', '5Y'
 
@@ -65,93 +66,25 @@ const FinancialDashboard = () => {
   const generateTimelinePoints = () => {
     if (chartData.length === 0) return [];
     
-    let selectedIndices = [];
-    
-    if (timeframe === '5D') {
-      // 5D: Show all trading days (up to 5 points)
-      const numPoints = Math.min(5, chartData.length);
-      const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
-      for (let i = 0; i < numPoints - 1; i++) {
-        selectedIndices.push(i * step);
-      }
-      selectedIndices.push(chartData.length - 1);
-    } else if (timeframe === '1M') {
-      // 1M: Show ~4 weekly points
-      const numPoints = Math.min(4, chartData.length);
-      const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
-      for (let i = 0; i < numPoints - 1; i++) {
-        selectedIndices.push(i * step);
-      }
-      selectedIndices.push(chartData.length - 1);
-    } else if (timeframe === '3M' || timeframe === '6M' || timeframe === 'YTD' || timeframe === '1Y') {
-      // For monthly views: Find first trading day of each month
-      const seenMonths = new Set();
-      const monthlyPoints = [];
-      
-      chartData.forEach((point, index) => {
-        const date = new Date(point.date);
-        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-        
-        if (!seenMonths.has(monthKey)) {
-          seenMonths.add(monthKey);
-          monthlyPoints.push(index);
-        }
-      });
-      
-      // For specific timeframes, limit the number of months shown
-      if (timeframe === '3M') {
-        selectedIndices = monthlyPoints.slice(-3); // Last 3 months
-      } else if (timeframe === '6M') {
-        selectedIndices = monthlyPoints.slice(-6); // Last 6 months
-      } else if (timeframe === 'YTD') {
-        selectedIndices = monthlyPoints; // All months from start of year
-      } else if (timeframe === '1Y') {
-        selectedIndices = monthlyPoints.slice(-12); // Last 12 months
-      }
-    } else {
-      // Fallback
-      const numPoints = 6;
-      const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
-      for (let i = 0; i < numPoints - 1; i++) {
-        selectedIndices.push(i * step);
-      }
-      selectedIndices.push(chartData.length - 1);
-    }
-    
+    const step = Math.max(1, Math.floor((chartData.length - 1) / (NUM_X_AXIS_POINTS - 1)));
     const chartWidth = 660;
+    const selectedIndices = [];
+    for (let i = 0; i < NUM_X_AXIS_POINTS - 1; i++) {
+      selectedIndices.push(i * step);
+    }
+    selectedIndices.push(chartData.length - 1);
     const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
-    
     return selectedPoints.map((point, i, arr) => {
       const xPosition = 60 + (i * (chartWidth / Math.max(1, arr.length - 1)));
       let label = '';
-      
       if (point.date) {
         const date = new Date(point.date);
-        
-        if (timeframe === '5D' || timeframe === '1M') {
-          // Format: 7 Oct 2025
-          const day = date.getDate();
-          const month = date.toLocaleDateString('en-US', { month: 'short' });
-          const year = date.getFullYear();
-          label = `${day} ${month} ${year}`;
-        } else if (timeframe === '3M' || timeframe === '6M' || timeframe === 'YTD' || timeframe === '1Y') {
-          // Format: 1 Jul 2025 (first trading day of month)
-          const day = date.getDate();
-          const month = date.toLocaleDateString('en-US', { month: 'short' });
-          const year = date.getFullYear();
-          label = `${day} ${month} ${year}`;
-        } else {
-          // Fallback
-          label = `${date.getMonth() + 1}/${date.getDate()}`;
-        }
+        // Always use 'Aug 16' style for all timeframes
+        label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       } else {
         label = `Point ${i + 1}`;
       }
-      
-      return {
-        label,
-        x: xPosition
-      };
+      return { label, x: xPosition };
     });
   };
 

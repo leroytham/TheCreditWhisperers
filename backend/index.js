@@ -15,7 +15,8 @@ const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri);
 
 // PYTHON_PATH=/'opt/anaconda3/bin/python';
-const PYTHON_PATH = '/opt/anaconda3/bin/python';
+// const PYTHON_PATH = '/opt/anaconda3/bin/python';
+const PYTHON_PATH = process.env.PYPATH || '/opt/anaconda3/bin/python';  // Default to 'python3' if PYPATH is not set
 
 // const PYTHON_PATH = 'C:\\Users\\User\\anaconda3\\python.exe';
 
