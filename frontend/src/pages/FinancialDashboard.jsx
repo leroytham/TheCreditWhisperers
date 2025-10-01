@@ -15,22 +15,6 @@ const FinancialDashboard = () => {
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  // COMMENTED OUT: News toggle state
-  // const [showNews, setShowNews] = useState(true);
-
-  // COMMENTED OUT: Recently viewed functionality
-  // const [recentlyViewed, setRecentlyViewed] = useState(() => {
-  //   const saved = localStorage.getItem('recentlyViewed');
-  //   return saved ? JSON.parse(saved) : [];
-  // });
-
-  // COMMENTED OUT: Top securities (black bar)
-  // const topSecurities = [
-  //   { name: 'S&P 500', symbol: 'SPX', price: '6,584.29', change: '0.05%', changeType: 'positive' },
-  //   { name: 'Nasdaq', symbol: 'NDX', price: '22,141.10', change: '0.44%', changeType: 'positive' },
-  //   { name: 'BSOO', symbol: 'BSOO', price: '2,386.16', change: '0.04%', changeType: 'positive' },
-  //   { name: 'US 10 Yr', symbol: 'US10Y', price: '4.06', change: '0.35%', changeType: 'negative' }
-  // ];
 
   // Backend API calls
   useEffect(() => {
@@ -47,26 +31,6 @@ const FinancialDashboard = () => {
       })
       .catch(err => console.error('Error fetching news:', err));
   }, [ticker, timeframe]);
-
-  // COMMENTED OUT: Recently viewed update effect
-  // useEffect(() => {
-  //   if (ticker && currentPrice) {
-  //     const newItem = {
-  //       symbol: ticker,
-  //       price: `${currentPrice.y.toFixed(2)} USD`,
-  //       change: `${priceChangePercent.toFixed(2)}%`,
-  //       changeType: priceChange >= 0 ? 'positive' : 'negative',
-  //       timestamp: Date.now()
-  //     };
-  //     setRecentlyViewed(prev => {
-  //       if (prev[0]?.symbol === ticker) return prev;
-  //       const filtered = prev.filter(item => item.symbol !== ticker);
-  //       const updated = [newItem, ...filtered].slice(0, 6);
-  //       localStorage.setItem('recentlyViewed', JSON.stringify(updated));
-  //       return updated;
-  //     });
-  //   }
-  // }, [ticker]);
 
   // Generate chart coordinates from backend data
   const generateChartData = () => {
@@ -97,37 +61,87 @@ const FinancialDashboard = () => {
 
   const priceRange = getPriceRange();
 
-  // Generate timeline points from data based on timeframe
+  // Generate timeline points from data based on timeframe - UPDATED
   const generateTimelinePoints = () => {
     if (chartData.length === 0) return [];
     
-    const numPoints = 6;
-    const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
-    const chartWidth = 660;
+    let selectedIndices = [];
     
-    const selectedIndices = [];
-    for (let i = 0; i < numPoints - 1; i++) {
-      selectedIndices.push(i * step);
+    if (timeframe === '5D') {
+      // 5D: Show all trading days (up to 5 points)
+      const numPoints = Math.min(5, chartData.length);
+      const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
+      for (let i = 0; i < numPoints - 1; i++) {
+        selectedIndices.push(i * step);
+      }
+      selectedIndices.push(chartData.length - 1);
+    } else if (timeframe === '1M') {
+      // 1M: Show ~4 weekly points
+      const numPoints = Math.min(4, chartData.length);
+      const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
+      for (let i = 0; i < numPoints - 1; i++) {
+        selectedIndices.push(i * step);
+      }
+      selectedIndices.push(chartData.length - 1);
+    } else if (timeframe === '3M' || timeframe === '6M' || timeframe === 'YTD' || timeframe === '1Y') {
+      // For monthly views: Find first trading day of each month
+      const seenMonths = new Set();
+      const monthlyPoints = [];
+      
+      chartData.forEach((point, index) => {
+        const date = new Date(point.date);
+        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        
+        if (!seenMonths.has(monthKey)) {
+          seenMonths.add(monthKey);
+          monthlyPoints.push(index);
+        }
+      });
+      
+      // For specific timeframes, limit the number of months shown
+      if (timeframe === '3M') {
+        selectedIndices = monthlyPoints.slice(-3); // Last 3 months
+      } else if (timeframe === '6M') {
+        selectedIndices = monthlyPoints.slice(-6); // Last 6 months
+      } else if (timeframe === 'YTD') {
+        selectedIndices = monthlyPoints; // All months from start of year
+      } else if (timeframe === '1Y') {
+        selectedIndices = monthlyPoints.slice(-12); // Last 12 months
+      }
+    } else {
+      // Fallback
+      const numPoints = 6;
+      const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
+      for (let i = 0; i < numPoints - 1; i++) {
+        selectedIndices.push(i * step);
+      }
+      selectedIndices.push(chartData.length - 1);
     }
-    selectedIndices.push(chartData.length - 1);
     
+    const chartWidth = 660;
     const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
     
     return selectedPoints.map((point, i, arr) => {
       const xPosition = 60 + (i * (chartWidth / Math.max(1, arr.length - 1)));
-      
       let label = '';
       
       if (point.date) {
         const date = new Date(point.date);
         
-        if (timeframe === 'YTD' || timeframe === '1Y' || timeframe === '5Y') {
-          label = date.toLocaleDateString('en-US', { month: 'short' });
-        } else if (timeframe === '1D' && point.time) {
-          label = point.time;
-        } else if (timeframe === '1D') {
-          label = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        if (timeframe === '5D' || timeframe === '1M') {
+          // Format: 7 Oct 2025
+          const day = date.getDate();
+          const month = date.toLocaleDateString('en-US', { month: 'short' });
+          const year = date.getFullYear();
+          label = `${day} ${month} ${year}`;
+        } else if (timeframe === '3M' || timeframe === '6M' || timeframe === 'YTD' || timeframe === '1Y') {
+          // Format: 1 Jul 2025 (first trading day of month)
+          const day = date.getDate();
+          const month = date.toLocaleDateString('en-US', { month: 'short' });
+          const year = date.getFullYear();
+          label = `${day} ${month} ${year}`;
         } else {
+          // Fallback
           label = `${date.getMonth() + 1}/${date.getDate()}`;
         }
       } else {
@@ -189,64 +203,7 @@ const FinancialDashboard = () => {
         </div>
       </header>
 
-      {/* COMMENTED OUT: Top Securities Ticker (Black Bar) */}
-      {/* <div className="bg-black text-white px-4 py-2">
-        <div className="flex space-x-6 overflow-x-auto">
-          {topSecurities.map((security, index) => (
-            <div key={index} className="flex items-center space-x-2 whitespace-nowrap">
-              <span className="text-sm font-semibold">{security.name}</span>
-              <span className="text-sm">USD</span>
-              <span className="text-lg font-bold">{security.price}</span>
-              <span className={`text-sm flex items-center ${
-                security.changeType === 'positive' ? 'text-green-400' : 'text-red-400'
-              }`}>
-                {security.changeType === 'positive' ? '▲' : '▼'} {security.change}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div> */}
-
       <div className="flex">
-        {/* COMMENTED OUT: Left Sidebar - Recently Viewed */}
-        {/* <div className="w-64 bg-white border-r border-gray-200 p-4">
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleTickerSubmit(e)}
-                placeholder="Search for any entity"
-                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <h3 className="text-lg font-semibold mb-4">Recently Viewed</h3>
-          <div className="space-y-3">
-            {recentlyViewed.length === 0 ? (
-              <div className="text-gray-400 text-sm">No recent searches</div>
-            ) : (
-              recentlyViewed.map((item, index) => (
-                <div key={`${item.symbol}-${item.timestamp}`} className="border-b border-gray-100 pb-2 cursor-pointer hover:bg-gray-50 p-2 rounded" 
-                     onClick={() => setTicker(item.symbol)}>
-                  <div className="text-sm font-medium text-gray-900">{item.symbol}</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">{item.price}</span>
-                    <span className={`text-xs flex items-center ${
-                      item.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {item.changeType === 'positive' ? '▲' : '▼'} {item.change}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div> */}
-
         {/* Main Content */}
         <div className="flex-1 p-6">
           <div className="bg-white rounded-lg shadow-sm">
@@ -302,24 +259,6 @@ const FinancialDashboard = () => {
                     </button>
                   ))}
                 </div>
-                {/* COMMENTED OUT: News Toggle */}
-                {/* <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-2">
-                    <span className="text-gray-600 text-sm">News</span>
-                    <button
-                      onClick={() => setShowNews(!showNews)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        showNews ? 'bg-blue-500' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          showNews ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </label>
-                </div> */}
               </div>
             </div>
 
