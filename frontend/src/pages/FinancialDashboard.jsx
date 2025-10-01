@@ -197,7 +197,7 @@ const FinancialDashboard = () => {
 
             {/* Chart Area */}
             <div className="p-6">
-              <div className="relative h-96 border border-gray-200 rounded">
+              <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
                 {chartData.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-gray-400">
                     <div className="text-center">
@@ -210,14 +210,12 @@ const FinancialDashboard = () => {
                   <svg className="w-full h-full" style={{ overflow: 'visible' }}>
                     <defs>
                       <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#10b981' : '#ef4444', stopOpacity: 0.3 }} />
-                        <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#10b981' : '#ef4444', stopOpacity: 0 }} />
+                        <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#3b82f6' : '#ef4444', stopOpacity: 0.25 }} />
+                        <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#3b82f6' : '#ef4444', stopOpacity: 0 }} />
                       </linearGradient>
                     </defs>
-                    
-                    {/* Chart Grid */}
+                    {/* Chart Grid - horizontal lines and price labels */}
                     <g className="text-gray-400 text-xs">
-                      {/* Horizontal grid lines */}
                       {[...Array(6)].map((_, i) => {
                         const yPos = 40 + (i * 50);
                         const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
@@ -228,16 +226,16 @@ const FinancialDashboard = () => {
                               y1={yPos}
                               x2="720"
                               y2={yPos}
-                              stroke="#f3f4f6"
+                              stroke="#e5e7eb"
                               strokeWidth="1"
                             />
-                            <text x="55" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="10">
+                            <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
                               {price.toLocaleString(undefined, {maximumFractionDigits: 0})}
                             </text>
                           </g>
                         );
                       })}
-                      {/* Vertical grid lines */}
+                      {/* Vertical grid lines for timeline points */}
                       {timelinePoints.map((point, i) => (
                         <line
                           key={`v-${i}`}
@@ -245,13 +243,12 @@ const FinancialDashboard = () => {
                           y1="40"
                           x2={point.x}
                           y2="290"
-                          stroke="#f3f4f6"
+                          stroke="#e5e7eb"
                           strokeWidth="1"
                         />
                       ))}
                     </g>
-                    
-                    {/* Chart Fill Area */}
+                    {/* Chart Fill Area - modern gradient */}
                     {chartData.length > 0 && (
                       <path
                         d={`M 60 290 ${chartData
@@ -264,8 +261,7 @@ const FinancialDashboard = () => {
                         fill="url(#chartGradient)"
                       />
                     )}
-                    
-                    {/* Chart Line */}
+                    {/* Chart Line - bold, modern color */}
                     {chartData.length > 0 && (
                       <path
                         d={`M ${60} ${290 - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * 250)} ${chartData
@@ -277,17 +273,16 @@ const FinancialDashboard = () => {
                           })
                           .join(' ')}`}
                         fill="none"
-                        stroke={priceChange >= 0 ? '#10b981' : '#ef4444'}
-                        strokeWidth="2"
+                        stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
+                        strokeWidth="3"
+                        style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.08))' }}
                       />
                     )}
-                    
-                    {/* Interactive Hover Areas */}
+                    {/* Interactive Hover Areas and Points */}
                     {chartData.map((point, i) => {
                       const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
                       const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
                       const isHovered = hoveredPoint?.index === i;
-                      
                       return (
                         <g key={i}>
                           {/* Large invisible hover area */}
@@ -298,22 +293,21 @@ const FinancialDashboard = () => {
                             height="250"
                             fill="transparent"
                             className="cursor-crosshair"
-                            onMouseEnter={() => setHoveredPoint({ ...point, x: x, y: y, index: i })}
+                            onMouseEnter={() => setHoveredPoint({ ...point, x: x, y: y, index: i, price: point.y })}
                             onMouseLeave={() => setHoveredPoint(null)}
                           />
-                          
                           {/* Visible point circle */}
                           {isHovered && (
                             <circle
                               cx={x}
                               cy={y}
-                              r="4"
-                              fill={priceChange >= 0 ? '#10b981' : '#ef4444'}
+                              r="5"
+                              fill={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
                               stroke="white"
                               strokeWidth="2"
+                              style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.15))' }}
                             />
                           )}
-                          
                           {/* Vertical line on hover */}
                           {isHovered && (
                             <line
@@ -321,7 +315,7 @@ const FinancialDashboard = () => {
                               y1="40"
                               x2={x}
                               y2="290"
-                              stroke={priceChange >= 0 ? '#10b981' : '#ef4444'}
+                              stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
                               strokeWidth="1"
                               strokeDasharray="3,3"
                             />
@@ -329,33 +323,30 @@ const FinancialDashboard = () => {
                         </g>
                       );
                     })}
-                    
-                    {/* Bottom Timeline Circles and Labels */}
+                    {/* Timeline Circles and Labels (Bloomberg style) */}
                     {timelinePoints.map((point, i) => (
                       <g key={`timeline-${i}`}>
-                        {/* Timeline circle */}
                         <circle
                           cx={point.x}
                           cy="310"
                           r="8"
-                          fill="white"
+                          fill="#f9fafb"
                           stroke="#d1d5db"
                           strokeWidth="2"
                         />
-                        {/* Inner circle */}
                         <circle
                           cx={point.x}
                           cy="310"
                           r="3"
-                          fill="#6b7280"
+                          fill="#3b82f6"
                         />
-                        {/* Timeline label */}
                         <text
                           x={point.x}
                           y="330"
                           textAnchor="middle"
-                          fill="#6b7280"
-                          fontSize="10"
+                          fill="#374151"
+                          fontSize="11"
+                          fontWeight="bold"
                         >
                           {point.label}
                         </text>
@@ -363,33 +354,32 @@ const FinancialDashboard = () => {
                     ))}
                   </svg>
                 )}
-                
-                {/* Fixed Position Tooltip */}
+                {/* Tooltip - Bloomberg style */}
                 {hoveredPoint && (
                   <div
-                    className="absolute bg-white border border-gray-300 rounded-lg p-3 shadow-lg pointer-events-none z-20"
+                    className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
                     style={{
                       left: `${Math.min(Math.max(hoveredPoint.x - 60, 10), 400)}px`,
-                      top: `${hoveredPoint.y - 100}px`
+                      top: `${hoveredPoint.y - 100}px`,
+                      minWidth: '120px'
                     }}
                   >
-                    <div className="text-sm font-semibold">{hoveredPoint.y.toLocaleString(undefined, {maximumFractionDigits: 2})} USD</div>
+                    <div className="text-base font-bold text-blue-600">{hoveredPoint.price?.toLocaleString(undefined, {maximumFractionDigits: 2})} USD</div>
                     <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
                     <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
                     <div className={`text-xs mt-1 ${
-                      hoveredPoint.y >= (currentPrice?.y || 0) ? 'text-green-600' : 'text-red-600'
+                      hoveredPoint.price >= (currentPrice?.y || 0) ? 'text-green-600' : 'text-red-600'
                     }`}>
                       {currentPrice ? (
-                        ((hoveredPoint.y - currentPrice.y) / currentPrice.y * 100) >= 0 ? '+' : ''
+                        ((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100) >= 0 ? '+' : ''
                       ) : ''}
-                      {currentPrice ? ((hoveredPoint.y - currentPrice.y) / currentPrice.y * 100).toFixed(2) : '0.00'}%
+                      {currentPrice ? ((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100).toFixed(2) : '0.00'}%
                     </div>
                   </div>
                 )}
-                
-                {/* Chart Info Box */}
-                <div className="absolute top-4 right-4 bg-white border border-gray-200 rounded p-3 shadow-sm">
-                  <div className="text-sm font-medium">
+                {/* Chart Info Box - Bloomberg style */}
+                <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
+                  <div className="text-base font-bold text-blue-600">
                     {currentPrice ? currentPrice.y.toLocaleString(undefined, {maximumFractionDigits: 2}) : '--'} USD
                   </div>
                   <div className="text-xs text-gray-600">{currentPrice ? currentPrice.date : '--'}</div>
