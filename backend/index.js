@@ -1,6 +1,3 @@
-const fetch = require('node-fetch');
-// ...existing code...
-// Move this endpoint below app initialization
 require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
