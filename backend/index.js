@@ -1,5 +1,10 @@
+const fetch = require('node-fetch');
+// ...existing code...
+// Move this endpoint below app initialization
 require('dotenv').config();
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const cors = require('cors');
 const { MongoClient, ObjectId } = require('mongodb');
 const bcrypt = require('bcrypt');
@@ -7,9 +12,53 @@ const { spawn } = require('child_process');
 const msal = require('@azure/msal-node'); 
 const PORT = process.env.PORT || 8000;
 
+
 const app = express();
+// --- Load tickers.csv into memory ---
+let tickerList = [];
+const tickerCsvPath = path.join(__dirname, 'tickers.csv');
+try {
+  const csvData = fs.readFileSync(tickerCsvPath, 'utf8');
+  const lines = csvData.split('\n').filter(Boolean);
+  const header = lines[0].split(',').map(h => h.trim());
+  tickerList = lines.slice(1).map(line => {
+    const cols = line.split(',');
+    return {
+      symbol: cols[0]?.trim(),
+      shortname: cols[1]?.trim(),
+      longname: cols[1]?.trim(), // Use name for both shortname and longname
+      quoteType: cols[2]?.trim() || 'EQUITY',
+      exchange: cols[3]?.trim() || ''
+    };
+  }).filter(t => t.symbol && t.shortname);
+  console.log(`Loaded ${tickerList.length} tickers into memory.`);
+} catch (err) {
+  console.error('Failed to load tickers.csv:', err.message);
+}
 app.use(cors());
 app.use(express.json());
+
+// --- API endpoint: Search ticker suggestions (calls Python)
+app.get('/api/search-ticker', (req, res) => {
+  const { q } = req.query;
+  const startTime = Date.now();
+  if (!q || q.length < 2) {
+    return res.json({ quotes: [] });
+  }
+
+  // Fast in-memory search
+  const query = q.trim().toLowerCase();
+  const matches = tickerList.filter(t =>
+    t.symbol.toLowerCase().includes(query) ||
+    t.shortname.toLowerCase().includes(query) ||
+    t.longname.toLowerCase().includes(query)
+  ).slice(0, 10); // Limit to 10 suggestions
+
+  const endTime = Date.now();
+  const duration = endTime - startTime;
+  console.log(`[search-ticker] Query: '${q}' took ${duration} ms (Node.js in-memory)`);
+  res.json({ quotes: matches });
+});
 
 const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri);
@@ -160,13 +209,87 @@ app.get('/articles', (req, res) => {
 });
 
 // --- API endpoint: Get price data ---
+// --- In-memory cache for price data ---
+const priceCache = {};
+const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// --- Scheduled cache refresh for all tickers ---
+function refreshAllTickerCache() {
+  tickerList.forEach(tickerObj => {
+    const ticker = tickerObj.symbol;
+    // Only refresh if not already fresh
+    const cacheKey = `${ticker}-1Y`;
+    const now = Date.now();
+    if (priceCache[cacheKey] && (now - priceCache[cacheKey].timestamp < PRICE_CACHE_TTL)) {
+      return;
+    }
+    // Spawn Python to get data for each ticker
+    const pyCode = `
+import sys
+import os
+import json
+import warnings
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from data_processing import get_data, filter_data
+ticker = "${ticker}"
+timeframe = "1Y"
+try:
+  df, company_name, currency = get_data(ticker)
+  if df is None:
+    print(json.dumps({"error": "Failed to get data"}))
+    sys.exit(1)
+  df_filtered = filter_data(df, timeframe)
+  prices = [{"date": str(idx.date()), "close": float(row["Close"])} for idx, row in df_filtered.iterrows()]
+  print(json.dumps({"prices": prices, "company_name": company_name, "currency": currency}))
+except Exception as e:
+  print(json.dumps({"error": str(e)}))
+  sys.exit(1)
+`;
+    const py = spawn(PYTHON_PATH, ['-c', pyCode], {
+      cwd: __dirname,
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
+    let data = '';
+    py.stdout.on('data', chunk => { data += chunk.toString(); });
+    py.on('close', code => {
+      if (code === 0) {
+        try {
+          let cleanData = data.trim();
+          const jsonStart = cleanData.indexOf('{');
+          if (jsonStart !== -1) cleanData = cleanData.substring(jsonStart);
+          let braceCount = 0, jsonEnd = -1;
+          for (let i = 0; i < cleanData.length; i++) {
+            if (cleanData[i] === '{') braceCount++;
+            if (cleanData[i] === '}') {
+              braceCount--;
+              if (braceCount === 0) { jsonEnd = i + 1; break; }
+            }
+          }
+          if (jsonEnd > 0) cleanData = cleanData.substring(0, jsonEnd);
+          const result = JSON.parse(cleanData);
+          priceCache[cacheKey] = { data: result, timestamp: Date.now() };
+        } catch {}
+      }
+    });
+  });
+}
+
+// Initial cache load and schedule refresh every 5 minutes
+setTimeout(refreshAllTickerCache, 2000); // Delay to allow tickers to load
+setInterval(refreshAllTickerCache, PRICE_CACHE_TTL);
+
 app.get('/api/price', async (req, res) => {
   const { ticker = 'AAPL', timeframe = '1M' } = req.query;
-  
-  console.log('=== PRICE REQUEST ===');
-  console.log('Ticker:', ticker);
-  console.log('Timeframe:', timeframe);
-  
+  const cacheKey = `${ticker}-${timeframe}`;
+  const now = Date.now();
+
+  // Check cache
+  if (priceCache[cacheKey] && (now - priceCache[cacheKey].timestamp < PRICE_CACHE_TTL)) {
+    return res.json(priceCache[cacheKey].data);
+  }
+
+  // Fetch fresh data from Python
   const pyCode = `
 import sys
 import os
@@ -197,19 +320,19 @@ except Exception as e:
     cwd: __dirname,
     env: { ...process.env, PYTHONUNBUFFERED: '1' }
   });
-  
+
   let data = '';
   let error = '';
   let responseSent = false;
-  
+
   py.stdout.on('data', chunk => {
     data += chunk.toString();
   });
-  
+
   py.stderr.on('data', chunk => { 
     error += chunk.toString();
   });
-  
+
   py.on('error', err => {
     console.error('Failed to start Python process:', err);
     if (!responseSent) {
@@ -221,14 +344,11 @@ except Exception as e:
       });
     }
   });
-  
+
   py.on('close', code => {
     if (responseSent) return;
     responseSent = true;
-    
-    console.log('Exit code:', code);
-    console.log('Has data:', data.length > 0);
-    
+
     if (code !== 0) {
       console.error('Python stderr:', error);
       return res.status(500).json({ 
@@ -237,14 +357,14 @@ except Exception as e:
         stdout: data
       });
     }
-    
+
     try {
       let cleanData = data.trim();
       const jsonStart = cleanData.indexOf('{');
       if (jsonStart !== -1) {
         cleanData = cleanData.substring(jsonStart);
       }
-      
+
       let braceCount = 0;
       let jsonEnd = -1;
       for (let i = 0; i < cleanData.length; i++) {
@@ -257,12 +377,14 @@ except Exception as e:
           }
         }
       }
-      
+
       if (jsonEnd > 0) {
         cleanData = cleanData.substring(0, jsonEnd);
       }
-      
+
       const result = JSON.parse(cleanData);
+      // Store in cache
+      priceCache[cacheKey] = { data: result, timestamp: Date.now() };
       res.json(result);
     } catch (err) {
       console.error('JSON parse error:', err.message);
@@ -275,7 +397,6 @@ except Exception as e:
     }
   });
 });
-
 // --- API endpoint: Get news with sentiment ---
 app.get('/api/news', async (req, res) => {
   const { ticker = 'AAPL' } = req.query;

@@ -392,3 +392,77 @@ def fetch_news_around_date(ticker, target_date, window=3, count=200):
     except Exception as e:
         print(f"Error fetching news around {target_date} for {ticker}: {e}", file=sys.stderr)
         return None
+    
+# -------------------------------
+# 7. Yahoo Finance Ticker Search
+# -------------------------------
+def search_ticker(query):
+    """
+    Search for ticker symbols using Yahoo Finance API.
+    Returns a dict with 'quotes' key (list of suggestions).
+    """
+    import csv
+    import os
+    import threading
+    if not query or len(query) < 2:
+        return {"quotes": []}
+
+    # Simple in-memory cache for suggestions
+    if not hasattr(search_ticker, "_cache"):
+        search_ticker._cache = {}
+        search_ticker._lock = threading.Lock()
+
+    cache = search_ticker._cache
+    lock = search_ticker._lock
+    query_lower = query.lower()
+
+    with lock:
+        if query_lower in cache:
+            return {"quotes": cache[query_lower]}
+
+    # Load tickers from CSV once and cache
+    if not hasattr(search_ticker, "_tickers"):
+        tickers_path = os.path.join(os.path.dirname(__file__), "tickers.csv")
+        tickers = []
+        try:
+            with open(tickers_path, newline='', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    tickers.append(row)
+        except Exception as e:
+            return {"quotes": [], "error": f"Failed to load tickers.csv: {e}"}
+        search_ticker._tickers = tickers
+    else:
+        tickers = search_ticker._tickers
+
+    # Filter tickers by query (symbol or name contains query, case-insensitive)
+    results = []
+    q = query_lower
+    for t in tickers:
+        if q in t["symbol"].lower() or q in t["shortname"].lower() or q in t["longname"].lower():
+            results.append({
+                "symbol": t["symbol"],
+                "shortname": t["shortname"],
+                "longname": t["longname"],
+                "quoteType": t["quoteType"],
+                "exchange": t["exchange"],
+                "score": 1.0
+            })
+            if len(results) >= 10:
+                break
+
+    with lock:
+        cache[query_lower] = results
+
+    return {"quotes": results}
+
+# CLI handler for direct script invocation
+if __name__ == "__main__":
+    import sys
+    import json
+    if len(sys.argv) >= 3 and sys.argv[1] == "search_ticker":
+        query = sys.argv[2]
+        result = search_ticker(query)
+        print(json.dumps(result))
+    else:
+        print(json.dumps({"quotes": [], "error": "Invalid arguments"}))

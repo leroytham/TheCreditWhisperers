@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRef } from 'react';
 import { Search, Bell, User, Menu } from 'lucide-react';
 // Standardize number of x-axis points
 const NUM_X_AXIS_POINTS = 6;
@@ -15,9 +16,12 @@ const FinancialDashboard = () => {
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
 
+
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   // Backend API calls
   useEffect(() => {
@@ -38,6 +42,37 @@ const FinancialDashboard = () => {
       })
       .catch(err => console.error('Error fetching news:', err));
   }, [ticker, timeframe]);
+
+  // Poll for real-time price updates every 15 seconds
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`)
+        .then(res => res.json())
+        .then(data => {
+          setPriceData(data.prices || []);
+          setCompanyName(data.company_name || '');
+          setCurrency(data.currency || 'USD');
+        })
+        .catch(err => console.error('Error polling price data:', err));
+    }, 15000);
+    return () => clearInterval(intervalId);
+  }, [ticker, timeframe]);
+
+  // Suggestions for ticker search
+  useEffect(() => {
+    if (searchTerm.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    setSuggestionsLoading(true);
+    fetch(`/api/search-ticker?q=${searchTerm}`)
+      .then(res => res.json())
+      .then(data => {
+        setSuggestions(data.quotes || []);
+      })
+      .catch(() => setSuggestions([]))
+      .finally(() => setSuggestionsLoading(false));
+  }, [searchTerm]);
 
   // Generate chart coordinates from backend data
   const generateChartData = () => {
@@ -102,12 +137,10 @@ const FinancialDashboard = () => {
   const priceChange = currentPrice && startPrice ? (currentPrice.y - startPrice.y) : 0;
   const priceChangePercent = startPrice ? ((priceChange / startPrice.y) * 100) : 0;
 
-  const handleTickerSubmit = (e) => {
-    e.preventDefault();
-    if (searchTerm.trim()) {
-      setTicker(searchTerm.toUpperCase().trim());
-      setSearchTerm('');
-    }
+  const handleTickerSelect = (symbol) => {
+    setTicker(symbol.toUpperCase().trim());
+    setSearchTerm('');
+    setSuggestions([]);
   };
 
   return (
@@ -129,10 +162,26 @@ const FinancialDashboard = () => {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleTickerSubmit(e)}
                 placeholder="Search sector, country, entity, and more"
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              {/* Suggestions dropdown */}
+              {searchTerm.length > 1 && suggestions.length > 0 && (
+                <div className="absolute left-0 top-full w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 z-30 max-h-96 overflow-y-auto">
+                  {suggestionsLoading && <div className="p-4 text-center text-gray-500">Loading...</div>}
+                  {!suggestionsLoading &&
+                    Array.from(
+                      new Map(
+                        suggestions.filter(q => q.quoteType === 'EQUITY').map(q => [q.symbol, q])
+                      ).values()
+                    ).map((q, idx) => (
+                      <div key={q.symbol + '-' + idx} onClick={() => handleTickerSelect(q.symbol)} className="px-4 py-3 cursor-pointer hover:bg-gray-100">
+                        <p className="font-bold text-sm">{q.symbol}</p>
+                        <p className="text-xs text-gray-600 truncate">{q.shortname || q.longname}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-4">
@@ -215,77 +264,77 @@ const FinancialDashboard = () => {
                     </div>
                   </div>
                 ) : (
-                  <svg className="w-full h-full" style={{ overflow: 'visible' }}>
-                    <defs>
-                      <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#3b82f6' : '#ef4444', stopOpacity: 0.25 }} />
-                        <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#3b82f6' : '#ef4444', stopOpacity: 0 }} />
-                      </linearGradient>
-                    </defs>
-                    {/* Chart Grid - horizontal lines and price labels */}
-                    <g className="text-gray-400 text-xs">
-                      {[...Array(6)].map((_, i) => {
-                        const yPos = 40 + (i * 50);
-                        const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
-                        return (
-                          <g key={i}>
-                            <line
-                              x1="60"
-                              y1={yPos}
-                              x2="720"
-                              y2={yPos}
-                              stroke="#e5e7eb"
-                              strokeWidth="1"
-                            />
-                            <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
-                              {price.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                            </text>
-                          </g>
-                        );
-                      })}
-                      {/* Vertical grid lines for timeline points */}
-                      {timelinePoints.map((point, i) => (
-                        <line
-                          key={`v-${i}`}
-                          x1={point.x}
-                          y1="40"
-                          x2={point.x}
-                          y2="290"
-                          stroke="#e5e7eb"
-                          strokeWidth="1"
+                    <svg className="w-full h-full" style={{ overflow: 'visible' }}>
+                      <defs>
+                        <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0.18 }} />
+                          <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0 }} />
+                        </linearGradient>
+                      </defs>
+                      {/* Chart Grid - horizontal lines and price labels */}
+                      <g className="text-gray-400 text-xs">
+                        {[...Array(6)].map((_, i) => {
+                          const yPos = 40 + (i * 50);
+                          const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
+                          return (
+                            <g key={i}>
+                              <line
+                                x1="60"
+                                y1={yPos}
+                                x2="720"
+                                y2={yPos}
+                                stroke="#e5e7eb"
+                                strokeWidth="1"
+                              />
+                              <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
+                                {price.toLocaleString(undefined, {maximumFractionDigits: 2})}
+                              </text>
+                            </g>
+                          );
+                        })}
+                        {/* Vertical grid lines for timeline points */}
+                        {timelinePoints.map((point, i) => (
+                          <line
+                            key={`v-${i}`}
+                            x1={point.x}
+                            y1="40"
+                            x2={point.x}
+                            y2="290"
+                            stroke="#e5e7eb"
+                            strokeWidth="1"
+                          />
+                        ))}
+                      </g>
+                      {/* Chart Fill Area - modern gradient */}
+                      {chartData.length > 0 && (
+                        <path
+                          d={`M 60 290 ${chartData
+                            .map((point, i) => {
+                              const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
+                              const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
+                              return `L ${x} ${y}`;
+                            })
+                            .join(' ')} L ${60 + ((chartData.length - 1) * (660 / Math.max(1, chartData.length - 1)))} 290 Z`}
+                          fill="url(#chartGradient)"
                         />
-                      ))}
-                    </g>
-                    {/* Chart Fill Area - modern gradient */}
-                    {chartData.length > 0 && (
-                      <path
-                        d={`M 60 290 ${chartData
-                          .map((point, i) => {
-                            const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
-                            const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
-                            return `L ${x} ${y}`;
-                          })
-                          .join(' ')} L ${60 + ((chartData.length - 1) * (660 / Math.max(1, chartData.length - 1)))} 290 Z`}
-                        fill="url(#chartGradient)"
-                      />
-                    )}
-                    {/* Chart Line - bold, modern color */}
-                    {chartData.length > 0 && (
-                      <path
-                        d={`M ${60} ${290 - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * 250)} ${chartData
-                          .slice(1)
-                          .map((point, i) => {
-                            const x = 60 + ((i + 1) * (660 / Math.max(1, chartData.length - 1)));
-                            const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
-                            return `L ${x} ${y}`;
-                          })
-                          .join(' ')}`}
-                        fill="none"
-                        stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
-                        strokeWidth="3"
-                        style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.08))' }}
-                      />
-                    )}
+                      )}
+                      {/* Chart Line - bold, modern color */}
+                      {chartData.length > 0 && (
+                        <path
+                          d={`M ${60} ${290 - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * 250)} ${chartData
+                            .slice(1)
+                            .map((point, i) => {
+                              const x = 60 + ((i + 1) * (660 / Math.max(1, chartData.length - 1)));
+                              const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
+                              return `L ${x} ${y}`;
+                            })
+                            .join(' ')}`}
+                          fill="none"
+                          stroke={priceChange >= 0 ? '#16a34a' : '#dc2626'}
+                          strokeWidth="3"
+                          style={{ filter: 'drop-shadow(0 2px 4px rgba(22,163,74,0.08))' }}
+                        />
+                      )}
                     {/* Interactive Hover Areas and Points */}
                     {chartData.map((point, i) => {
                       const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
@@ -410,7 +459,7 @@ const FinancialDashboard = () => {
               <h3 className="text-lg font-semibold mb-4">Overall Sentiment</h3>
               <div className="flex items-center space-x-8">
                 <div>
-                  <div className="text-sm text-gray-600">Average Sentiment Score (5M)</div>
+                  <div className="text-sm text-gray-600">Average Sentiment Score</div>
                   <div className={`text-4xl font-bold ${
                     (sentiment.avg_score || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>

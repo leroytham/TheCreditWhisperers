@@ -1,0 +1,11 @@
+symbol,name,quoteType,exchange
+AAPL,Apple Inc.,EQUITY,NASDAQ
+MSFT,Microsoft Corp.,EQUITY,NASDAQ
+TSLA,Tesla Inc.,EQUITY,NASDAQ
+GOOGL,Alphabet Inc.,EQUITY,NASDAQ
+AMZN,Amazon.com Inc.,EQUITY,NASDAQ
+NVDA,NVIDIA Corp.,EQUITY,NASDAQ
+CRM,Salesforce Inc.,EQUITY,NYSE
+META,Meta Platforms,EQUITY,NASDAQ
+JPM,JPMorgan Chase & Co.,EQUITY,NYSE
+V, Visa Inc.,EQUITY,NYSE
