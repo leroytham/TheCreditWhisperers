@@ -268,6 +268,15 @@ except Exception as e:
           priceCache[cacheKey] = { data: result, timestamp: Date.now() };
         } catch {}
       }
+      // After each ticker refresh, log cache status
+      if (Object.keys(priceCache).length > 0) {
+        console.log('--- Price Cache Status ---');
+        Object.entries(priceCache).forEach(([key, val]) => {
+          const age = ((Date.now() - val.timestamp) / 1000).toFixed(1);
+          console.log(`  ${key}: ${val.timestamp} (age: ${age}s)`);
+        });
+        console.log('--------------------------');
+      }
     });
   });
 }

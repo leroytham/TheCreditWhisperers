@@ -10,6 +10,7 @@ const FinancialDashboard = () => {
   // Backend integration state
   const [ticker, setTicker] = useState('AAPL');
   const [timeframe, setTimeframe] = useState('1Y');
+  const [priceData1Y, setPriceData1Y] = useState([]);
   const [priceData, setPriceData] = useState([]);
   const [companyName, setCompanyName] = useState('');
   const [currency, setCurrency] = useState('USD');
@@ -25,10 +26,11 @@ const FinancialDashboard = () => {
 
   // Backend API calls
   useEffect(() => {
-    fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`)
+    // Always fetch 1Y data only
+    fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
       .then(res => res.json())
       .then(data => {
-        setPriceData(data.prices || []);
+        setPriceData1Y(data.prices || []);
         setCompanyName(data.company_name || '');
         setCurrency(data.currency || 'USD');
       })
@@ -41,22 +43,55 @@ const FinancialDashboard = () => {
         setSentiment({ avg_score: data.avg_score });
       })
       .catch(err => console.error('Error fetching news:', err));
-  }, [ticker, timeframe]);
+  }, [ticker]);
+
+  // Filter priceData for selected timeframe
+  useEffect(() => {
+    if (!priceData1Y || priceData1Y.length === 0) {
+      setPriceData([]);
+      return;
+    }
+    const now = new Date();
+    let filtered = priceData1Y;
+    if (timeframe === '5D') {
+      // Last 5 trading days
+      filtered = priceData1Y.slice(-5);
+    } else if (timeframe === '1M') {
+      // Last 1 month
+      const oneMonthAgo = new Date(now);
+      oneMonthAgo.setMonth(now.getMonth() - 1);
+      filtered = priceData1Y.filter(pt => new Date(pt.date) >= oneMonthAgo);
+    } else if (timeframe === '3M') {
+      const threeMonthsAgo = new Date(now);
+      threeMonthsAgo.setMonth(now.getMonth() - 3);
+      filtered = priceData1Y.filter(pt => new Date(pt.date) >= threeMonthsAgo);
+    } else if (timeframe === '6M') {
+      const sixMonthsAgo = new Date(now);
+      sixMonthsAgo.setMonth(now.getMonth() - 6);
+      filtered = priceData1Y.filter(pt => new Date(pt.date) >= sixMonthsAgo);
+    } else if (timeframe === 'YTD') {
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      filtered = priceData1Y.filter(pt => new Date(pt.date) >= startOfYear);
+    } else {
+      filtered = priceData1Y;
+    }
+    setPriceData(filtered);
+  }, [priceData1Y, timeframe]);
 
   // Poll for real-time price updates every 15 seconds
   useEffect(() => {
     const intervalId = setInterval(() => {
-      fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`)
+      fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
         .then(res => res.json())
         .then(data => {
-          setPriceData(data.prices || []);
+          setPriceData1Y(data.prices || []);
           setCompanyName(data.company_name || '');
           setCurrency(data.currency || 'USD');
         })
         .catch(err => console.error('Error polling price data:', err));
     }, 15000);
     return () => clearInterval(intervalId);
-  }, [ticker, timeframe]);
+  }, [ticker]);
 
   // Suggestions for ticker search
   useEffect(() => {
