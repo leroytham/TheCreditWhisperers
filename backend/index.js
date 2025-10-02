@@ -51,10 +51,38 @@ app.get('/api/search-ticker', (req, res) => {
     t.longname.toLowerCase().includes(query)
   ).slice(0, 10); // Limit to 10 suggestions
 
-  const endTime = Date.now();
-  const duration = endTime - startTime;
-  console.log(`[search-ticker] Query: '${q}' took ${duration} ms (Node.js in-memory)`);
-  res.json({ quotes: matches });
+  if (matches.length > 0) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(`[search-ticker] Query: '${q}' took ${duration} ms (Node.js in-memory)`);
+    return res.json({ quotes: matches });
+  }
+
+  // If no matches, call Python search_ticker for Yahoo Finance suggestions
+  const py = spawn(PYTHON_PATH, ['data_processing.py', 'search_ticker', q], {
+    cwd: __dirname,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
+  let data = '';
+  let error = '';
+  py.stdout.on('data', chunk => { data += chunk.toString(); });
+  py.stderr.on('data', chunk => { error += chunk.toString(); });
+  py.on('close', code => {
+    if (code !== 0) {
+      console.error(`[search-ticker] Python error:`, error);
+      return res.json({ quotes: [], error: error });
+    }
+    try {
+      const result = JSON.parse(data);
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      console.log(`[search-ticker] Query: '${q}' took ${duration} ms (Python fallback)`);
+      res.json(result);
+    } catch (err) {
+      console.error(`[search-ticker] JSON parse error:`, err.message);
+      res.json({ quotes: [], error: 'Failed to parse Python output' });
+    }
+  });
 });
 
 const uri = process.env.MONGO_URI;

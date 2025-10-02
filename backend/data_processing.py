@@ -439,17 +439,50 @@ def search_ticker(query):
     results = []
     q = query_lower
     for t in tickers:
-        if q in t["symbol"].lower() or q in t["shortname"].lower() or q in t["longname"].lower():
+        symbol = t.get("symbol", "")
+        shortname = t.get("shortname", "")
+        longname = t.get("longname", "")
+        if q in symbol.lower() or q in shortname.lower() or q in longname.lower():
             results.append({
-                "symbol": t["symbol"],
-                "shortname": t["shortname"],
-                "longname": t["longname"],
-                "quoteType": t["quoteType"],
-                "exchange": t["exchange"],
+                "symbol": symbol,
+                "shortname": shortname,
+                "longname": longname,
+                "quoteType": t.get("quoteType", ""),
+                "exchange": t.get("exchange", ""),
                 "score": 1.0
             })
             if len(results) >= 10:
                 break
+
+    # If no results, query Yahoo Finance public search API
+    if not results:
+        import requests
+        try:
+            url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=10&newsCount=0"
+            print(f"[search_ticker] Requesting: {url}", file=sys.stderr)
+            resp = requests.get(url, timeout=5)
+            print(f"[search_ticker] Status code: {resp.status_code}", file=sys.stderr)
+            print(f"[search_ticker] Raw response: {resp.text[:500]}", file=sys.stderr)
+            if resp.status_code == 200:
+                data = resp.json()
+                print(f"[search_ticker] Parsed JSON: {data}", file=sys.stderr)
+                quotes = data.get("quotes", [])
+                for qobj in quotes:
+                    results.append({
+                        "symbol": qobj.get("symbol", ""),
+                        "shortname": qobj.get("shortname", ""),
+                        "longname": qobj.get("longname", ""),
+                        "quoteType": qobj.get("quoteType", ""),
+                        "exchange": qobj.get("exchange", ""),
+                        "score": qobj.get("score", 1.0)
+                    })
+                    if len(results) >= 10:
+                        break
+            else:
+                print(f"[search_ticker] Non-200 response", file=sys.stderr)
+        except Exception as e:
+            print(f"[search_ticker] Exception: {e}", file=sys.stderr)
+            return {"quotes": [], "error": f"Yahoo Finance API error: {e}"}
 
     with lock:
         cache[query_lower] = results
@@ -464,5 +497,17 @@ if __name__ == "__main__":
         query = sys.argv[2]
         result = search_ticker(query)
         print(json.dumps(result))
+    elif len(sys.argv) >= 3 and sys.argv[1] == "test_yahoo_api":
+        import requests
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={sys.argv[2]}&quotesCount=10&newsCount=0"
+        print(f"Testing Yahoo Finance API: {url}")
+        resp = requests.get(url, timeout=5)
+        print(f"Status code: {resp.status_code}")
+        print(f"Raw response: {resp.text[:500]}")
+        if resp.status_code == 200:
+            data = resp.json()
+            print(f"Parsed JSON: {json.dumps(data, indent=2)[:1000]}")
+        else:
+            print("Non-200 response")
     else:
         print(json.dumps({"quotes": [], "error": "Invalid arguments"}))
