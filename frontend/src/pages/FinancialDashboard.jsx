@@ -16,6 +16,7 @@ const FinancialDashboard = () => {
   const [currency, setCurrency] = useState('USD');
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
+  const [lastFetched, setLastFetched] = useState(null);
 
 
   // UI state
@@ -33,6 +34,7 @@ const FinancialDashboard = () => {
         setPriceData1Y(data.prices || []);
         setCompanyName(data.company_name || '');
         setCurrency(data.currency || 'USD');
+        setLastFetched(new Date());
       })
       .catch(err => console.error('Error fetching price data:', err));
 
@@ -87,6 +89,7 @@ const FinancialDashboard = () => {
           setPriceData1Y(data.prices || []);
           setCompanyName(data.company_name || '');
           setCurrency(data.currency || 'USD');
+          setLastFetched(new Date());
         })
         .catch(err => console.error('Error polling price data:', err));
     }, 15000);
@@ -239,6 +242,15 @@ const FinancialDashboard = () => {
                   </h1>
                   <p className="text-gray-600">{ticker}</p>
                   <p className="text-gray-600">({currency})</p>
+                </div>
+                <div className="text-xs text-gray-500 text-right">
+                  {lastFetched && (
+                    <span>
+                      Data retrieved: {lastFetched.toLocaleString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
+                      })}
+                    </span>
+                  )}
                 </div>
               </div>
 
