@@ -4,9 +4,40 @@
   "main": "index.js",
   "proxy": "http://localhost:8000",
   "scripts": {
-    "test": "jest --watchAll --detectOpenHandles",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
     "start": "node index.js",
     "dev": "nodemon index.js"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      "/data_processing.py",
+      "/ArticleCategorisation.py",
+      "/tickers.csv"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.test.js",
+      "**/?(*.)+(spec|test).js"
+    ],
+    "collectCoverageFrom": [
+      "*.js",
+      "!coverage/**",
+      "!node_modules/**",
+      "!jest.config.js"
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "testTimeout": 10000,
+    "verbose": true,
+    "forceExit": true,
+    "detectOpenHandles": false
   },
   "keywords": [],
   "author": "",

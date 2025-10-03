@@ -3,8 +3,9 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
-const { MongoClient, ObjectId } = require('mongodb');
-const bcrypt = require('bcrypt');
+// DEPRECATED - Using Microsoft Auth only
+// const { MongoClient, ObjectId } = require('mongodb');
+// const bcrypt = require('bcrypt');
 const { spawn } = require('child_process');  
 const msal = require('@azure/msal-node'); 
 const PORT = process.env.PORT || 8000;
@@ -85,8 +86,9 @@ app.get('/api/search-ticker', (req, res) => {
   });
 });
 
-const uri = process.env.MONGO_URI;
-const client = new MongoClient(uri);
+// DEPRECATED - Using Microsoft Auth only
+// const uri = process.env.MONGO_URI;
+// const client = new MongoClient(uri);
 
 // PYTHON_PATH=/'opt/anaconda3/bin/python';
 // const PYTHON_PATH = '/opt/anaconda3/bin/python';
@@ -108,64 +110,66 @@ app.get('/', (req, res) => {
   res.send('Backend connected 🚀');
 });
 
-app.post('/signup', async (req, res) => {
-  const { username, password } = req.body;
+// DEPRECATED - Using Microsoft Auth only
+// app.post('/signup', async (req, res) => {
+//   const { username, password } = req.body;
+//
+//   if (!username || !password) {
+//     return res.status(400).json({ success: false, message: "Missing username or password" });
+//   }
+//
+//   try {
+//     await client.connect();
+//     const db = client.db("NewsIngestion");
+//
+//     const existingUser = await db.collection("Users").findOne({ username });
+//     if (existingUser) {
+//       return res.status(400).json({ success: false, message: "Username already exists" });
+//     }
+//
+//     const hashedPassword = await bcrypt.hash(password, 10);
+//
+//     const result = await db.collection("Users").insertOne({
+//       username,
+//       password: hashedPassword,
+//       createdAt: new Date()
+//     });
+//
+//     res.json({ success: true, message: "Signup successful", userId: result.insertedId });
+//   } catch (err) {
+//     console.error("Signup error:", err);
+//     res.status(500).json({ success: false, message: "Server error" });
+//   }
+// });
 
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: "Missing username or password" });
-  }
-
-  try {
-    await client.connect();
-    const db = client.db("NewsIngestion");
-
-    const existingUser = await db.collection("Users").findOne({ username });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: "Username already exists" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await db.collection("Users").insertOne({
-      username,
-      password: hashedPassword,
-      createdAt: new Date()
-    });
-
-    res.json({ success: true, message: "Signup successful", userId: result.insertedId });
-  } catch (err) {
-    console.error("Signup error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-app.post('/LoginAdmin', async (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: "Missing username or password" });
-  }
-
-  try {
-    await client.connect();
-    const db = client.db("NewsIngestion");
-
-    const user = await db.collection("Users").findOne({ username });
-    if (!user) {
-      return res.status(401).json({ success: false, message: "Invalid username or password" });
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ success: false, message: "Invalid username or password" });
-    }
-
-    res.json({ success: true, message: "Login successful", user: { id: user._id, username: user.username } });
-  } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
+// DEPRECATED - Using Microsoft Auth only
+// app.post('/LoginAdmin', async (req, res) => {
+//   const { username, password } = req.body;
+//
+//   if (!username || !password) {
+//     return res.status(400).json({ success: false, message: "Missing username or password" });
+//   }
+//
+//   try {
+//     await client.connect();
+//     const db = client.db("NewsIngestion");
+//
+//     const user = await db.collection("Users").findOne({ username });
+//     if (!user) {
+//       return res.status(401).json({ success: false, message: "Invalid username or password" });
+//     }
+//
+//     const isPasswordValid = await bcrypt.compare(password, user.password);
+//     if (!isPasswordValid) {
+//       return res.status(401).json({ success: false, message: "Invalid username or password" });
+//     }
+//
+//     res.json({ success: true, message: "Login successful", user: { id: user._id, username: user.username } });
+//   } catch (err) {
+//     console.error("Login error:", err);
+//     res.status(500).json({ success: false, message: "Server error" });
+//   }
+// });
 
 app.get('/login', (req, res) => {
   const authCodeUrlParameters = {
