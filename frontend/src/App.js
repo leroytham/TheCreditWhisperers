@@ -7,15 +7,15 @@ import FinancialDashboard from "./pages/FinancialDashboard";
 function App() {
   return (
     <Router>
-      <nav>
+      {/* <nav>
         <Link to="/signup">Signup</Link> | <Link to="/login">Login</Link>
-      </nav>
+      </nav> */}
       <Routes>
-        <Route path="/signup" element={<SignupCard />} />
+        {/* <Route path="/signup" element={<SignupCard />} /> */}
         <Route path="/login" element={<LoginCard />} />
         <Route path="/financial_dashboard" element={<FinancialDashboard />} />
 
-        <Route path="/" element={<SignupCard />} /> 
+        <Route path="/" element={<LoginCard />} /> 
       </Routes>
     </Router>
   );
