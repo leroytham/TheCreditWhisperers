@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRef } from 'react';
+import { useNavigate } from "react-router-dom";
 import { Search, Bell, User, Menu } from 'lucide-react';
 // Standardize number of x-axis points
 const NUM_X_AXIS_POINTS = 6;
@@ -17,6 +18,7 @@ const FinancialDashboard = () => {
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
+  const navigate = useNavigate();
 
 
   // UI state
@@ -187,20 +189,25 @@ const FinancialDashboard = () => {
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Menu className="w-6 h-6 text-gray-600" />
+            {/* <Menu className="w-6 h-6 text-gray-600" /> */}
             <nav className="flex space-x-8">
-              <button className="text-gray-600 hover:text-gray-900">PORTFOLIO</button>
+              <button 
+                className="text-gray-600 hover:text-gray-900"
+                onClick={() => navigate("/portfolio_page")}
+                >PORTFOLIO
+                </button>
               <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">ENTITY</button>
             </nav>
           </div>
           <div className="flex-1 max-w-md mx-8">
             <div className="relative">
+              {/* Search sector, country, entity, and more" placeholder */}
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search sector, country, entity, and more"
+                placeholder="Search by entity"
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               {/* Suggestions dropdown */}

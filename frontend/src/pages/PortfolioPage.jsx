@@ -741,9 +741,9 @@ const PerformanceView = ({ context, onBack }) => {
                           <div className="text-lg font-bold">{Number(hoveredPoint.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                           <div className={`text-xs ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>{tooltip.changePct >= 0 ? '+' : ''}{tooltip.changePct.toFixed(2)}%</div>
                         </div>
-                        {hoveredPoint.volume !== undefined && (
+                        {/* {hoveredPoint.volume !== undefined && (
                           <div className="text-xs text-gray-500 mt-2">Vol: {Number(hoveredPoint.volume).toLocaleString()}</div>
-                        )}
+                        )} */}
                       </div>
                     </div>
                   )}
@@ -813,7 +813,7 @@ const Portfolio = () => {
         <div className="flex items-center justify-between">
           {/* Left: Menu + PORTFOLIO/ENTITY */}
           <div className="flex items-center space-x-4">
-            <Menu className="w-6 h-6 text-gray-600" />
+            {/* <Menu className="w-6 h-6 text-gray-600" /> */}
             <nav className="flex space-x-8">
               <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">PORTFOLIO</button>
               <button
@@ -825,7 +825,7 @@ const Portfolio = () => {
             </nav>
           </div>
 
-          {/* Middle: Search bar */}
+          {/* Middle: Search bar
           <div className="flex-1 max-w-md mx-8 relative">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -835,7 +835,7 @@ const Portfolio = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search sector, country, entity, and more"
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              ></input>
               {searchTerm.length > 1 && suggestions?.length > 0 && (
                 <div className="absolute left-0 top-full w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 z-30 max-h-96 overflow-y-auto">
                   {Array.from(
@@ -856,7 +856,7 @@ const Portfolio = () => {
                 </div>
               )}
             </div>
-          </div>
+          </div> */}
 
           {/* Right: Icons */}
           <div className="flex items-center space-x-4">

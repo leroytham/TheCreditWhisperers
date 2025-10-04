@@ -455,7 +455,7 @@ from data_processing import get_ticker_news, analyze_sentiment
 ticker = "${ticker}"
 
 try:
-    news_articles = get_ticker_news(ticker, count=50)
+    news_articles = get_ticker_news(ticker, count=198)
     if news_articles is None:
         print(json.dumps({"error": "Failed to get news"}))
         sys.exit(1)
