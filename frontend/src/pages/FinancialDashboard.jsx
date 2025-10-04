@@ -3,44 +3,8 @@ import { useRef } from 'react';
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
 
-
-
-// export default function FinancialDashboard() {
-//   const [searchParams] = useSearchParams();
-//   const navigate = useNavigate();
-
-//   useEffect(() => {
-//     const user = searchParams.get("user");
-//     if (user) {
-//       sessionStorage.setItem("user", user);
-//     } else if (!sessionStorage.getItem("user")) {
-//       navigate("/login");
-//     }
-//   }, [navigate, searchParams]);
-
-//   return <div>Welcome, {sessionStorage.getItem("user")}!</div>;
-// }
-
-// Standardize number of x-axis points
-
-// const FinancialDashboard = () => {
-//   const [searchParams] = useSearchParams();
-//   const navigate = useNavigate();
-
-//   useEffect(() => {
-//     const user = searchParams.get("user");
-//     if (user) {
-//       sessionStorage.setItem("user", user);
-//     } else if (!sessionStorage.getItem("user")) {
-//       navigate("/login");
-//     }
-//   }, [navigate, searchParams]);
-// }, [navigate, searchParams]);
-
-
 const NUM_X_AXIS_POINTS = 6;
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
-// COMMENTED OUT timeframes: '1D', '5Y'
 
 const FinancialDashboard = () => {
   // Backend integration state
@@ -52,15 +16,15 @@ const FinancialDashboard = () => {
   const [currency, setCurrency] = useState('USD');
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
+  const [dailySentiment, setDailySentiment] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-
-
-
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [hoveredBar, setHoveredBar] = useState(null);
+  const [visibleHeadlines, setVisibleHeadlines] = useState(5);
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -81,12 +45,10 @@ const FinancialDashboard = () => {
       navigate("/login");
     }
   };
-  
-  
 
   // Backend API calls
   useEffect(() => {
-    // Always fetch 1Y data only
+    // Fetch 1Y price data
     fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
       .then(res => res.json())
       .then(data => {
@@ -97,6 +59,7 @@ const FinancialDashboard = () => {
       })
       .catch(err => console.error('Error fetching price data:', err));
 
+    // Fetch news
     fetch(`/api/news?ticker=${ticker}`)
       .then(res => res.json())
       .then(data => {
@@ -104,6 +67,14 @@ const FinancialDashboard = () => {
         setSentiment({ avg_score: data.avg_score });
       })
       .catch(err => console.error('Error fetching news:', err));
+
+    // Fetch daily sentiment data
+    fetch(`/api/daily-sentiment?ticker=${ticker}`)
+      .then(res => res.json())
+      .then(data => {
+        setDailySentiment(data.daily || {});
+      })
+      .catch(err => console.error('Error fetching daily sentiment:', err));
   }, [ticker]);
 
   // Filter priceData for selected timeframe
@@ -115,10 +86,8 @@ const FinancialDashboard = () => {
     const now = new Date();
     let filtered = priceData1Y;
     if (timeframe === '5D') {
-      // Last 5 trading days
       filtered = priceData1Y.slice(-5);
     } else if (timeframe === '1M') {
-      // Last 1 month
       const oneMonthAgo = new Date(now);
       oneMonthAgo.setMonth(now.getMonth() - 1);
       filtered = priceData1Y.filter(pt => new Date(pt.date) >= oneMonthAgo);
@@ -200,7 +169,7 @@ const FinancialDashboard = () => {
 
   const priceRange = getPriceRange();
 
-  // Generate timeline points from data based on timeframe - UPDATED
+  // Generate timeline points from data based on timeframe
   const generateTimelinePoints = () => {
     if (chartData.length === 0) return [];
     
@@ -217,7 +186,6 @@ const FinancialDashboard = () => {
       let label = '';
       if (point.date) {
         const date = new Date(point.date);
-        // Always use 'Aug 16' style for all timeframes
         label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       } else {
         label = `Point ${i + 1}`;
@@ -228,7 +196,7 @@ const FinancialDashboard = () => {
 
   const timelinePoints = generateTimelinePoints();
 
-  // Current price info - calculate based on timeframe (start to end of selected period)
+  // Current price info
   const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
   const startPrice = chartData.length > 0 ? chartData[0] : null;
   const priceChange = currentPrice && startPrice ? (currentPrice.y - startPrice.y) : 0;
@@ -240,13 +208,43 @@ const FinancialDashboard = () => {
     setSuggestions([]);
   };
 
+  // Generate daily sentiment bar chart data
+  const generateDailySentimentBars = () => {
+    if (!dailySentiment || Object.keys(dailySentiment).length === 0) {
+      return [];
+    }
+
+    // Sort by date and get last 7 days
+    const sortedDates = Object.keys(dailySentiment).sort();
+    const last7Days = sortedDates.slice(-7);
+
+    return last7Days.map((date, index) => {
+      const dayData = dailySentiment[date];
+      const score = dayData.score || 0;
+      const count = dayData.count || 0;
+      const headlines = dayData.headlines || [];
+      const dateObj = new Date(date);
+      const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      return {
+        date: date,
+        label: label,
+        score: score,
+        count: count,
+        headlines: headlines,
+        index: index
+      };
+    });
+  };
+
+  const dailySentimentBars = generateDailySentimentBars();
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            {/* <Menu className="w-6 h-6 text-gray-600" /> */}
             <nav className="flex space-x-8">
               <button 
                 className="text-gray-600 hover:text-gray-900"
@@ -258,7 +256,6 @@ const FinancialDashboard = () => {
           </div>
           <div className="flex-1 max-w-md mx-8">
             <div className="relative">
-              {/* Search sector, country, entity, and more" placeholder */}
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
@@ -267,7 +264,6 @@ const FinancialDashboard = () => {
                 placeholder="Search by entity"
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              {/* Suggestions dropdown */}
               {searchTerm.length > 1 && suggestions.length > 0 && (
                 <div className="absolute left-0 top-full w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 z-30 max-h-96 overflow-y-auto">
                   {suggestionsLoading && <div className="p-4 text-center text-gray-500">Loading...</div>}
@@ -289,9 +285,7 @@ const FinancialDashboard = () => {
           <div className="flex items-center space-x-4">
             <Bell className="w-6 h-6 text-gray-600" />
             <User className="w-6 h-6 text-gray-600" />
-            <button
-              onClick={handleLogout}
-            >
+            <button onClick={handleLogout}>
               <LogOut className="w-6 h-6 text-gray-600 hover:text-gray-600 transition" />
             </button>
           </div>
@@ -368,7 +362,7 @@ const FinancialDashboard = () => {
               </div>
             </div>
 
-            {/* Chart Area */}
+            {/* Price Chart Area */}
             <div className="p-6">
               <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
                 {chartData.length === 0 ? (
@@ -387,41 +381,25 @@ const FinancialDashboard = () => {
                           <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0 }} />
                         </linearGradient>
                       </defs>
-                      {/* Chart Grid - horizontal lines and price labels */}
+                      {/* Chart Grid */}
                       <g className="text-gray-400 text-xs">
                         {[...Array(6)].map((_, i) => {
                           const yPos = 40 + (i * 50);
                           const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
                           return (
                             <g key={i}>
-                              <line
-                                x1="60"
-                                y1={yPos}
-                                x2="720"
-                                y2={yPos}
-                                stroke="#e5e7eb"
-                                strokeWidth="1"
-                              />
+                              <line x1="60" y1={yPos} x2="720" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
                               <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
                                 {price.toLocaleString(undefined, {maximumFractionDigits: 2})}
                               </text>
                             </g>
                           );
                         })}
-                        {/* Vertical grid lines for timeline points */}
                         {timelinePoints.map((point, i) => (
-                          <line
-                            key={`v-${i}`}
-                            x1={point.x}
-                            y1="40"
-                            x2={point.x}
-                            y2="290"
-                            stroke="#e5e7eb"
-                            strokeWidth="1"
-                          />
+                          <line key={`v-${i}`} x1={point.x} y1="40" x2={point.x} y2="290" stroke="#e5e7eb" strokeWidth="1" />
                         ))}
                       </g>
-                      {/* Chart Fill Area - modern gradient */}
+                      {/* Chart Fill Area */}
                       {chartData.length > 0 && (
                         <path
                           d={`M 60 290 ${chartData
@@ -434,7 +412,7 @@ const FinancialDashboard = () => {
                           fill="url(#chartGradient)"
                         />
                       )}
-                      {/* Chart Line - bold, modern color */}
+                      {/* Chart Line */}
                       {chartData.length > 0 && (
                         <path
                           d={`M ${60} ${290 - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * 250)} ${chartData
@@ -451,14 +429,13 @@ const FinancialDashboard = () => {
                           style={{ filter: 'drop-shadow(0 2px 4px rgba(22,163,74,0.08))' }}
                         />
                       )}
-                    {/* Interactive Hover Areas and Points */}
+                    {/* Interactive Hover Areas */}
                     {chartData.map((point, i) => {
                       const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
                       const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
                       const isHovered = hoveredPoint?.index === i;
                       return (
                         <g key={i}>
-                          {/* Large invisible hover area */}
                           <rect
                             x={x - 10}
                             y="40"
@@ -469,77 +446,33 @@ const FinancialDashboard = () => {
                             onMouseEnter={() => setHoveredPoint({ ...point, x: x, y: y, index: i, price: point.y })}
                             onMouseLeave={() => setHoveredPoint(null)}
                           />
-                          {/* Visible point circle */}
                           {isHovered && (
-                            <circle
-                              cx={x}
-                              cy={y}
-                              r="5"
-                              fill={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
-                              stroke="white"
-                              strokeWidth="2"
-                              style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.15))' }}
-                            />
-                          )}
-                          {/* Vertical line on hover */}
-                          {isHovered && (
-                            <line
-                              x1={x}
-                              y1="40"
-                              x2={x}
-                              y2="290"
-                              stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
-                              strokeWidth="1"
-                              strokeDasharray="3,3"
-                            />
+                            <>
+                              <circle cx={x} cy={y} r="5" fill={priceChange >= 0 ? '#3b82f6' : '#ef4444'} stroke="white" strokeWidth="2" style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.15))' }} />
+                              <line x1={x} y1="40" x2={x} y2="290" stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'} strokeWidth="1" strokeDasharray="3,3" />
+                            </>
                           )}
                         </g>
                       );
                     })}
-                    {/* Timeline Circles and Labels (Bloomberg style) */}
+                    {/* Timeline */}
                     {timelinePoints.map((point, i) => (
                       <g key={`timeline-${i}`}>
-                        <circle
-                          cx={point.x}
-                          cy="310"
-                          r="8"
-                          fill="#f9fafb"
-                          stroke="#d1d5db"
-                          strokeWidth="2"
-                        />
-                        <circle
-                          cx={point.x}
-                          cy="310"
-                          r="3"
-                          fill="#3b82f6"
-                        />
-                        <text
-                          x={point.x}
-                          y="330"
-                          textAnchor="middle"
-                          fill="#374151"
-                          fontSize="11"
-                          fontWeight="bold"
-                        >
+                        <circle cx={point.x} cy="310" r="8" fill="#f9fafb" stroke="#d1d5db" strokeWidth="2" />
+                        <circle cx={point.x} cy="310" r="3" fill="#3b82f6" />
+                        <text x={point.x} y="330" textAnchor="middle" fill="#374151" fontSize="11" fontWeight="bold">
                           {point.label}
                         </text>
                       </g>
                     ))}
                   </svg>
                 )}
-                {/* Tooltip - Bloomberg style */}
+                {/* Tooltip */}
                 {hoveredPoint && (
                   <div
                     className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
                     style={{
-                      /* Tooltip width is 160px, chart left edge is at 60px, chart width is 660px */
-                      left: `${Math.max(
-                        60, // chart left edge
-                        Math.min(
-                          hoveredPoint.x - 80, // center tooltip above point
-                          60 + 660 - 160 // chart right edge minus tooltip width
-                        )
-                      )}px`,
+                      left: `${Math.max(60, Math.min(hoveredPoint.x - 80, 60 + 660 - 160))}px`,
                       top: `${hoveredPoint.y - 100}px`,
                       minWidth: '120px'
                     }}
@@ -547,17 +480,13 @@ const FinancialDashboard = () => {
                     <div className="text-base font-bold text-blue-600">{hoveredPoint.price?.toLocaleString(undefined, {maximumFractionDigits: 2})} USD</div>
                     <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
                     <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
-                    <div className={`text-xs mt-1 ${
-                      hoveredPoint.price >= (currentPrice?.y || 0) ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {currentPrice ? (
-                        ((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100) >= 0 ? '+' : ''
-                      ) : ''}
+                    <div className={`text-xs mt-1 ${hoveredPoint.price >= (currentPrice?.y || 0) ? 'text-green-600' : 'text-red-600'}`}>
+                      {currentPrice ? (((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100) >= 0 ? '+' : '') : ''}
                       {currentPrice ? ((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100).toFixed(2) : '0.00'}%
                     </div>
                   </div>
                 )}
-                {/* Chart Info Box - Bloomberg style */}
+                {/* Chart Info Box */}
                 <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
                   <div className="text-base font-bold text-blue-600">
                     {currentPrice ? currentPrice.y.toLocaleString(undefined, {maximumFractionDigits: 2}) : '--'} USD
@@ -567,6 +496,176 @@ const FinancialDashboard = () => {
                     {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Daily Sentiment Bar Chart */}
+            <div className="px-6 pb-6">
+              <h3 className="text-lg font-semibold mb-4">Daily Average Sentiment (Past 7 Days)</h3>
+              <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md p-6">
+                {dailySentimentBars.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      <div>Loading sentiment data...</div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-full h-full">
+                      {/* Y-axis label - moved to left side, rotated */}
+                      <text 
+                        x="-180" 
+                        y="15" 
+                        fill="#6b7280" 
+                        fontSize="11" 
+                        fontWeight="600"
+                        transform="rotate(-90)"
+                        textAnchor="middle"
+                      >
+                        Average Sentiment Score
+                      </text>
+
+                      {/* Y-axis labels and grid lines */}
+                      <g className="text-gray-400 text-xs">
+                        {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
+                          const yPos = 40 + (i * 65);
+                          return (
+                            <g key={i}>
+                              <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
+                              <text x="60" y={yPos + 4} textAnchor="end" fill="#6b7280" fontSize="12" fontWeight="500">
+                                {value.toFixed(1)}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </g>
+
+                      {/* Bars with score labels */}
+                      {dailySentimentBars.map((bar, i) => {
+                        const barWidth = 70;
+                        const barSpacing = (680) / dailySentimentBars.length;
+                        const x = 70 + (i * barSpacing) + (barSpacing - barWidth) / 2;
+                        const zeroY = 170; // Middle of chart (0 value)
+                        const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
+                        const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
+                        const barColor = bar.score > 0 ? '#22c55e' : bar.score < 0 ? '#ef4444' : '#9ca3af';
+
+                        return (
+                          <g key={i}>
+                            {/* Bar */}
+                            <rect
+                              x={x}
+                              y={barY}
+                              width={barWidth}
+                              height={Math.max(scoreHeight, 3)}
+                              fill={barColor}
+                              opacity="0.85"
+                              rx="3"
+                              className="cursor-pointer transition-opacity"
+                              style={{ opacity: hoveredBar === i ? 1 : 0.85 }}
+                              onMouseEnter={() => setHoveredBar(i)}
+                              onMouseLeave={() => setHoveredBar(null)}
+                            />
+                            {/* Score label above bar */}
+                            <text
+                              x={x + barWidth / 2}
+                              y={bar.score >= 0 ? barY - 8 : barY + scoreHeight + 18}
+                              textAnchor="middle"
+                              fill="#374151"
+                              fontSize="12"
+                              fontWeight="600"
+                            >
+                              {bar.score.toFixed(2)}
+                            </text>
+                            {/* Date label on X-axis */}
+                            <text
+                              x={x + barWidth / 2}
+                              y="325"
+                              textAnchor="middle"
+                              fill="#374151"
+                              fontSize="12"
+                              fontWeight="500"
+                            >
+                              {bar.label}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    {/* Hover Tooltip */}
+                    {hoveredBar !== null && dailySentimentBars[hoveredBar] && (
+                      <div
+                        className="absolute bg-white border-2 border-blue-400 rounded-lg shadow-2xl p-4 z-30 overflow-y-auto"
+                        style={{
+                          left: `${Math.min(Math.max(70 + (hoveredBar * (680 / dailySentimentBars.length)) + ((680 / dailySentimentBars.length) / 2) - 150, 20), 600)}px`,
+                          top: '100px',
+                          width: '320px',
+                          maxHeight: '400px'
+                        }}
+                        onMouseEnter={() => setHoveredBar(hoveredBar)}
+                        onMouseLeave={() => {
+                          setHoveredBar(null);
+                          setVisibleHeadlines(5); // Reset when leaving
+                        }}
+                      >
+                        <div className="mb-3 pb-2 border-b border-gray-200">
+                          <div className="text-sm font-semibold text-gray-700">{dailySentimentBars[hoveredBar].label}</div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-gray-600">Sentiment Score:</span>
+                            <span className={`text-sm font-bold ${dailySentimentBars[hoveredBar].score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {dailySentimentBars[hoveredBar].score.toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-gray-600">Articles Analyzed:</span>
+                            <span className="text-sm font-semibold text-blue-600">{dailySentimentBars[hoveredBar].count}</span>
+                          </div>
+                        </div>
+
+                        {dailySentimentBars[hoveredBar].headlines && dailySentimentBars[hoveredBar].headlines.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-gray-700 mb-2">
+                              Most Polar Headlines (Top {Math.min(visibleHeadlines, dailySentimentBars[hoveredBar].headlines.length)})
+                            </div>
+                            <div className="space-y-3">
+                              {dailySentimentBars[hoveredBar].headlines.slice(0, visibleHeadlines).map((headline, idx) => (
+                                <div key={idx} className="border-l-2 border-blue-300 pl-2 py-1">
+                                  <a
+                                    href={headline.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-800 hover:text-blue-600 hover:underline leading-tight block cursor-pointer transition-colors"
+                                    style={{ pointerEvents: 'auto', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                                  >
+                                    {headline.title}
+                                  </a>
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span className="text-xs text-gray-500">{headline.provider}</span>
+                                    <span className={`text-xs font-semibold ${headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {headline.sentiment_score >= 0 ? '+' : ''}{headline.sentiment_score.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* View More Button */}
+                            {visibleHeadlines < dailySentimentBars[hoveredBar].headlines.length && (
+                              <button
+                                onClick={() => setVisibleHeadlines(prev => prev + 5)}
+                                className="mt-3 w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded transition-colors"
+                              >
+                                View More ({dailySentimentBars[hoveredBar].headlines.length - visibleHeadlines} remaining)
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -591,7 +690,7 @@ const FinancialDashboard = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Related News (Always visible) */}
+        {/* Right Sidebar - Related News */}
         <div className="w-80 bg-white border-l border-gray-200 p-4">
           <h3 className="text-lg font-semibold mb-4">Related News</h3>
           <div className="space-y-4 max-h-screen overflow-y-auto">

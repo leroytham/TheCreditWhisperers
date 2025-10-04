@@ -538,6 +538,139 @@ except Exception as e:
   });
 });
 
+// Add this new endpoint to your backend/index.js file
+// Place it after the /api/news endpoint
+
+// --- API endpoint: Get daily sentiment with article counts and samples ---
+app.get('/api/daily-sentiment', async (req, res) => {
+  const { ticker = 'AAPL' } = req.query;
+  
+  console.log('=== DAILY SENTIMENT REQUEST ===');
+  console.log('Ticker:', ticker);
+  
+  const pyCode = `
+import sys
+import os
+import json
+import warnings
+from collections import defaultdict
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+from data_processing import get_ticker_news, analyze_sentiment
+
+ticker = "${ticker}"
+
+try:
+    news_articles = get_ticker_news(ticker, count=198)
+    if news_articles is None:
+        print(json.dumps({"error": "Failed to get news"}))
+        sys.exit(1)
+    
+    results, _, _, daily_avg_sentiment = analyze_sentiment(news_articles)
+    
+    # Group articles by date with counts and samples
+    daily_data = {}
+    articles_by_date = defaultdict(list)
+    
+    for article in results:
+        date = article.get('publish_date')
+        if date:
+            articles_by_date[date].append(article)
+    
+    # Build daily data with sentiment, count, and sample headlines
+    # Sort by polarity (absolute sentiment score) - most polar first
+    for date, score in daily_avg_sentiment.items():
+        articles = articles_by_date.get(date, [])
+        # Sort by absolute sentiment score (descending) to get most polar
+        sorted_articles = sorted(articles, key=lambda x: abs(x.get('sentiment_score', 0)), reverse=True)
+        
+        daily_data[date] = {
+            'score': float(score),
+            'count': len(articles),
+            'headlines': [
+                {
+                    'title': a.get('title', ''),
+                    'provider': a.get('provider', ''),
+                    'link': a.get('link', ''),
+                    'sentiment_score': float(a.get('sentiment_score', 0))
+                }
+                for a in sorted_articles  # Return ALL articles, sorted by polarity
+            ]
+        }
+    
+    print(json.dumps({"daily": daily_data}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+    sys.exit(1)
+`;
+
+  const py = spawn(PYTHON_PATH, ['-c', pyCode], { 
+    cwd: __dirname,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+  });
+  
+  let data = '';
+  let error = '';
+  let responseSent = false;
+  
+  py.stdout.on('data', chunk => {
+    data += chunk.toString();
+  });
+  
+  py.stderr.on('data', chunk => { 
+    error += chunk.toString();
+  });
+  
+  py.on('error', err => {
+    console.error('Failed to start Python process:', err);
+    if (!responseSent) {
+      responseSent = true;
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to start Python process', 
+        details: err.message 
+      });
+    }
+  });
+  
+  py.on('close', code => {
+    if (responseSent) return;
+    responseSent = true;
+    
+    console.log('Exit code:', code);
+    console.log('Has data:', data.length > 0);
+    
+    if (code !== 0) {
+      console.error('Python stderr:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: error || 'Script failed', 
+        stdout: data 
+      });
+    }
+    
+    try {
+      let cleanData = data.trim();
+      const jsonStart = cleanData.indexOf('{');
+      if (jsonStart !== -1) {
+        cleanData = cleanData.substring(jsonStart);
+      }
+      
+      const result = JSON.parse(cleanData);
+      res.json(result);
+    } catch (err) {
+      console.error('JSON parse error:', err.message);
+      console.error('Raw data:', data);
+      res.status(500).json({ 
+        success: false, 
+        error: err.message, 
+        raw: data
+      });
+    }
+  });
+});
+
 // app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
 
 if (require.main === module) {
