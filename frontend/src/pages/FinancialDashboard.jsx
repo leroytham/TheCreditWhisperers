@@ -1,8 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { useRef } from 'react';
-import { useNavigate } from "react-router-dom";
-import { Search, Bell, User, Menu } from 'lucide-react';
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
+
+
+
+// export default function FinancialDashboard() {
+//   const [searchParams] = useSearchParams();
+//   const navigate = useNavigate();
+
+//   useEffect(() => {
+//     const user = searchParams.get("user");
+//     if (user) {
+//       sessionStorage.setItem("user", user);
+//     } else if (!sessionStorage.getItem("user")) {
+//       navigate("/login");
+//     }
+//   }, [navigate, searchParams]);
+
+//   return <div>Welcome, {sessionStorage.getItem("user")}!</div>;
+// }
+
 // Standardize number of x-axis points
+
+// const FinancialDashboard = () => {
+//   const [searchParams] = useSearchParams();
+//   const navigate = useNavigate();
+
+//   useEffect(() => {
+//     const user = searchParams.get("user");
+//     if (user) {
+//       sessionStorage.setItem("user", user);
+//     } else if (!sessionStorage.getItem("user")) {
+//       navigate("/login");
+//     }
+//   }, [navigate, searchParams]);
+// }, [navigate, searchParams]);
+
+
 const NUM_X_AXIS_POINTS = 6;
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
 // COMMENTED OUT timeframes: '1D', '5Y'
@@ -18,7 +53,10 @@ const FinancialDashboard = () => {
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+
 
 
   // UI state
@@ -26,6 +64,25 @@ const FinancialDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+
+  useEffect(() => {
+    const user = searchParams.get("user");
+    if (user) {
+      sessionStorage.setItem("user", user);
+    } else if (!sessionStorage.getItem("user")) {
+      navigate("/login");
+    }
+  }, [navigate, searchParams]);
+
+  const handleLogout = () => {
+    const confirmLogout = window.confirm("Are you sure you want to log out?");
+    if (confirmLogout) {
+      sessionStorage.removeItem("user");
+      navigate("/login");
+    }
+  };
+  
+  
 
   // Backend API calls
   useEffect(() => {
@@ -232,6 +289,11 @@ const FinancialDashboard = () => {
           <div className="flex items-center space-x-4">
             <Bell className="w-6 h-6 text-gray-600" />
             <User className="w-6 h-6 text-gray-600" />
+            <button
+              onClick={handleLogout}
+            >
+              <LogOut className="w-6 h-6 text-gray-600 hover:text-gray-600 transition" />
+            </button>
           </div>
         </div>
       </header>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Menu, Search, Bell, User } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Menu, Search, Bell, User, LogOut } from "lucide-react";
 
 // --- Hardcoded country/sector data (from trial_v3.html) ---
 const industryData = {
@@ -798,6 +798,8 @@ const Portfolio = () => {
   const navigate = useNavigate();
   const [view, setView] = useState('filter'); // 'filter' | 'performance'
   const [performanceContext, setPerformanceContext] = useState(null);
+  const [searchParams] = useSearchParams();
+
 
   // Example suggestions
   const suggestions = [
@@ -805,6 +807,25 @@ const Portfolio = () => {
     { symbol: "MSFT", quoteType: "EQUITY", shortname: "Microsoft Corp." },
     { symbol: "GOOGL", quoteType: "EQUITY", shortname: "Alphabet Inc." },
   ];
+
+  useEffect(() => {
+    const user = searchParams.get("user");
+    if (user) {
+      sessionStorage.setItem("user", user);
+    } else if (!sessionStorage.getItem("user")) {
+      navigate("/login");
+    }
+  }, [navigate, searchParams]);
+
+  const handleLogout = () => {
+    const confirmLogout = window.confirm("Are you sure you want to log out?");
+    if (confirmLogout) {
+      sessionStorage.removeItem("user");
+      navigate("/login");
+    }
+  };
+
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -862,6 +883,11 @@ const Portfolio = () => {
           <div className="flex items-center space-x-4">
             <Bell className="w-6 h-6 text-gray-600" />
             <User className="w-6 h-6 text-gray-600" />
+            <button
+              onClick={handleLogout}
+            >
+              <LogOut className="w-6 h-6 text-gray-600 hover:text-gray-600 transition" />
+            </button>
           </div>
         </div>
       </header>
