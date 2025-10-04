@@ -222,9 +222,8 @@ const BloombergSelector = ({ onSectorSelect }) => {
   );
 };
 
-// Lightweight performance view that mimics trial_v3 behavior
 const PerformanceView = ({ context, onBack }) => {
-  // Safely derive context fields so hooks can be called unconditionally
+
   const countryCode = context?.countryCode || '';
   const countryName = context?.countryName || '';
   const sector = context?.sector || null;
@@ -239,7 +238,7 @@ const PerformanceView = ({ context, onBack }) => {
   const [news, setNews] = useState([]);
   const [sentimentAvg, setSentimentAvg] = useState(null);
   const [error, setError] = useState(null);
-  // Chart & UI state
+
   const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
   const NUM_X_AXIS_POINTS = 6;
   const [timeframe, setTimeframe] = useState('1M');
@@ -247,6 +246,10 @@ const PerformanceView = ({ context, onBack }) => {
   const chartContainerRef = useRef(null);
   const [dynamicChartWidth, setDynamicChartWidth] = useState(660);
   const [topConstituents, setTopConstituents] = useState([]);
+  const [topEvents, setTopEvents] = useState([]);
+
+  const [showEvents, setShowEvents] = useState(true);
+
 
 
   // Measure container width and update chart width for responsive behavior
@@ -324,6 +327,7 @@ const PerformanceView = ({ context, onBack }) => {
     let mounted = true;
     setLoading(true);
     setError(null);
+    setTopEvents([]);
     
     // Map S&P sector codes to real Yahoo/ETF tickers for news
     const newsTickerOverrides = {
@@ -348,7 +352,13 @@ const PerformanceView = ({ context, onBack }) => {
     const fetchNews = fetch(`http://localhost:5001/news?ticker=${encodeURIComponent(newsTicker)}`)
     .then(r => r.json());
 
-    Promise.allSettled([fetchPrice, fetchNews, fetchConstituents]).then(([priceRes, newsRes, constRes]) => {
+    // fetch significant news api
+    const fetchAnalysis = fetch(
+      `http://localhost:5001/analyze?ticker=${encodeURIComponent(newsTicker)}&history_period=${encodeURIComponent(timeframe)}`
+    ).then(r => r.json());
+    
+
+    Promise.allSettled([fetchPrice, fetchNews, fetchConstituents, fetchAnalysis]).then(([priceRes, newsRes, constRes, analysisRes]) => {
       if (!mounted) return;
       // Price result
       if (priceRes.status === 'fulfilled' && priceRes.value) {
@@ -384,10 +394,19 @@ const PerformanceView = ({ context, onBack }) => {
         console.error('News fetch failed', newsRes.reason || newsRes.value);
         setError(prev => prev ? prev + ' | news failed' : 'news failed');
       }
+
+      // top constituents
       if (constRes.status === 'fulfilled' && constRes.value && constRes.value.success) {
         setTopConstituents(constRes.value.top_constituents);
       } else {
         console.error('Top constituent fetch failed', constRes.reason || constRes.value);
+      }
+
+      // significant news portion
+      if (analysisRes.status === "fulfilled" && analysisRes.value && analysisRes.value.success) {
+        setTopEvents(analysisRes.value.events || []);
+      } else {
+        console.error("Analysis fetch failed", analysisRes.reason || analysisRes.value);
       }
   
 
@@ -427,7 +446,7 @@ const PerformanceView = ({ context, onBack }) => {
     });
 
     return () => { mounted = false; };
-  }, [ticker]);
+  }, [timeframe, ticker]);
 
   // Filter priceData1Y into priceData according to timeframe (same logic as FinancialDashboard)
   useEffect(() => {
@@ -513,6 +532,32 @@ const PerformanceView = ({ context, onBack }) => {
 
   const timelinePoints = generateTimelinePoints();
 
+
+  // Compute event marker positions
+  const eventMarkers = React.useMemo(() => {
+    if (!chartData || chartData.length === 0 || !topEvents || topEvents.length === 0) return [];
+
+    return topEvents.map((event) => {
+      const eventDate = new Date(event.start_date);
+      // Find the closest price point by date
+      const index = chartData.findIndex(pt => new Date(pt.date).toDateString() === eventDate.toDateString());
+      if (index === -1) return null;
+
+      const x = 60 + (index * (chartWidth / Math.max(1, chartData.length - 1)));
+      const y = (40 + chartHeight) - ((chartData[index].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+
+      return {
+        x,
+        y,
+        trend: event.trend,
+        pct: event.total_move_pct,
+        date: event.start_date,
+        news: event.news
+      };
+    }).filter(Boolean);
+  }, [chartData, topEvents, chartWidth, chartHeight, priceRange]);
+
+
   // Precompute tooltip positioning and values to avoid inline IIFE in JSX
   const tooltip = (() => {
     if (!hoveredPoint) return null;
@@ -576,15 +621,61 @@ const PerformanceView = ({ context, onBack }) => {
           ) : (
             <>
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-2">
-                  {TIMEFRAMES.map(tf => (
-                    <button key={tf} onClick={() => setTimeframe(tf)} className={`px-2 py-1 text-sm rounded ${timeframe === tf ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
-                      {tf}
-                    </button>
-                  ))}
-                </div>
-                {sentimentAvg !== null && <div className={`text-sm font-medium ${sentimentAvg >= 0 ? 'text-green-600' : 'text-red-600'}`}>Avg Sentiment: {Number(sentimentAvg).toFixed(2)}</div>}
-              </div>
+      {/* Left side: timeframe buttons */}
+      <div className="flex items-center space-x-2">
+        {TIMEFRAMES.map(tf => (
+          <button
+            key={tf}
+            onClick={() => setTimeframe(tf)}
+            className={`px-2 py-1 text-sm rounded ${
+              timeframe === tf
+                ? 'bg-blue-500 text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {tf}
+          </button>
+        ))}
+      </div>
+
+      {/* Right side: sentiment + toggle */}
+      <div className="flex items-center space-x-4">
+        {/* Sentiment */}
+        {sentimentAvg !== null && (
+          <div
+            className={`text-sm font-medium ${
+              sentimentAvg >= 0 ? 'text-green-600' : 'text-red-600'
+            }`}
+          >
+            Avg Sentiment: {Number(sentimentAvg).toFixed(2)}
+          </div>
+        )}
+
+        {/* Major Events toggle */}
+        <div className="flex items-center space-x-2">
+          <label
+            htmlFor="toggle-events"
+            className="text-sm text-gray-600 select-none"
+          >
+            Major Events
+          </label>
+          <button
+            id="toggle-events"
+            onClick={() => setShowEvents(prev => !prev)}
+            className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors duration-200 ${
+              showEvents ? 'bg-blue-500' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                showEvents ? 'translate-x-5' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+
 
               <div ref={chartContainerRef} className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
                 {(!chartData || chartData.length === 0) ? (
@@ -737,6 +828,66 @@ const PerformanceView = ({ context, onBack }) => {
                         </text>
                       </g>
                     ))}
+
+                    {/* Significant Event Markers */}
+                    {showEvents && eventMarkers.map((marker, i) => (
+                      <g key={`event-${i}`} className="cursor-pointer group">
+                        {/* Marker line */}
+                        <line
+                          x1={marker.x}
+                          y1="40"
+                          x2={marker.x}
+                          y2={40 + chartHeight}
+                          stroke={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
+                          strokeWidth="1.5"
+                          strokeDasharray="4,2"
+                          opacity="0.6"
+                        />
+                        {/* Small event circle */}
+                        <circle
+                          cx={marker.x}
+                          cy={marker.y}
+                          r="5"
+                          fill={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
+                          stroke="white"
+                          strokeWidth="2"
+                        />
+                        {/* Hover tooltip for event */}
+                        <g className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <rect
+                            x={marker.x - 70}
+                            y={marker.y - 60}
+                            width="140"
+                            height="48"
+                            rx="6"
+                            fill="white"
+                            stroke="#d1d5db"
+                            strokeWidth="1"
+                            filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
+                          />
+                          <text
+                            x={marker.x}
+                            y={marker.y - 42}
+                            textAnchor="middle"
+                            fill="#111827"
+                            fontSize="11"
+                            fontWeight="bold"
+                          >
+                            {marker.trend} Move ({marker.pct.toFixed(2)}%)
+                          </text>
+                          <text
+                            x={marker.x}
+                            y={marker.y - 28}
+                            textAnchor="middle"
+                            fill="#6b7280"
+                            fontSize="10"
+                          >
+                            {marker.date}
+                          </text>
+                        </g>
+                      </g>
+                    ))}
+
                   </svg>
                   {/* Hover tooltip - positioned absolutely inside the chart container */}
                   {tooltip && (
@@ -797,6 +948,7 @@ const PerformanceView = ({ context, onBack }) => {
               ))
             )}
           </div>
+        {/* top constituent area */}
         </div>
           <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
             <div className="flex items-center justify-between mb-4">
@@ -835,6 +987,48 @@ const PerformanceView = ({ context, onBack }) => {
               </table>
             )}
           </div>
+
+          {/* Significant Events section */}
+          <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Significant Events</h3>
+              <span className="text-sm text-gray-500">{sectorName}</span>
+            </div>
+
+            {(!topEvents || topEvents.length === 0) ? (
+              <div className="text-gray-400 text-sm">No significant events found.</div>
+            ) : (
+              <div className="space-y-6">
+                {topEvents.slice(0, 5).map((event, idx) => (
+                  <div key={idx} className="border-b border-gray-100 pb-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-sm font-semibold text-gray-800">
+                        {event.trend} Move · {event.total_move_pct.toFixed(2)}%
+                      </h4>
+                      <span className="text-xs text-gray-500">
+                        {event.start_date} → {event.end_date} ({event.days} days)
+                      </span>
+                    </div>
+
+                    {event.news && event.news.length > 0 ? (
+                      <ul className="ml-2 list-disc text-sm text-gray-700 space-y-1">
+                        {event.news.slice(0, 3).map((n, i) => (
+                          <li key={i}>
+                            <a href={n.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+                              [{n.date}] {n.title} ({n.publisher})
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-gray-400">No related news.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
 
       </div>
     </div>
