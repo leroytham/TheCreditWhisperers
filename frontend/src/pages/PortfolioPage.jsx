@@ -246,6 +246,8 @@ const PerformanceView = ({ context, onBack }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const chartContainerRef = useRef(null);
   const [dynamicChartWidth, setDynamicChartWidth] = useState(660);
+  const [topConstituents, setTopConstituents] = useState([]);
+
 
   // Measure container width and update chart width for responsive behavior
   useLayoutEffect(() => {
@@ -340,11 +342,13 @@ const PerformanceView = ({ context, onBack }) => {
     const newsTicker = newsTickerOverrides[ticker] || ticker;
 
     const fetchPrice = fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`).then(r => r.json());
+    const fetchConstituents = fetch(`http://localhost:5001/top-constituents?ticker=${encodeURIComponent(newsTicker)}`).then(r => r.json());
+
     // const fetchNews = fetch(`/api/news?ticker=${encodeURIComponent(ticker)}`).then(r => r.json());
     const fetchNews = fetch(`http://localhost:5001/news?ticker=${encodeURIComponent(newsTicker)}`)
     .then(r => r.json());
 
-    Promise.allSettled([fetchPrice, fetchNews]).then(([priceRes, newsRes]) => {
+    Promise.allSettled([fetchPrice, fetchNews, fetchConstituents]).then(([priceRes, newsRes, constRes]) => {
       if (!mounted) return;
       // Price result
       if (priceRes.status === 'fulfilled' && priceRes.value) {
@@ -380,6 +384,12 @@ const PerformanceView = ({ context, onBack }) => {
         console.error('News fetch failed', newsRes.reason || newsRes.value);
         setError(prev => prev ? prev + ' | news failed' : 'news failed');
       }
+      if (constRes.status === 'fulfilled' && constRes.value && constRes.value.success) {
+        setTopConstituents(constRes.value.top_constituents);
+      } else {
+        console.error('Top constituent fetch failed', constRes.reason || constRes.value);
+      }
+  
 
       // If we didn't get news from /api/news, try fallback to /articles (older route)
       // if (!newsReceived) {
@@ -788,10 +798,51 @@ const PerformanceView = ({ context, onBack }) => {
             )}
           </div>
         </div>
+          <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Top Constituents</h3>
+              <span className="text-sm text-gray-500">{sectorName}</span>
+            </div>
+
+            {(!topConstituents || topConstituents.length === 0) ? (
+              <div className="text-gray-400 text-sm">No constituent data available.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-gray-500 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left py-2">Name</th>
+                    <th className="text-right py-2">Price</th>
+                    <th className="text-right py-2">Market Cap</th>
+                    <th className="text-right py-2">% Day</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topConstituents.map((c, idx) => (
+                    <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="py-2 font-medium text-gray-900">{c.name || c.symbol}</td>
+                      <td className="py-2 text-right">
+                        {c.price ? `$${c.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '--'}
+                      </td>
+                      <td className="py-2 text-right">
+                        {c.marketCap ? `$${(c.marketCap / 1e9).toFixed(1)}B` : '--'}
+                      </td>
+                      <td className={`py-2 text-right ${c.percentChange.toFixed(2) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {c.percentChange.toFixed(2) !== null ? `${c.percentChange.toFixed(2) > 0 ? '+' : ''}${c.percentChange.toFixed(2)}%` : '--'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
       </div>
     </div>
   );
 };
+
+
+
 
 const Portfolio = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -799,6 +850,7 @@ const Portfolio = () => {
   const [view, setView] = useState('filter'); // 'filter' | 'performance'
   const [performanceContext, setPerformanceContext] = useState(null);
   const [searchParams] = useSearchParams();
+
 
 
   // Example suggestions
