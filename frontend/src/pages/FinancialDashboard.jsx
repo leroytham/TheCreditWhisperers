@@ -30,6 +30,10 @@ const FinancialDashboard = () => {
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
+  // Daily sentiment fetch status
+  const [dailySentimentLoading, setDailySentimentLoading] = useState(false);
+  const [dailySentimentError, setDailySentimentError] = useState(null);
+
   useEffect(() => {
     const user = searchParams.get("user");
     if (user) {
@@ -47,36 +51,140 @@ const FinancialDashboard = () => {
     }
   };
 
-  // Backend API calls
-  useEffect(() => {
-    // Fetch 1Y price data
-    fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
-      .then(res => res.json())
-      .then(data => {
-        setPriceData1Y(data.prices || []);
-        setCompanyName(data.company_name || '');
-        setCurrency(data.currency || 'USD');
-        setLastFetched(new Date());
-      })
-      .catch(err => console.error('Error fetching price data:', err));
+// ---------- Backend API calls ----------
+useEffect(() => {
+  // Fetch 1Y price data
+  fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
+    .then(res => res.json())
+    .then(data => {
+      setPriceData1Y(data.prices || []);
+      setCompanyName(data.company_name || '');
+      setCurrency(data.currency || 'USD');
+      setLastFetched(new Date());
+    })
+    .catch(err => console.error('Error fetching price data:', err));
 
-    // Fetch news
-    fetch(`/api/news?ticker=${ticker}`)
-      .then(res => res.json())
-      .then(data => {
-        setNews(data.news || []);
-        setSentiment({ avg_score: data.avg_score });
-      })
-      .catch(err => console.error('Error fetching news:', err));
+  // Fetch news + overall sentiment
+  fetch(`/api/news?ticker=${ticker}`)
+    .then(res => res.json())
+    .then(data => {
+      setNews(data.news || []);
+      const avg = Number(data.avg_score ?? data.average_sentiment ?? 0);
+      setSentiment({ avg_score: avg });
+    })
+    .catch(err => console.error('Error fetching news:', err));
 
-    // Fetch daily sentiment data
-    fetch(`/api/daily-sentiment?ticker=${ticker}`)
-      .then(res => res.json())
-      .then(data => {
-        setDailySentiment(data.daily || {});
-      })
-      .catch(err => console.error('Error fetching daily sentiment:', err));
-  }, [ticker]);
+  // --- Fetch daily sentiment data (supports both new and old endpoints) ---
+  setDailySentimentLoading(true);
+  setDailySentimentError(null);
+
+  const endpoints = [
+    `/api/daily-sentiment?ticker=${encodeURIComponent(ticker)}`,
+    `/api/sentiment/daily?ticker=${encodeURIComponent(ticker)}`, // legacy
+  ];
+
+  (async () => {
+    let success = false;
+
+    for (const url of endpoints) {
+      try {
+        console.log('[daily-sentiment] GET', url);
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) {
+          console.warn(`[daily-sentiment] HTTP ${res.status} from ${url}`);
+          continue;
+        }
+
+        const text = await res.text(); // raw for debugging
+        console.log('[daily-sentiment] raw:', text);
+        const json = text ? JSON.parse(text) : null;
+
+        const normalized = normalizeDailySentiment(json);
+        const size = Object.keys(normalized).length;
+
+        if (size === 0) {
+          console.warn('[daily-sentiment] normalized is empty');
+          // try next endpoint (if any)
+          continue;
+        }
+
+        setDailySentiment(normalized);
+        success = true;
+        break;
+      } catch (err) {
+        console.error('[daily-sentiment] fetch/parse error:', err);
+      }
+    }
+
+    if (!success) {
+      setDailySentiment({});
+      setDailySentimentError('No sentiment data returned for the past 7 days.');
+    }
+    setDailySentimentLoading(false);
+  })();
+}, [ticker]);
+
+// ---------- Helper: normalize backend daily sentiment payload ----------
+function normalizeDailySentiment(payload) {
+  // Shape A: { daily: { "YYYY-MM-DD": { score, count, headlines[] } } }
+  if (payload?.daily && typeof payload.daily === 'object') {
+    return normalizeDailyMap(payload.daily);
+  }
+
+  // Shape B: { data: [ { date|day|ts, avg|score|mean, count|n|articles, headlines? }, ... ] }
+  if (Array.isArray(payload?.data)) {
+    return normalizeDailyArray(payload.data);
+  }
+
+  // Shape C: [ { ... } ]
+  if (Array.isArray(payload)) {
+    return normalizeDailyArray(payload);
+  }
+
+  return {};
+}
+
+function normalizeDailyMap(mapObj) {
+  const out = {};
+  for (const [k, v] of Object.entries(mapObj)) {
+    const key = toISODate(k);
+    if (!key) continue;
+    out[key] = {
+      score: num(v.avg ?? v.score ?? v.mean ?? 0),
+      count: num(v.count ?? v.n ?? v.articles ?? 0),
+      headlines: Array.isArray(v.headlines) ? v.headlines : [],
+    };
+  }
+  return out;
+}
+
+function normalizeDailyArray(arr) {
+  return arr.reduce((acc, d) => {
+    const key = toISODate(d.date ?? d.day ?? d.ts ?? d.timestamp);
+    if (!key) return acc;
+    acc[key] = {
+      score: num(d.avg ?? d.score ?? d.mean ?? 0),
+      count: num(d.count ?? d.n ?? d.articles ?? 0),
+      headlines: Array.isArray(d.headlines) ? d.headlines : [],
+    };
+    return acc;
+  }, {});
+}
+
+function toISODate(x) {
+  try {
+    const d = new Date(x);
+    if (Number.isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  } catch {
+    return null;
+  }
+}
+
+const num = (v) => (v == null || v === '' ? 0 : Number(v));
 
   // Filter priceData for selected timeframe
   useEffect(() => {
@@ -716,10 +824,122 @@ return (
                   </div>
                 </div>
               ) : (
-                <>
-                  {/* (your existing bars SVG remains unchanged) */}
-                  {/* ... keep everything inside here exactly as you had it ... */}
-                </>
+                <svg className="w-full h-full" style={{ overflow: "visible" }}>
+                  {/* Y-axis gridlines and labels */}
+                  <g className="text-gray-400 text-xs">
+                    {[-0.4, -0.2, 0, 0.2, 0.4].map((value, i) => {
+                      const yPos = 40 + (4 - i) * 60;
+                      return (
+                        <g key={i}>
+                          <line
+                            x1="60"
+                            y1={yPos}
+                            x2="720"
+                            y2={yPos}
+                            stroke={value === 0 ? "#9ca3af" : "#e5e7eb"}
+                            strokeWidth={value === 0 ? "2" : "1"}
+                          />
+                          <text
+                            x="50"
+                            y={yPos + 4}
+                            textAnchor="end"
+                            fill="#6b7280"
+                            fontSize="12"
+                            fontWeight="500"
+                          >
+                            {value.toFixed(1)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </g>
+
+                  {/* Bars */}
+                  {dailySentimentBars.map((bar, i) => {
+                    const barWidth = 70;
+                    const spacing = (660 - barWidth * dailySentimentBars.length) / (dailySentimentBars.length + 1);
+                    const x = 60 + spacing + i * (barWidth + spacing);
+                    const zeroY = 40 + 4 * 60;
+                    
+                    const displayScore = Math.max(-0.4, Math.min(0.4, bar.score));
+                    const scoreY = zeroY - (displayScore * 300);
+                    const barHeight = Math.abs(scoreY - zeroY);
+                    const barY = displayScore >= 0 ? scoreY : zeroY;
+                    const isHovered = hoveredBar?.index === i;
+                    const fillColor = bar.score >= 0 ? "#22c55e" : "#ef4444";
+
+                    return (
+                      <g key={i}>
+                        <rect
+                          x={x}
+                          y={barY}
+                          width={barWidth}
+                          height={barHeight}
+                          fill={fillColor}
+                          opacity={isHovered ? 1 : 0.85}
+                          className="cursor-pointer transition-opacity"
+                          onMouseEnter={() => setHoveredBar({ ...bar, x, y: scoreY, index: i })}
+                          onMouseLeave={() => setHoveredBar(null)}
+                          rx="4"
+                        />
+                        
+                        <text
+                          x={x + barWidth / 2}
+                          y="330"
+                          textAnchor="middle"
+                          fill="#374151"
+                          fontSize="11"
+                          fontWeight="500"
+                        >
+                          {bar.label}
+                        </text>
+
+                        {bar.count > 0 && (
+                          <>
+                            <circle
+                              cx={x + barWidth / 2}
+                              cy={barY - 15}
+                              r="12"
+                              fill="#3b82f6"
+                              opacity="0.95"
+                            />
+                            <text
+                              x={x + barWidth / 2}
+                              y={barY - 10}
+                              textAnchor="middle"
+                              fill="white"
+                              fontSize="11"
+                              fontWeight="bold"
+                            >
+                              {bar.count}
+                            </text>
+                          </>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              )}
+              
+              {hoveredBar && (
+                <div
+                  className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
+                  style={{
+                    left: `${Math.min(hoveredBar.x, 600)}px`,
+                    top: `${Math.max(20, hoveredBar.y - 100)}px`,
+                    minWidth: "180px",
+                  }}
+                >
+                  <div className="text-sm font-bold text-gray-700">{hoveredBar.date}</div>
+                  <div className={`text-2xl font-bold mt-1 ${
+                    hoveredBar.score >= 0 ? "text-green-600" : "text-red-600"
+                  }`}>
+                    {hoveredBar.score.toFixed(3)}
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {hoveredBar.count} article{hoveredBar.count !== 1 ? "s" : ""}
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -757,14 +977,48 @@ return (
             {relatedNews.length === 0 ? (
               <div className="text-gray-400">No news found for {ticker}</div>
             ) : (
-              <RelatedNewsList items={relatedNews} />
+              relatedNews.map((item, idx) => (
+                <div key={item.id || idx} className="mb-4 p-3 border-b border-gray-200">
+                  <a 
+                    href={item.link || '#'} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    {item.title || 'Untitled'}
+                  </a>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {item.source} • {new Date(item.publishedAt).toLocaleDateString()}
+                  </div>
+                  
+                  {/* Related Tickers */}
+                  {item.tickers && item.tickers.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {item.tickers.map((tickerSymbol, tidx) => (
+                        <span 
+                          key={tidx}
+                          className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded"
+                        >
+                          {tickerSymbol}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <div className={`text-xs mt-2 font-semibold ${
+                    item.sentimentScore >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    Sentiment score: {item.sentimentScore >= 0 ? 'Positive' : 'Negative'} ({item.sentimentScore.toFixed(2)})
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
       </div>
     </div>
   </div>
-); // end return
-}; // end component
+);
+};
 
 export default FinancialDashboard;
