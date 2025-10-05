@@ -817,69 +817,72 @@ return (
 })}
                 </svg>
               )}
-              {/* Tooltip */}
-{hoveredPoint && hoveredPoint.isEvent && (
-  <div
-    className="absolute bg-white rounded-xl shadow-2xl pointer-events-none z-30 border border-gray-200"
-    style={{
-      left: `${Math.max(60, Math.min(hoveredPoint.x - 160, 600))}px`,
-      top: `${70}px`,
-      width: "340px",
-      maxHeight: "450px",
-      overflowY: "auto"
-    }}
-  >
-    {/* Header */}
-    <div className={`p-4 rounded-t-xl ${
-      hoveredPoint.trend === 'UP' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'
-    }`}>
-      <div className={`font-bold text-lg ${
-        hoveredPoint.trend === 'UP' ? 'text-green-700' : 'text-red-700'
-      }`}>
-        {hoveredPoint.trend === 'UP' ? '↗' : '↘'} {hoveredPoint.trend} Move: {Math.abs(hoveredPoint.total_move_pct).toFixed(2)}%
-      </div>
-      <div className="text-sm text-gray-600 mt-1">
-        {hoveredPoint.start_date}
-        {hoveredPoint.end_date !== hoveredPoint.start_date && ` → ${hoveredPoint.end_date}`}
-        <span className="ml-2 text-gray-500">({hoveredPoint.days} day{hoveredPoint.days > 1 ? 's' : ''})</span>
-      </div>
-    </div>
+{/* Tooltip for major events */}
+              {hoveredPoint && hoveredPoint.isEvent && (
+                <div
+                  className="absolute bg-white rounded-xl shadow-2xl z-30 border border-gray-200"
+                  style={{
+                    left: `${Math.max(60, Math.min(hoveredPoint.x - 160, 600))}px`,
+                    top: `${70}px`,
+                    width: "340px",
+                    maxHeight: "450px",
+                    overflowY: "auto"
+                  }}
+                  onMouseEnter={() => setHoveredPoint(hoveredPoint)}
+                  onMouseLeave={() => setHoveredPoint(null)}
+                >
+                  {/* Header */}
+                  <div className={`p-4 rounded-t-xl ${
+                    hoveredPoint.trend === 'UP' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'
+                  }`}>
+                    <div className={`font-bold text-lg ${
+                      hoveredPoint.trend === 'UP' ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      {hoveredPoint.trend === 'UP' ? '↗' : '↘'} {hoveredPoint.trend} Move: {Math.abs(hoveredPoint.total_move_pct).toFixed(2)}%
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {hoveredPoint.start_date}
+                      {hoveredPoint.end_date !== hoveredPoint.start_date && ` → ${hoveredPoint.end_date}`}
+                      <span className="ml-2 text-gray-500">({hoveredPoint.days} day{hoveredPoint.days > 1 ? 's' : ''})</span>
+                    </div>
+                  </div>
 
-    {/* News Section */}
-    {hoveredPoint.news && hoveredPoint.news.length > 0 && (
-      <div className="p-4">
-        <div className="font-semibold text-sm text-gray-700 mb-3 flex items-center">
-          <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
-          Related News
-        </div>
-        <div className="space-y-3">
-          {hoveredPoint.news.map((article, i) => (
-            <div 
-              key={i} 
-              className="group hover:bg-gray-50 p-2 rounded-lg transition-colors cursor-pointer border-l-2 border-transparent hover:border-blue-500"
-            >
-              <a 
-                href={article.link} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="block"
-              >
-                <div className="text-sm font-medium text-gray-800 group-hover:text-blue-600 leading-snug mb-1">
-                  {article.title}
+                  {/* News Section */}
+                  {hoveredPoint.news && hoveredPoint.news.length > 0 && (
+                    <div className="p-4">
+                      <div className="font-semibold text-sm text-gray-700 mb-3 flex items-center">
+                        <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
+                        Related News
+                      </div>
+                      <div className="space-y-3">
+                        {hoveredPoint.news.map((article, i) => (
+                          <div 
+                            key={i} 
+                            className="group hover:bg-gray-50 p-2 rounded-lg transition-colors cursor-pointer border-l-2 border-transparent hover:border-blue-500"
+                          >
+                            <a 
+                              href={article.link} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <div className="text-sm font-medium text-gray-800 group-hover:text-blue-600 leading-snug mb-1">
+                                {article.title}
+                              </div>
+                              <div className="flex items-center text-xs text-gray-500">
+                                <span className="font-medium">{article.publisher}</span>
+                                <span className="mx-1.5">•</span>
+                                <span>{article.date}</span>
+                              </div>
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center text-xs text-gray-500">
-                  <span className="font-medium">{article.publisher}</span>
-                  <span className="mx-1.5">•</span>
-                  <span>{article.date}</span>
-                </div>
-              </a>
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </div>
-)}
+              )}
+
               {/* Chart Info Box */}
               <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
                 <div className="text-base font-bold text-blue-600">
@@ -910,7 +913,7 @@ return (
             <h3 className="text-lg font-semibold mb-4">
               Daily Average Sentiment (Past 7 Days)
             </h3>
-            <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md p-6">
+            <div className="relative h-96 bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-lg shadow-md p-6">
               {dailySentimentBars.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   <div className="text-center">
@@ -919,11 +922,11 @@ return (
                   </div>
                 </div>
               ) : (
-                <svg className="w-full h-full" style={{ overflow: "visible" }}>
+                <svg className="w-full h-full" viewBox="0 0 780 360">
                   {/* Y-axis gridlines and labels */}
-                  <g className="text-gray-400 text-xs">
-                    {[-0.4, -0.2, 0, 0.2, 0.4].map((value, i) => {
-                      const yPos = 40 + (4 - i) * 60;
+                  <g>
+                    {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
+                      const yPos = 40 + i * 60;
                       return (
                         <g key={i}>
                           <line
@@ -931,16 +934,16 @@ return (
                             y1={yPos}
                             x2="720"
                             y2={yPos}
-                            stroke={value === 0 ? "#9ca3af" : "#e5e7eb"}
+                            stroke={value === 0 ? "#374151" : "#e5e7eb"}
                             strokeWidth={value === 0 ? "2" : "1"}
                           />
                           <text
                             x="50"
-                            y={yPos + 4}
+                            y={yPos + 5}
                             textAnchor="end"
                             fill="#6b7280"
                             fontSize="12"
-                            fontWeight="500"
+                            fontWeight={value === 0 ? "600" : "400"}
                           >
                             {value.toFixed(1)}
                           </text>
@@ -954,14 +957,14 @@ return (
                     const barWidth = 70;
                     const spacing = (660 - barWidth * dailySentimentBars.length) / (dailySentimentBars.length + 1);
                     const x = 60 + spacing + i * (barWidth + spacing);
-                    const zeroY = 40 + 4 * 60;
+                    const zeroY = 160;
                     
-                    const displayScore = Math.max(-0.4, Math.min(0.4, bar.score));
-                    const scoreY = zeroY - (displayScore * 300);
-                    const barHeight = Math.abs(scoreY - zeroY);
-                    const barY = displayScore >= 0 ? scoreY : zeroY;
+                    const score = Math.max(-0.4, Math.min(0.4, bar.score));
+                    const barHeight = Math.abs(score) * 300;
+                    const barY = score >= 0 ? zeroY - barHeight : zeroY;
+                    
                     const isHovered = hoveredBar?.index === i;
-                    const fillColor = bar.score >= 0 ? "#22c55e" : "#ef4444";
+                    const fillColor = bar.score >= 0 ? "#10b981" : "#ef4444";
 
                     return (
                       <g key={i}>
@@ -971,20 +974,19 @@ return (
                           width={barWidth}
                           height={barHeight}
                           fill={fillColor}
-                          opacity={isHovered ? 1 : 0.85}
-                          className="cursor-pointer transition-opacity"
-                          onMouseEnter={() => setHoveredBar({ ...bar, x, y: scoreY, index: i })}
+                          opacity={isHovered ? "1" : "0.85"}
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredBar({ ...bar, x, y: barY, index: i })}
                           onMouseLeave={() => setHoveredBar(null)}
-                          rx="4"
+                          rx="3"
                         />
                         
                         <text
                           x={x + barWidth / 2}
                           y="330"
                           textAnchor="middle"
-                          fill="#374151"
+                          fill="#6b7280"
                           fontSize="11"
-                          fontWeight="500"
                         >
                           {bar.label}
                         </text>
@@ -993,17 +995,16 @@ return (
                           <>
                             <circle
                               cx={x + barWidth / 2}
-                              cy={barY - 15}
+                              cy={score >= 0 ? barY - 15 : barY + barHeight + 15}
                               r="12"
                               fill="#3b82f6"
-                              opacity="0.95"
                             />
                             <text
                               x={x + barWidth / 2}
-                              y={barY - 10}
+                              y={score >= 0 ? barY - 10 : barY + barHeight + 20}
                               textAnchor="middle"
                               fill="white"
-                              fontSize="11"
+                              fontSize="10"
                               fontWeight="bold"
                             >
                               {bar.count}
@@ -1018,21 +1019,24 @@ return (
               
               {hoveredBar && (
                 <div
-                  className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
+                  className="absolute bg-white border-2 border-blue-300 rounded-xl p-4 shadow-2xl pointer-events-none z-20"
                   style={{
                     left: `${Math.min(hoveredBar.x, 600)}px`,
-                    top: `${Math.max(20, hoveredBar.y - 100)}px`,
-                    minWidth: "180px",
+                    top: `${Math.max(20, hoveredBar.y - 110)}px`,
+                    minWidth: "200px",
                   }}
                 >
-                  <div className="text-sm font-bold text-gray-700">{hoveredBar.date}</div>
-                  <div className={`text-2xl font-bold mt-1 ${
+                  <div className="text-sm font-semibold text-gray-700">{hoveredBar.date}</div>
+                  <div className={`text-3xl font-bold mt-1 ${
                     hoveredBar.score >= 0 ? "text-green-600" : "text-red-600"
                   }`}>
-                    {hoveredBar.score.toFixed(3)}
+                    {hoveredBar.score >= 0 ? "+" : ""}{hoveredBar.score.toFixed(3)}
                   </div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    {hoveredBar.count} article{hoveredBar.count !== 1 ? "s" : ""}
+                  <div className="text-xs text-gray-600 mt-2 flex items-center">
+                    <span className="font-semibold">Articles:</span>
+                    <span className="ml-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
+                      {hoveredBar.count}
+                    </span>
                   </div>
                 </div>
               )}
@@ -1086,7 +1090,6 @@ return (
                     {item.source} • {new Date(item.publishedAt).toLocaleDateString()}
                   </div>
                   
-                  {/* Related Tickers */}
                   {item.tickers && item.tickers.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {item.tickers.map((tickerSymbol, tidx) => (
