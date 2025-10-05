@@ -818,72 +818,65 @@ return (
                 </svg>
               )}
               {/* Tooltip */}
-{hoveredPoint && (
+{hoveredPoint && hoveredPoint.isEvent && (
   <div
-    className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
+    className="absolute bg-white rounded-xl shadow-2xl pointer-events-none z-30 border border-gray-200"
     style={{
-      left: `${Math.max(60, Math.min(hoveredPoint.x - 80, 60 + 660 - 160))}px`,
-      top: `${hoveredPoint.isEvent ? 60 : hoveredPoint.y - 100}px`,
-      minWidth: hoveredPoint.isEvent ? "200px" : "120px",
-      maxWidth: "280px",
+      left: `${Math.max(60, Math.min(hoveredPoint.x - 160, 600))}px`,
+      top: `${70}px`,
+      width: "340px",
+      maxHeight: "450px",
+      overflowY: "auto"
     }}
   >
-    {hoveredPoint.isEvent ? (
-      <>
-        <div className="text-sm font-bold text-red-600 mb-1">Major Price Movement</div>
-        <div className="text-xs text-gray-600">
-          {hoveredPoint.start_date} {hoveredPoint.end_date !== hoveredPoint.start_date && `- ${hoveredPoint.end_date}`}
+    {/* Header */}
+    <div className={`p-4 rounded-t-xl ${
+      hoveredPoint.trend === 'UP' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'
+    }`}>
+      <div className={`font-bold text-lg ${
+        hoveredPoint.trend === 'UP' ? 'text-green-700' : 'text-red-700'
+      }`}>
+        {hoveredPoint.trend === 'UP' ? '↗' : '↘'} {hoveredPoint.trend} Move: {Math.abs(hoveredPoint.total_move_pct).toFixed(2)}%
+      </div>
+      <div className="text-sm text-gray-600 mt-1">
+        {hoveredPoint.start_date}
+        {hoveredPoint.end_date !== hoveredPoint.start_date && ` → ${hoveredPoint.end_date}`}
+        <span className="ml-2 text-gray-500">({hoveredPoint.days} day{hoveredPoint.days > 1 ? 's' : ''})</span>
+      </div>
+    </div>
+
+    {/* News Section */}
+    {hoveredPoint.news && hoveredPoint.news.length > 0 && (
+      <div className="p-4">
+        <div className="font-semibold text-sm text-gray-700 mb-3 flex items-center">
+          <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
+          Related News
         </div>
-        <div className={`text-xl font-bold mt-2 ${
-          hoveredPoint.trend === 'UP' ? 'text-green-600' : 'text-red-600'
-        }`}>
-          {hoveredPoint.trend === 'UP' ? '↑' : '↓'} {Math.abs(hoveredPoint.total_move_pct).toFixed(2)}%
+        <div className="space-y-3">
+          {hoveredPoint.news.map((article, i) => (
+            <div 
+              key={i} 
+              className="group hover:bg-gray-50 p-2 rounded-lg transition-colors cursor-pointer border-l-2 border-transparent hover:border-blue-500"
+            >
+              <a 
+                href={article.link} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <div className="text-sm font-medium text-gray-800 group-hover:text-blue-600 leading-snug mb-1">
+                  {article.title}
+                </div>
+                <div className="flex items-center text-xs text-gray-500">
+                  <span className="font-medium">{article.publisher}</span>
+                  <span className="mx-1.5">•</span>
+                  <span>{article.date}</span>
+                </div>
+              </a>
+            </div>
+          ))}
         </div>
-        <div className="text-xs text-gray-500 mt-1">
-          {hoveredPoint.days} day{hoveredPoint.days > 1 ? 's' : ''} streak
-        </div>
-        {hoveredPoint.news && hoveredPoint.news.length > 0 && (
-          <div className="text-xs text-gray-600 mt-2 border-t pt-2">
-            <div className="font-semibold mb-1">Related News:</div>
-            {hoveredPoint.news.slice(0, 2).map((article, i) => (
-              <div key={i} className="truncate mb-1 text-gray-700">
-                • {article.title}
-              </div>
-            ))}
-            {hoveredPoint.news.length > 2 && (
-              <div className="text-gray-500 italic">+{hoveredPoint.news.length - 2} more</div>
-            )}
-          </div>
-        )}
-      </>
-    ) : (
-      <>
-        <div className="text-base font-bold text-blue-600">
-          {hoveredPoint.price?.toLocaleString(undefined, {
-            maximumFractionDigits: 2,
-          })}{" "}
-          USD
-        </div>
-        <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
-        <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
-        <div
-          className={`text-xs mt-1 ${
-            hoveredPoint.price >= (currentPrice?.y || 0)
-              ? "text-green-600"
-              : "text-red-600"
-          }`}
-        >
-          {currentPrice
-            ? ((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100 >= 0
-              ? "+"
-              : ""
-            : ""}
-          {currentPrice
-            ? (((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100).toFixed(2)
-            : "0.00"}
-          %
-        </div>
-      </>
+      </div>
     )}
   </div>
 )}
