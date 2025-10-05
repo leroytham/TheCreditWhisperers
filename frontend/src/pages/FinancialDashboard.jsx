@@ -21,6 +21,8 @@ const FinancialDashboard = () => {
   const [lastFetched, setLastFetched] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [significantEvents, setSignificantEvents] = useState([]);
+  const [showEvents, setShowEvents] = useState(false);
 
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -73,6 +75,24 @@ useEffect(() => {
       setSentiment({ avg_score: avg });
     })
     .catch(err => console.error('Error fetching news:', err));
+  
+  // Fetch significant events
+fetch(`http://localhost:5001/analyze?ticker=${ticker}&history_period=${timeframe}`)
+  .then(res => res.json())
+  .then(data => {
+    console.log('Events response:', data);
+    if (data.success && data.events) {
+      console.log('Setting events:', data.events);
+      setSignificantEvents(data.events);
+    } else {
+      console.log('No events found');
+      setSignificantEvents([]);
+    }
+  })
+  .catch(err => {
+    console.error('Error fetching events:', err);
+    setSignificantEvents([]);
+  });
 
   // --- Fetch daily sentiment data (supports both new and old endpoints) ---
   setDailySentimentLoading(true);
@@ -498,25 +518,42 @@ return (
           </div>
 
           {/* Chart Controls */}
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex space-x-1">
-                {TIMEFRAMES.map((tf) => (
-                  <button
-                    key={tf}
-                    onClick={() => setTimeframe(tf)}
-                    className={`px-3 py-1 rounded text-sm ${
-                      timeframe === tf
-                        ? "bg-blue-500 text-white"
-                        : "text-gray-600 hover:bg-gray-100"
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+<div className="px-6 py-4 border-b border-gray-200">
+  <div className="flex items-center justify-between">
+    <div className="flex space-x-1">
+      {TIMEFRAMES.map((tf) => (
+        <button
+          key={tf}
+          onClick={() => setTimeframe(tf)}
+          className={`px-3 py-1 rounded text-sm ${
+            timeframe === tf
+              ? "bg-blue-500 text-white"
+              : "text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          {tf}
+        </button>
+      ))}
+    </div>
+    
+    {/* Toggle for Major Events */}
+    <div className="flex items-center space-x-2">
+      <span className="text-sm text-gray-600">Major Events</span>
+      <button
+        onClick={() => setShowEvents(!showEvents)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+          showEvents ? 'bg-blue-500' : 'bg-gray-300'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            showEvents ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  </div>
+</div>
 
           {/* Price Chart Area */}
           <div className="p-6">
@@ -734,57 +771,122 @@ return (
                       </text>
                     </g>
                   ))}
+
+                  {/* Major Event Lines */}
+{showEvents && significantEvents.map((event, idx) => {
+  const eventDate = new Date(event.start_date);
+  const eventIndex = chartData.findIndex(d => {
+    const dataDate = new Date(d.date);
+    return dataDate.toDateString() === eventDate.toDateString();
+  });
+  
+  if (eventIndex === -1) return null;
+  
+  const x = 60 + (eventIndex * (660 / Math.max(1, chartData.length - 1)));
+  
+  return (
+    <g key={`event-${idx}`}>
+      <line
+        x1={x}
+        y1="40"
+        x2={x}
+        y2="290"
+        stroke="#ef4444"
+        strokeWidth="2"
+        strokeDasharray="5,3"
+      />
+      <circle
+        cx={x}
+        cy="30"
+        r="6"
+        fill="#ef4444"
+        stroke="white"
+        strokeWidth="2"
+        className="cursor-pointer"
+        onMouseEnter={() => setHoveredPoint({
+          ...event,
+          x: x,
+          y: 30,
+          isEvent: true,
+          index: idx
+        })}
+        onMouseLeave={() => setHoveredPoint(null)}
+      />
+    </g>
+  );
+})}
                 </svg>
               )}
               {/* Tooltip */}
-              {hoveredPoint && (
-                <div
-                  className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
-                  style={{
-                    left: `${Math.max(
-                      60,
-                      Math.min(
-                        hoveredPoint.x - 80,
-                        60 + 660 - 160
-                      )
-                    )}px`,
-                    top: `${hoveredPoint.y - 100}px`,
-                    minWidth: "120px",
-                  }}
-                >
-                  <div className="text-base font-bold text-blue-600">
-                    {hoveredPoint.price?.toLocaleString(undefined, {
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    USD
-                  </div>
-                  <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
-                  <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
-                  <div
-                    className={`text-xs mt-1 ${
-                      hoveredPoint.price >= (currentPrice?.y || 0)
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {currentPrice
-                      ? ((hoveredPoint.price - currentPrice.y) / currentPrice.y) *
-                          100 >=
-                        0
-                        ? "+"
-                        : ""
-                      : ""}
-                    {currentPrice
-                      ? (
-                          ((hoveredPoint.price - currentPrice.y) /
-                            currentPrice.y) *
-                          100
-                        ).toFixed(2)
-                      : "0.00"}
-                    %
-                  </div>
-                </div>
-              )}
+{hoveredPoint && (
+  <div
+    className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
+    style={{
+      left: `${Math.max(60, Math.min(hoveredPoint.x - 80, 60 + 660 - 160))}px`,
+      top: `${hoveredPoint.isEvent ? 60 : hoveredPoint.y - 100}px`,
+      minWidth: hoveredPoint.isEvent ? "200px" : "120px",
+      maxWidth: "280px",
+    }}
+  >
+    {hoveredPoint.isEvent ? (
+      <>
+        <div className="text-sm font-bold text-red-600 mb-1">Major Price Movement</div>
+        <div className="text-xs text-gray-600">
+          {hoveredPoint.start_date} {hoveredPoint.end_date !== hoveredPoint.start_date && `- ${hoveredPoint.end_date}`}
+        </div>
+        <div className={`text-xl font-bold mt-2 ${
+          hoveredPoint.trend === 'UP' ? 'text-green-600' : 'text-red-600'
+        }`}>
+          {hoveredPoint.trend === 'UP' ? '↑' : '↓'} {Math.abs(hoveredPoint.total_move_pct).toFixed(2)}%
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          {hoveredPoint.days} day{hoveredPoint.days > 1 ? 's' : ''} streak
+        </div>
+        {hoveredPoint.news && hoveredPoint.news.length > 0 && (
+          <div className="text-xs text-gray-600 mt-2 border-t pt-2">
+            <div className="font-semibold mb-1">Related News:</div>
+            {hoveredPoint.news.slice(0, 2).map((article, i) => (
+              <div key={i} className="truncate mb-1 text-gray-700">
+                • {article.title}
+              </div>
+            ))}
+            {hoveredPoint.news.length > 2 && (
+              <div className="text-gray-500 italic">+{hoveredPoint.news.length - 2} more</div>
+            )}
+          </div>
+        )}
+      </>
+    ) : (
+      <>
+        <div className="text-base font-bold text-blue-600">
+          {hoveredPoint.price?.toLocaleString(undefined, {
+            maximumFractionDigits: 2,
+          })}{" "}
+          USD
+        </div>
+        <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
+        <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
+        <div
+          className={`text-xs mt-1 ${
+            hoveredPoint.price >= (currentPrice?.y || 0)
+              ? "text-green-600"
+              : "text-red-600"
+          }`}
+        >
+          {currentPrice
+            ? ((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100 >= 0
+              ? "+"
+              : ""
+            : ""}
+          {currentPrice
+            ? (((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100).toFixed(2)
+            : "0.00"}
+          %
+        </div>
+      </>
+    )}
+  </div>
+)}
               {/* Chart Info Box */}
               <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
                 <div className="text-base font-bold text-blue-600">
