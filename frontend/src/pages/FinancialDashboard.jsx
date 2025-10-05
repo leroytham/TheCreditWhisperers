@@ -294,7 +294,7 @@ const FinancialDashboard = () => {
 
       <div className="flex">
         {/* Main Content */}
-        <div className="flex-1 p-6">
+        <div className="w-2/3 p-6">
           <div className="bg-white rounded-lg shadow-sm">
             {/* Chart Header */}
             <div className="p-6 border-b border-gray-200">
@@ -691,7 +691,8 @@ const FinancialDashboard = () => {
         </div>
 
         {/* Right Sidebar - Related News */}
-        <div className="w-80 bg-white border-l border-gray-200 p-4">
+        <div className="w-1/3 p-6">
+          <div className="bg-white border-l border-gray-200 rounded-lg shadow-sm p-4">
           <h3 className="text-lg font-semibold mb-4">Related News</h3>
           <div className="space-y-4 max-h-screen overflow-y-auto">
             {news.length === 0 ? (
@@ -730,6 +731,7 @@ const FinancialDashboard = () => {
         </div>
       </div>
     </div>
+  </div>
   );
 };
 
