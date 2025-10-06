@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, User, LogOut, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function Header() {
+  const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   
@@ -32,6 +34,14 @@ export default function Header() {
 
   const handleSettings = () => {
     alert('Settings functionality coming soon!');
+  };
+
+  const handleLogout = () => {
+    const confirmLogout = window.confirm("Are you sure you want to log out?");
+    if (confirmLogout) {
+      sessionStorage.removeItem("user");
+      navigate("/login");
+    }
   };
   
   const notifications = [
@@ -132,10 +142,13 @@ export default function Header() {
                     <span className="text-sm">Settings</span>
                   </button>
                   
-                  <button className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-red-600 mt-1">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-red-600 mt-1"
+                  >
                     <LogOut size={18} />
                     <span className="text-sm">Sign Out</span>
-                  </button>
+                  </button> 
                 </div>
               </div>
             )}
