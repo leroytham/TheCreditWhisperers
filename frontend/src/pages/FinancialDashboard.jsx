@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useRef } from 'react';
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
+import { Search, Bell, User, LogOut } from 'lucide-react';
 
 const NUM_X_AXIS_POINTS = 6;
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
@@ -18,8 +16,6 @@ const FinancialDashboard = () => {
   const [sentiment, setSentiment] = useState({});
   const [dailySentiment, setDailySentiment] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -28,23 +24,6 @@ const FinancialDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-
-  useEffect(() => {
-    const user = searchParams.get("user");
-    if (user) {
-      sessionStorage.setItem("user", user);
-    } else if (!sessionStorage.getItem("user")) {
-      navigate("/login");
-    }
-  }, [navigate, searchParams]);
-
-  const handleLogout = () => {
-    const confirmLogout = window.confirm("Are you sure you want to log out?");
-    if (confirmLogout) {
-      sessionStorage.removeItem("user");
-      navigate("/login");
-    }
-  };
 
   // Backend API calls
   useEffect(() => {
@@ -246,11 +225,7 @@ const FinancialDashboard = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <nav className="flex space-x-8">
-              <button 
-                className="text-gray-600 hover:text-gray-900"
-                onClick={() => navigate("/portfolio_page")}
-                >SECTOR
-                </button>
+              <button className="text-gray-600 hover:text-gray-900">PORTFOLIO</button>
               <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">ENTITY</button>
             </nav>
           </div>
@@ -285,9 +260,7 @@ const FinancialDashboard = () => {
           <div className="flex items-center space-x-4">
             <Bell className="w-6 h-6 text-gray-600" />
             <User className="w-6 h-6 text-gray-600" />
-            <button onClick={handleLogout}>
-              <LogOut className="w-6 h-6 text-gray-600 hover:text-gray-600 transition" />
-            </button>
+            <LogOut className="w-6 h-6 text-gray-600" />
           </div>
         </div>
       </header>
@@ -502,7 +475,7 @@ const FinancialDashboard = () => {
             {/* Daily Sentiment Bar Chart */}
             <div className="px-6 pb-6">
               <h3 className="text-lg font-semibold mb-4">Daily Average Sentiment (Past 7 Days)</h3>
-              <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md p-6">
+              <div className="relative bg-white border border-gray-200 rounded-lg shadow-md p-6" style={{ height: '450px' }}>
                 {dailySentimentBars.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-gray-400">
                     <div className="text-center">
@@ -513,7 +486,7 @@ const FinancialDashboard = () => {
                 ) : (
                   <>
                     <svg className="w-full h-full">
-                      {/* Y-axis label - moved to left side, rotated */}
+                      {/* Y-axis label */}
                       <text 
                         x="-180" 
                         y="15" 
@@ -528,8 +501,8 @@ const FinancialDashboard = () => {
 
                       {/* Y-axis labels and grid lines */}
                       <g className="text-gray-400 text-xs">
-                        {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
-                          const yPos = 40 + (i * 65);
+                        {[1.0, 0.5, 0, -0.5, -1.0].map((value, i) => {
+                          const yPos = 40 + (i * 80);
                           return (
                             <g key={i}>
                               <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
@@ -546,14 +519,17 @@ const FinancialDashboard = () => {
                         const barWidth = 70;
                         const barSpacing = (680) / dailySentimentBars.length;
                         const x = 70 + (i * barSpacing) + (barSpacing - barWidth) / 2;
-                        const zeroY = 170; // Middle of chart (0 value)
-                        const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
+                        
+                        const chartHeight = 320;
+                        const zeroY = 40 + (chartHeight / 2);
+                        const pixelsPerUnit = chartHeight / 2;
+                        
+                        const scoreHeight = Math.abs(bar.score) * pixelsPerUnit;
                         const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
                         const barColor = bar.score > 0 ? '#22c55e' : bar.score < 0 ? '#ef4444' : '#9ca3af';
 
                         return (
                           <g key={i}>
-                            {/* Bar */}
                             <rect
                               x={x}
                               y={barY}
@@ -567,7 +543,6 @@ const FinancialDashboard = () => {
                               onMouseEnter={() => setHoveredBar(i)}
                               onMouseLeave={() => setHoveredBar(null)}
                             />
-                            {/* Score label above bar */}
                             <text
                               x={x + barWidth / 2}
                               y={bar.score >= 0 ? barY - 8 : barY + scoreHeight + 18}
@@ -578,10 +553,9 @@ const FinancialDashboard = () => {
                             >
                               {bar.score.toFixed(2)}
                             </text>
-                            {/* Date label on X-axis */}
                             <text
                               x={x + barWidth / 2}
-                              y="325"
+                              y="380"
                               textAnchor="middle"
                               fill="#374151"
                               fontSize="12"
@@ -607,7 +581,7 @@ const FinancialDashboard = () => {
                         onMouseEnter={() => setHoveredBar(hoveredBar)}
                         onMouseLeave={() => {
                           setHoveredBar(null);
-                          setVisibleHeadlines(5); // Reset when leaving
+                          setVisibleHeadlines(5);
                         }}
                       >
                         <div className="mb-3 pb-2 border-b border-gray-200">
@@ -651,7 +625,6 @@ const FinancialDashboard = () => {
                               ))}
                             </div>
                             
-                            {/* View More Button */}
                             {visibleHeadlines < dailySentimentBars[hoveredBar].headlines.length && (
                               <button
                                 onClick={() => setVisibleHeadlines(prev => prev + 5)}
