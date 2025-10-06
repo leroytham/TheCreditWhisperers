@@ -5,15 +5,10 @@ import LoginCard from "./LoginPage";
 import FinancialDashboard from "./pages/FinancialDashboard";
 import PortfolioPage from "./pages/PortfolioPage";
 
-
 function App() {
   return (
     <Router>
-      {/* <nav>
-        <Link to="/signup">Signup</Link> | <Link to="/login">Login</Link>
-      </nav> */}
       <Routes>
-        {/* <Route path="/signup" element={<SignupCard />} /> */}
         <Route path="/login" element={<LoginCard />} />
         <Route path="/financial_dashboard" element={<FinancialDashboard />} />
         <Route path="/portfolio_page" element={<PortfolioPage />} />

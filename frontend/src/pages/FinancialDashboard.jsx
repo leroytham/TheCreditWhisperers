@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
 import RelatedNewsList from "../components/RelatedNewsList";
+import Header from "../components/Header"; 
 
 const NUM_X_AXIS_POINTS = 6;
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
@@ -384,73 +385,12 @@ const relatedNews = (news || []).map((a, i) => ({
 return (
   <div className="min-h-screen bg-gray-50">
     {/* Header */}
-    <header className="bg-white border-b border-gray-200 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <nav className="flex space-x-8">
-            <button
-              className="text-gray-600 hover:text-gray-900"
-              onClick={() => navigate("/portfolio_page")}
-            >
-              PORTFOLIO
-            </button>
-            <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">
-              ENTITY
-            </button>
-          </nav>
-        </div>
-        <div className="flex-1 max-w-md mx-8">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by entity"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {searchTerm.length > 1 && suggestions.length > 0 && (
-              <div className="absolute left-0 top-full w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 z-30 max-h-96 overflow-y-auto">
-                {suggestionsLoading && (
-                  <div className="p-4 text-center text-gray-500">Loading...</div>
-                )}
-                {!suggestionsLoading &&
-                  Array.from(
-                    new Map(
-                      suggestions
-                        .filter((q) => q.quoteType === "EQUITY")
-                        .map((q) => [q.symbol, q])
-                    ).values()
-                  ).map((q, idx) => (
-                    <div
-                      key={q.symbol + "-" + idx}
-                      onClick={() => handleTickerSelect(q.symbol)}
-                      className="px-4 py-3 cursor-pointer hover:bg-gray-100"
-                    >
-                      <p className="font-bold text-sm">{q.symbol}</p>
-                      <p className="text-xs text-gray-600 truncate">
-                        {q.shortname || q.longname}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center space-x-4">
-          <Bell className="w-6 h-6 text-gray-600" />
-          <User className="w-6 h-6 text-gray-600" />
-          <button onClick={handleLogout}>
-            <LogOut className="w-6 h-6 text-gray-600 hover:text-gray-600 transition" />
-          </button>
-        </div>
-      </div>
-    </header>
+    <Header />
 
     <div className="flex">
       {/* Main Content */}
       <div className="w-2/3 p-6">
-        <div className="bg-white rounded-lg shadow-sm">
+  <div className="bg-white rounded-lg shadow-sm">
           {/* Chart Header */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
