@@ -1082,7 +1082,7 @@ const Portfolio = () => {
           <div className="flex items-center space-x-4">
             {/* <Menu className="w-6 h-6 text-gray-600" /> */}
             <nav className="flex space-x-8">
-              <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">PORTFOLIO</button>
+              <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">SECTOR</button>
               <button
                 className="text-gray-600 hover:text-gray-900"
                 onClick={() => navigate("/financial_dashboard")}

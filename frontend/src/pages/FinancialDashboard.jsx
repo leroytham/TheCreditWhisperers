@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useRef } from 'react';
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
-import RelatedNewsList from "../components/RelatedNewsList";
-import Header from "../components/Header"; 
 
 const NUM_X_AXIS_POINTS = 6;
 const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
@@ -22,8 +20,6 @@ const FinancialDashboard = () => {
   const [lastFetched, setLastFetched] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [significantEvents, setSignificantEvents] = useState([]);
-  const [showEvents, setShowEvents] = useState(false);
 
   // UI state
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -32,10 +28,6 @@ const FinancialDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-
-  // Daily sentiment fetch status
-  const [dailySentimentLoading, setDailySentimentLoading] = useState(false);
-  const [dailySentimentError, setDailySentimentError] = useState(null);
 
   useEffect(() => {
     const user = searchParams.get("user");
@@ -54,158 +46,36 @@ const FinancialDashboard = () => {
     }
   };
 
-// ---------- Backend API calls ----------
-useEffect(() => {
-  // Fetch 1Y price data
-  fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
-    .then(res => res.json())
-    .then(data => {
-      setPriceData1Y(data.prices || []);
-      setCompanyName(data.company_name || '');
-      setCurrency(data.currency || 'USD');
-      setLastFetched(new Date());
-    })
-    .catch(err => console.error('Error fetching price data:', err));
+  // Backend API calls
+  useEffect(() => {
+    // Fetch 1Y price data
+    fetch(`/api/price?ticker=${ticker}&timeframe=1Y`)
+      .then(res => res.json())
+      .then(data => {
+        setPriceData1Y(data.prices || []);
+        setCompanyName(data.company_name || '');
+        setCurrency(data.currency || 'USD');
+        setLastFetched(new Date());
+      })
+      .catch(err => console.error('Error fetching price data:', err));
 
-  // Fetch news + overall sentiment
-  fetch(`/api/news?ticker=${ticker}`)
-    .then(res => res.json())
-    .then(data => {
-      setNews(data.news || []);
-      const avg = Number(data.avg_score ?? data.average_sentiment ?? 0);
-      setSentiment({ avg_score: avg });
-    })
-    .catch(err => console.error('Error fetching news:', err));
-  
-  // Fetch significant events
-fetch(`http://localhost:5001/analyze?ticker=${ticker}&history_period=${timeframe}`)
-  .then(res => res.json())
-  .then(data => {
-    console.log('Events response:', data);
-    if (data.success && data.events) {
-      console.log('Setting events:', data.events);
-      setSignificantEvents(data.events);
-    } else {
-      console.log('No events found');
-      setSignificantEvents([]);
-    }
-  })
-  .catch(err => {
-    console.error('Error fetching events:', err);
-    setSignificantEvents([]);
-  });
+    // Fetch news
+    fetch(`/api/news?ticker=${ticker}`)
+      .then(res => res.json())
+      .then(data => {
+        setNews(data.news || []);
+        setSentiment({ avg_score: data.avg_score });
+      })
+      .catch(err => console.error('Error fetching news:', err));
 
-  // --- Fetch daily sentiment data (supports both new and old endpoints) ---
-  setDailySentimentLoading(true);
-  setDailySentimentError(null);
-
-  const endpoints = [
-    `/api/daily-sentiment?ticker=${encodeURIComponent(ticker)}`,
-    `/api/sentiment/daily?ticker=${encodeURIComponent(ticker)}`, // legacy
-  ];
-
-  (async () => {
-    let success = false;
-
-    for (const url of endpoints) {
-      try {
-        console.log('[daily-sentiment] GET', url);
-        const res = await fetch(url, { headers: { Accept: 'application/json' } });
-        if (!res.ok) {
-          console.warn(`[daily-sentiment] HTTP ${res.status} from ${url}`);
-          continue;
-        }
-
-        const text = await res.text(); // raw for debugging
-        console.log('[daily-sentiment] raw:', text);
-        const json = text ? JSON.parse(text) : null;
-
-        const normalized = normalizeDailySentiment(json);
-        const size = Object.keys(normalized).length;
-
-        if (size === 0) {
-          console.warn('[daily-sentiment] normalized is empty');
-          // try next endpoint (if any)
-          continue;
-        }
-
-        setDailySentiment(normalized);
-        success = true;
-        break;
-      } catch (err) {
-        console.error('[daily-sentiment] fetch/parse error:', err);
-      }
-    }
-
-    if (!success) {
-      setDailySentiment({});
-      setDailySentimentError('No sentiment data returned for the past 7 days.');
-    }
-    setDailySentimentLoading(false);
-  })();
-}, [ticker]);
-
-// ---------- Helper: normalize backend daily sentiment payload ----------
-function normalizeDailySentiment(payload) {
-  // Shape A: { daily: { "YYYY-MM-DD": { score, count, headlines[] } } }
-  if (payload?.daily && typeof payload.daily === 'object') {
-    return normalizeDailyMap(payload.daily);
-  }
-
-  // Shape B: { data: [ { date|day|ts, avg|score|mean, count|n|articles, headlines? }, ... ] }
-  if (Array.isArray(payload?.data)) {
-    return normalizeDailyArray(payload.data);
-  }
-
-  // Shape C: [ { ... } ]
-  if (Array.isArray(payload)) {
-    return normalizeDailyArray(payload);
-  }
-
-  return {};
-}
-
-function normalizeDailyMap(mapObj) {
-  const out = {};
-  for (const [k, v] of Object.entries(mapObj)) {
-    const key = toISODate(k);
-    if (!key) continue;
-    out[key] = {
-      score: num(v.avg ?? v.score ?? v.mean ?? 0),
-      count: num(v.count ?? v.n ?? v.articles ?? 0),
-      headlines: Array.isArray(v.headlines) ? v.headlines : [],
-    };
-  }
-  return out;
-}
-
-function normalizeDailyArray(arr) {
-  return arr.reduce((acc, d) => {
-    const key = toISODate(d.date ?? d.day ?? d.ts ?? d.timestamp);
-    if (!key) return acc;
-    acc[key] = {
-      score: num(d.avg ?? d.score ?? d.mean ?? 0),
-      count: num(d.count ?? d.n ?? d.articles ?? 0),
-      headlines: Array.isArray(d.headlines) ? d.headlines : [],
-    };
-    return acc;
-  }, {});
-}
-
-function toISODate(x) {
-  try {
-    const d = new Date(x);
-    if (Number.isNaN(d.getTime())) return null;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${dd}`;
-  } catch {
-    return null;
-  }
-}
-
-const num = (v) => (v == null || v === '' ? 0 : Number(v));
+    // Fetch daily sentiment data
+    fetch(`/api/daily-sentiment?ticker=${ticker}`)
+      .then(res => res.json())
+      .then(data => {
+        setDailySentiment(data.daily || {});
+      })
+      .catch(err => console.error('Error fetching daily sentiment:', err));
+  }, [ticker]);
 
   // Filter priceData for selected timeframe
   useEffect(() => {
@@ -367,687 +237,493 @@ const num = (v) => (v == null || v === '' ? 0 : Number(v));
     });
   };
 
-  // ---- keep everything above this line unchanged ----
-const dailySentimentBars = generateDailySentimentBars();
+  const dailySentimentBars = generateDailySentimentBars();
 
-// Map backend news -> props for RelatedNewsList
-const relatedNews = (news || []).map((a, i) => ({
-  id: a.id ?? a.link ?? String(i),
-  title: a.title,
-  source: a.provider ?? "Unknown",
-  publishedAt: a.publish_date ?? new Date().toISOString(),
-  summary: a.description ?? "",
-  tickers: [ticker],
-  sentimentScore: Number(a.sentiment_score ?? 0),
-  link: a.link ?? a.url ?? null,
-})); // <-- IMPORTANT: close with )); and a semicolon
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <nav className="flex space-x-8">
+              <button 
+                className="text-gray-600 hover:text-gray-900"
+                onClick={() => navigate("/portfolio_page")}
+                >SECTOR
+                </button>
+              <button className="text-gray-900 font-semibold border-b-2 border-blue-500 pb-2">ENTITY</button>
+            </nav>
+          </div>
+          <div className="flex-1 max-w-md mx-8">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by entity"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchTerm.length > 1 && suggestions.length > 0 && (
+                <div className="absolute left-0 top-full w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 z-30 max-h-96 overflow-y-auto">
+                  {suggestionsLoading && <div className="p-4 text-center text-gray-500">Loading...</div>}
+                  {!suggestionsLoading &&
+                    Array.from(
+                      new Map(
+                        suggestions.filter(q => q.quoteType === 'EQUITY').map(q => [q.symbol, q])
+                      ).values()
+                    ).map((q, idx) => (
+                      <div key={q.symbol + '-' + idx} onClick={() => handleTickerSelect(q.symbol)} className="px-4 py-3 cursor-pointer hover:bg-gray-100">
+                        <p className="font-bold text-sm">{q.symbol}</p>
+                        <p className="text-xs text-gray-600 truncate">{q.shortname || q.longname}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center space-x-4">
+            <Bell className="w-6 h-6 text-gray-600" />
+            <User className="w-6 h-6 text-gray-600" />
+            <button onClick={handleLogout}>
+              <LogOut className="w-6 h-6 text-gray-600 hover:text-gray-600 transition" />
+            </button>
+          </div>
+        </div>
+      </header>
 
-return (
-  <div className="min-h-screen bg-gray-50">
-    {/* Header */}
-    <Header />
-
-    <div className="flex">
-      {/* Main Content */}
-      <div className="w-2/3 p-6">
-  <div className="bg-white rounded-lg shadow-sm">
-          {/* Chart Header */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-2xl font-bold">
-                  {companyName ? `${companyName}` : `${ticker} `}
-                </h1>
-                <p className="text-gray-600">{ticker}</p>
-                <p className="text-gray-600">({currency})</p>
+      <div className="flex">
+        {/* Main Content */}
+        <div className="w-2/3 p-6">
+          <div className="bg-white rounded-lg shadow-sm">
+            {/* Chart Header */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-2xl font-bold">
+                    {companyName ? `${companyName}` : `${ticker} `}
+                  </h1>
+                  <p className="text-gray-600">{ticker}</p>
+                  <p className="text-gray-600">({currency})</p>
+                </div>
+                <div className="text-xs text-gray-500 text-right">
+                  {lastFetched && (
+                    <span>
+                      Data retrieved: {lastFetched.toLocaleString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
+                      })}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="text-xs text-gray-500 text-right">
-                {lastFetched && (
-                  <span>
-                    Data retrieved:{" "}
-                    {lastFetched.toLocaleString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: true,
-                      timeZoneName: "short",
+
+              <div className="flex items-end space-x-4 mb-4">
+                <span className="text-4xl font-bold">
+                  {currentPrice ? currentPrice.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'}
+                </span>
+                <span className={`flex items-center text-xl ${
+                  priceChange >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} 
+                  <span className="ml-1">{priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%</span>
+                </span>
+              </div>
+              <p className="text-gray-600 text-sm">
+                As of {currentPrice ? new Date(currentPrice.date).toLocaleString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  year: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
+                  timeZoneName: 'short'
+                }) : 'Loading...'}
+              </p>
+            </div>
+
+            {/* Chart Controls */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex space-x-1">
+                  {TIMEFRAMES.map((tf) => (
+                    <button
+                      key={tf}
+                      onClick={() => setTimeframe(tf)}
+                      className={`px-3 py-1 rounded text-sm ${
+                        timeframe === tf
+                          ? 'bg-blue-500 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Price Chart Area */}
+            <div className="p-6">
+              <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
+                {chartData.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      <div>Loading chart data...</div>
+                      <div className="text-xs mt-1">Fetching {ticker} data...</div>
+                    </div>
+                  </div>
+                ) : (
+                    <svg className="w-full h-full" style={{ overflow: 'visible' }}>
+                      <defs>
+                        <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0.18 }} />
+                          <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0 }} />
+                        </linearGradient>
+                      </defs>
+                      {/* Chart Grid */}
+                      <g className="text-gray-400 text-xs">
+                        {[...Array(6)].map((_, i) => {
+                          const yPos = 40 + (i * 50);
+                          const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
+                          return (
+                            <g key={i}>
+                              <line x1="60" y1={yPos} x2="720" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
+                              <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
+                                {price.toLocaleString(undefined, {maximumFractionDigits: 2})}
+                              </text>
+                            </g>
+                          );
+                        })}
+                        {timelinePoints.map((point, i) => (
+                          <line key={`v-${i}`} x1={point.x} y1="40" x2={point.x} y2="290" stroke="#e5e7eb" strokeWidth="1" />
+                        ))}
+                      </g>
+                      {/* Chart Fill Area */}
+                      {chartData.length > 0 && (
+                        <path
+                          d={`M 60 290 ${chartData
+                            .map((point, i) => {
+                              const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
+                              const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
+                              return `L ${x} ${y}`;
+                            })
+                            .join(' ')} L ${60 + ((chartData.length - 1) * (660 / Math.max(1, chartData.length - 1)))} 290 Z`}
+                          fill="url(#chartGradient)"
+                        />
+                      )}
+                      {/* Chart Line */}
+                      {chartData.length > 0 && (
+                        <path
+                          d={`M ${60} ${290 - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * 250)} ${chartData
+                            .slice(1)
+                            .map((point, i) => {
+                              const x = 60 + ((i + 1) * (660 / Math.max(1, chartData.length - 1)));
+                              const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
+                              return `L ${x} ${y}`;
+                            })
+                            .join(' ')}`}
+                          fill="none"
+                          stroke={priceChange >= 0 ? '#16a34a' : '#dc2626'}
+                          strokeWidth="3"
+                          style={{ filter: 'drop-shadow(0 2px 4px rgba(22,163,74,0.08))' }}
+                        />
+                      )}
+                    {/* Interactive Hover Areas */}
+                    {chartData.map((point, i) => {
+                      const x = 60 + (i * (660 / Math.max(1, chartData.length - 1)));
+                      const y = 290 - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * 250);
+                      const isHovered = hoveredPoint?.index === i;
+                      return (
+                        <g key={i}>
+                          <rect
+                            x={x - 10}
+                            y="40"
+                            width="20"
+                            height="250"
+                            fill="transparent"
+                            className="cursor-crosshair"
+                            onMouseEnter={() => setHoveredPoint({ ...point, x: x, y: y, index: i, price: point.y })}
+                            onMouseLeave={() => setHoveredPoint(null)}
+                          />
+                          {isHovered && (
+                            <>
+                              <circle cx={x} cy={y} r="5" fill={priceChange >= 0 ? '#3b82f6' : '#ef4444'} stroke="white" strokeWidth="2" style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.15))' }} />
+                              <line x1={x} y1="40" x2={x} y2="290" stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'} strokeWidth="1" strokeDasharray="3,3" />
+                            </>
+                          )}
+                        </g>
+                      );
                     })}
-                  </span>
+                    {/* Timeline */}
+                    {timelinePoints.map((point, i) => (
+                      <g key={`timeline-${i}`}>
+                        <circle cx={point.x} cy="310" r="8" fill="#f9fafb" stroke="#d1d5db" strokeWidth="2" />
+                        <circle cx={point.x} cy="310" r="3" fill="#3b82f6" />
+                        <text x={point.x} y="330" textAnchor="middle" fill="#374151" fontSize="11" fontWeight="bold">
+                          {point.label}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                )}
+                {/* Tooltip */}
+                {hoveredPoint && (
+                  <div
+                    className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none z-20"
+                    style={{
+                      left: `${Math.max(60, Math.min(hoveredPoint.x - 80, 60 + 660 - 160))}px`,
+                      top: `${hoveredPoint.y - 100}px`,
+                      minWidth: '120px'
+                    }}
+                  >
+                    <div className="text-base font-bold text-blue-600">{hoveredPoint.price?.toLocaleString(undefined, {maximumFractionDigits: 2})} USD</div>
+                    <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
+                    <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
+                    <div className={`text-xs mt-1 ${hoveredPoint.price >= (currentPrice?.y || 0) ? 'text-green-600' : 'text-red-600'}`}>
+                      {currentPrice ? (((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100) >= 0 ? '+' : '') : ''}
+                      {currentPrice ? ((hoveredPoint.price - currentPrice.y) / currentPrice.y * 100).toFixed(2) : '0.00'}%
+                    </div>
+                  </div>
+                )}
+                {/* Chart Info Box */}
+                <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
+                  <div className="text-base font-bold text-blue-600">
+                    {currentPrice ? currentPrice.y.toLocaleString(undefined, {maximumFractionDigits: 2}) : '--'} USD
+                  </div>
+                  <div className="text-xs text-gray-600">{currentPrice ? currentPrice.date : '--'}</div>
+                  <div className={`text-xs mt-1 ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Sentiment Bar Chart */}
+            <div className="px-6 pb-6">
+              <h3 className="text-lg font-semibold mb-4">Daily Average Sentiment (Past 7 Days)</h3>
+              <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md p-6">
+                {dailySentimentBars.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      <div>Loading sentiment data...</div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <svg className="w-full h-full">
+                      {/* Y-axis label - moved to left side, rotated */}
+                      <text 
+                        x="-180" 
+                        y="15" 
+                        fill="#6b7280" 
+                        fontSize="11" 
+                        fontWeight="600"
+                        transform="rotate(-90)"
+                        textAnchor="middle"
+                      >
+                        Average Sentiment Score
+                      </text>
+
+                      {/* Y-axis labels and grid lines */}
+                      <g className="text-gray-400 text-xs">
+                        {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
+                          const yPos = 40 + (i * 65);
+                          return (
+                            <g key={i}>
+                              <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
+                              <text x="60" y={yPos + 4} textAnchor="end" fill="#6b7280" fontSize="12" fontWeight="500">
+                                {value.toFixed(1)}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </g>
+
+                      {/* Bars with score labels */}
+                      {dailySentimentBars.map((bar, i) => {
+                        const barWidth = 70;
+                        const barSpacing = (680) / dailySentimentBars.length;
+                        const x = 70 + (i * barSpacing) + (barSpacing - barWidth) / 2;
+                        const zeroY = 170; // Middle of chart (0 value)
+                        const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
+                        const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
+                        const barColor = bar.score > 0 ? '#22c55e' : bar.score < 0 ? '#ef4444' : '#9ca3af';
+
+                        return (
+                          <g key={i}>
+                            {/* Bar */}
+                            <rect
+                              x={x}
+                              y={barY}
+                              width={barWidth}
+                              height={Math.max(scoreHeight, 3)}
+                              fill={barColor}
+                              opacity="0.85"
+                              rx="3"
+                              className="cursor-pointer transition-opacity"
+                              style={{ opacity: hoveredBar === i ? 1 : 0.85 }}
+                              onMouseEnter={() => setHoveredBar(i)}
+                              onMouseLeave={() => setHoveredBar(null)}
+                            />
+                            {/* Score label above bar */}
+                            <text
+                              x={x + barWidth / 2}
+                              y={bar.score >= 0 ? barY - 8 : barY + scoreHeight + 18}
+                              textAnchor="middle"
+                              fill="#374151"
+                              fontSize="12"
+                              fontWeight="600"
+                            >
+                              {bar.score.toFixed(2)}
+                            </text>
+                            {/* Date label on X-axis */}
+                            <text
+                              x={x + barWidth / 2}
+                              y="325"
+                              textAnchor="middle"
+                              fill="#374151"
+                              fontSize="12"
+                              fontWeight="500"
+                            >
+                              {bar.label}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    {/* Hover Tooltip */}
+                    {hoveredBar !== null && dailySentimentBars[hoveredBar] && (
+                      <div
+                        className="absolute bg-white border-2 border-blue-400 rounded-lg shadow-2xl p-4 z-30 overflow-y-auto"
+                        style={{
+                          left: `${Math.min(Math.max(70 + (hoveredBar * (680 / dailySentimentBars.length)) + ((680 / dailySentimentBars.length) / 2) - 150, 20), 600)}px`,
+                          top: '100px',
+                          width: '320px',
+                          maxHeight: '400px'
+                        }}
+                        onMouseEnter={() => setHoveredBar(hoveredBar)}
+                        onMouseLeave={() => {
+                          setHoveredBar(null);
+                          setVisibleHeadlines(5); // Reset when leaving
+                        }}
+                      >
+                        <div className="mb-3 pb-2 border-b border-gray-200">
+                          <div className="text-sm font-semibold text-gray-700">{dailySentimentBars[hoveredBar].label}</div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-gray-600">Sentiment Score:</span>
+                            <span className={`text-sm font-bold ${dailySentimentBars[hoveredBar].score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {dailySentimentBars[hoveredBar].score.toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs text-gray-600">Articles Analyzed:</span>
+                            <span className="text-sm font-semibold text-blue-600">{dailySentimentBars[hoveredBar].count}</span>
+                          </div>
+                        </div>
+
+                        {dailySentimentBars[hoveredBar].headlines && dailySentimentBars[hoveredBar].headlines.length > 0 && (
+                          <div>
+                            <div className="text-xs font-semibold text-gray-700 mb-2">
+                              Most Polar Headlines (Top {Math.min(visibleHeadlines, dailySentimentBars[hoveredBar].headlines.length)})
+                            </div>
+                            <div className="space-y-3">
+                              {dailySentimentBars[hoveredBar].headlines.slice(0, visibleHeadlines).map((headline, idx) => (
+                                <div key={idx} className="border-l-2 border-blue-300 pl-2 py-1">
+                                  <a
+                                    href={headline.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-800 hover:text-blue-600 hover:underline leading-tight block cursor-pointer transition-colors"
+                                    style={{ pointerEvents: 'auto', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                                  >
+                                    {headline.title}
+                                  </a>
+                                  <div className="flex items-center justify-between mt-1">
+                                    <span className="text-xs text-gray-500">{headline.provider}</span>
+                                    <span className={`text-xs font-semibold ${headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {headline.sentiment_score >= 0 ? '+' : ''}{headline.sentiment_score.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* View More Button */}
+                            {visibleHeadlines < dailySentimentBars[hoveredBar].headlines.length && (
+                              <button
+                                onClick={() => setVisibleHeadlines(prev => prev + 5)}
+                                className="mt-3 w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded transition-colors"
+                              >
+                                View More ({dailySentimentBars[hoveredBar].headlines.length - visibleHeadlines} remaining)
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
 
-            <div className="flex items-end space-x-4 mb-4">
-              <span className="text-4xl font-bold">
-                {currentPrice
-                  ? currentPrice.y.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })
-                  : "--"}
-              </span>
-              <span
-                className={`flex items-center text-xl ${
-                  priceChange >= 0 ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {priceChange >= 0 ? "▲" : "▼"} {Math.abs(priceChange).toFixed(2)}
-                <span className="ml-1">
-                  {priceChangePercent >= 0 ? "+" : ""}
-                  {priceChangePercent.toFixed(2)}%
-                </span>
-              </span>
-            </div>
-            <p className="text-gray-600 text-sm">
-              As of{" "}
-              {currentPrice
-                ? new Date(currentPrice.date).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                    hour12: true,
-                    timeZoneName: "short",
-                  })
-                : "Loading..."}
-            </p>
-          </div>
-
-          {/* Chart Controls */}
-<div className="px-6 py-4 border-b border-gray-200">
-  <div className="flex items-center justify-between">
-    <div className="flex space-x-1">
-      {TIMEFRAMES.map((tf) => (
-        <button
-          key={tf}
-          onClick={() => setTimeframe(tf)}
-          className={`px-3 py-1 rounded text-sm ${
-            timeframe === tf
-              ? "bg-blue-500 text-white"
-              : "text-gray-600 hover:bg-gray-100"
-          }`}
-        >
-          {tf}
-        </button>
-      ))}
-    </div>
-    
-    {/* Toggle for Major Events */}
-    <div className="flex items-center space-x-2">
-      <span className="text-sm text-gray-600">Major Events</span>
-      <button
-        onClick={() => setShowEvents(!showEvents)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          showEvents ? 'bg-blue-500' : 'bg-gray-300'
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-            showEvents ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
-    </div>
-  </div>
-</div>
-
-          {/* Price Chart Area */}
-          <div className="p-6">
-            <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
-              {chartData.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-400">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-                    <div>Loading chart data...</div>
-                    <div className="text-xs mt-1">Fetching {ticker} data...</div>
-                  </div>
-                </div>
-              ) : (
-                <svg className="w-full h-full" style={{ overflow: "visible" }}>
-                  <defs>
-                    <linearGradient
-                      id="chartGradient"
-                      x1="0%"
-                      y1="0%"
-                      x2="0%"
-                      y2="100%"
-                    >
-                      <stop
-                        offset="0%"
-                        style={{
-                          stopColor: priceChange >= 0 ? "#16a34a" : "#dc2626",
-                          stopOpacity: 0.18,
-                        }}
-                      />
-                      <stop
-                        offset="100%"
-                        style={{
-                          stopColor: priceChange >= 0 ? "#16a34a" : "#dc2626",
-                          stopOpacity: 0,
-                        }}
-                      />
-                    </linearGradient>
-                  </defs>
-                  {/* Chart Grid */}
-                  <g className="text-gray-400 text-xs">
-                    {[...Array(6)].map((_, i) => {
-                      const yPos = 40 + i * 50;
-                      const price =
-                        priceRange.max -
-                        ((priceRange.max - priceRange.min) * i) / 5;
-                      return (
-                        <g key={i}>
-                          <line
-                            x1="60"
-                            y1={yPos}
-                            x2="720"
-                            y2={yPos}
-                            stroke="#e5e7eb"
-                            strokeWidth="1"
-                          />
-                          <text
-                            x="50"
-                            y={yPos + 5}
-                            textAnchor="end"
-                            fill="#9ca3af"
-                            fontSize="11"
-                            fontWeight="bold"
-                          >
-                            {price.toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })}
-                          </text>
-                        </g>
-                      );
-                    })}
-                    {timelinePoints.map((point, i) => (
-                      <line
-                        key={`v-${i}`}
-                        x1={point.x}
-                        y1="40"
-                        x2={point.x}
-                        y2="290"
-                        stroke="#e5e7eb"
-                        strokeWidth="1"
-                      />
-                    ))}
-                  </g>
-                  {/* Chart Fill Area */}
-                  {chartData.length > 0 && (
-                    <path
-                      d={`M 60 290 ${chartData
-                        .map((point, i) => {
-                          const x =
-                            60 + (i * (660 / Math.max(1, chartData.length - 1)));
-                          const y =
-                            290 -
-                            ((point.y - priceRange.min) /
-                              (priceRange.max - priceRange.min)) *
-                              250;
-                          return `L ${x} ${y}`;
-                        })
-                        .join(" ")} L ${
-                        60 +
-                        ((chartData.length - 1) *
-                          (660 / Math.max(1, chartData.length - 1)))
-                      } 290 Z`}
-                      fill="url(#chartGradient)"
-                    />
-                  )}
-                  {/* Chart Line */}
-                  {chartData.length > 0 && (
-                    <path
-                      d={`M ${60} ${
-                        290 -
-                        ((chartData[0].y - priceRange.min) /
-                          (priceRange.max - priceRange.min)) *
-                          250
-                      } ${chartData
-                        .slice(1)
-                        .map((point, i) => {
-                          const x =
-                            60 +
-                            ((i + 1) *
-                              (660 / Math.max(1, chartData.length - 1)));
-                          const y =
-                            290 -
-                            ((point.y - priceRange.min) /
-                              (priceRange.max - priceRange.min)) *
-                              250;
-                          return `L ${x} ${y}`;
-                        })
-                        .join(" ")}`}
-                      fill="none"
-                      stroke={priceChange >= 0 ? "#16a34a" : "#dc2626"}
-                      strokeWidth="3"
-                      style={{
-                        filter: "drop-shadow(0 2px 4px rgba(22,163,74,0.08))",
-                      }}
-                    />
-                  )}
-                  {/* Interactive Hover Areas */}
-                  {chartData.map((point, i) => {
-                    const x =
-                      60 + (i * (660 / Math.max(1, chartData.length - 1)));
-                    const y =
-                      290 -
-                      ((point.y - priceRange.min) /
-                        (priceRange.max - priceRange.min)) *
-                        250;
-                    const isHovered = hoveredPoint?.index === i;
-                    return (
-                      <g key={i}>
-                        <rect
-                          x={x - 10}
-                          y="40"
-                          width="20"
-                          height="250"
-                          fill="transparent"
-                          className="cursor-crosshair"
-                          onMouseEnter={() =>
-                            setHoveredPoint({
-                              ...point,
-                              x: x,
-                              y: y,
-                              index: i,
-                              price: point.y,
-                            })
-                          }
-                          onMouseLeave={() => setHoveredPoint(null)}
-                        />
-                        {isHovered && (
-                          <>
-                            <circle
-                              cx={x}
-                              cy={y}
-                              r="5"
-                              fill={priceChange >= 0 ? "#3b82f6" : "#ef4444"}
-                              stroke="white"
-                              strokeWidth="2"
-                              style={{
-                                filter:
-                                  "drop-shadow(0 2px 4px rgba(59,130,246,0.15))",
-                              }}
-                            />
-                            <line
-                              x1={x}
-                              y1="40"
-                              x2={x}
-                              y2="290"
-                              stroke={priceChange >= 0 ? "#3b82f6" : "#ef4444"}
-                              strokeWidth="1"
-                              strokeDasharray="3,3"
-                            />
-                          </>
-                        )}
-                      </g>
-                    );
-                  })}
-                  {/* Timeline */}
-                  {timelinePoints.map((point, i) => (
-                    <g key={`timeline-${i}`}>
-                      <circle
-                        cx={point.x}
-                        cy="310"
-                        r="8"
-                        fill="#f9fafb"
-                        stroke="#d1d5db"
-                        strokeWidth="2"
-                      />
-                      <circle cx={point.x} cy="310" r="3" fill="#3b82f6" />
-                      <text
-                        x={point.x}
-                        y="330"
-                        textAnchor="middle"
-                        fill="#374151"
-                        fontSize="11"
-                        fontWeight="bold"
-                      >
-                        {point.label}
-                      </text>
-                    </g>
-                  ))}
-
-                  {/* Major Event Lines */}
-{showEvents && significantEvents.map((event, idx) => {
-  const eventDate = new Date(event.start_date);
-  const eventIndex = chartData.findIndex(d => {
-    const dataDate = new Date(d.date);
-    return dataDate.toDateString() === eventDate.toDateString();
-  });
-  
-  if (eventIndex === -1) return null;
-  
-  const x = 60 + (eventIndex * (660 / Math.max(1, chartData.length - 1)));
-  
-  return (
-    <g key={`event-${idx}`}>
-      <line
-        x1={x}
-        y1="40"
-        x2={x}
-        y2="290"
-        stroke="#ef4444"
-        strokeWidth="2"
-        strokeDasharray="5,3"
-      />
-      <circle
-        cx={x}
-        cy="30"
-        r="6"
-        fill="#ef4444"
-        stroke="white"
-        strokeWidth="2"
-        className="cursor-pointer"
-        onMouseEnter={() => setHoveredPoint({
-          ...event,
-          x: x,
-          y: 30,
-          isEvent: true,
-          index: idx
-        })}
-        onMouseLeave={() => setHoveredPoint(null)}
-      />
-    </g>
-  );
-})}
-                </svg>
-              )}
-{/* Tooltip for major events */}
-              {hoveredPoint && hoveredPoint.isEvent && (
-                <div
-                  className="absolute bg-white rounded-xl shadow-2xl z-30 border border-gray-200"
-                  style={{
-                    left: `${Math.max(60, Math.min(hoveredPoint.x - 160, 600))}px`,
-                    top: `${70}px`,
-                    width: "340px",
-                    maxHeight: "450px",
-                    overflowY: "auto"
-                  }}
-                  onMouseEnter={() => setHoveredPoint(hoveredPoint)}
-                  onMouseLeave={() => setHoveredPoint(null)}
-                >
-                  {/* Header */}
-                  <div className={`p-4 rounded-t-xl ${
-                    hoveredPoint.trend === 'UP' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'
+            {/* Overall Sentiment */}
+            <div className="px-6 pb-6">
+              <h3 className="text-lg font-semibold mb-4">Overall Sentiment</h3>
+              <div className="flex items-center space-x-8">
+                <div>
+                  <div className="text-sm text-gray-600">Average Sentiment Score</div>
+                  <div className={`text-4xl font-bold ${
+                    (sentiment.avg_score || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
-                    <div className={`font-bold text-lg ${
-                      hoveredPoint.trend === 'UP' ? 'text-green-700' : 'text-red-700'
-                    }`}>
-                      {hoveredPoint.trend === 'UP' ? '↗' : '↘'} {hoveredPoint.trend} Move: {Math.abs(hoveredPoint.total_move_pct).toFixed(2)}%
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      {hoveredPoint.start_date}
-                      {hoveredPoint.end_date !== hoveredPoint.start_date && ` → ${hoveredPoint.end_date}`}
-                      <span className="ml-2 text-gray-500">({hoveredPoint.days} day{hoveredPoint.days > 1 ? 's' : ''})</span>
-                    </div>
-                  </div>
-
-                  {/* News Section */}
-                  {hoveredPoint.news && hoveredPoint.news.length > 0 && (
-                    <div className="p-4">
-                      <div className="font-semibold text-sm text-gray-700 mb-3 flex items-center">
-                        <span className="w-1 h-4 bg-blue-500 rounded mr-2"></span>
-                        Related News
-                      </div>
-                      <div className="space-y-3">
-                        {hoveredPoint.news.map((article, i) => (
-                          <div 
-                            key={i} 
-                            className="group hover:bg-gray-50 p-2 rounded-lg transition-colors cursor-pointer border-l-2 border-transparent hover:border-blue-500"
-                          >
-                            <a 
-                              href={article.link} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="block"
-                            >
-                              <div className="text-sm font-medium text-gray-800 group-hover:text-blue-600 leading-snug mb-1">
-                                {article.title}
-                              </div>
-                              <div className="flex items-center text-xs text-gray-500">
-                                <span className="font-medium">{article.publisher}</span>
-                                <span className="mx-1.5">•</span>
-                                <span>{article.date}</span>
-                              </div>
-                            </a>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Chart Info Box */}
-              <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
-                <div className="text-base font-bold text-blue-600">
-                  {currentPrice
-                    ? currentPrice.y.toLocaleString(undefined, {
-                        maximumFractionDigits: 2,
-                      })
-                    : "--"}{" "}
-                  USD
-                </div>
-                <div className="text-xs text-gray-600">
-                  {currentPrice ? currentPrice.date : "--"}
-                </div>
-                <div
-                  className={`text-xs mt-1 ${
-                    priceChange >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {priceChangePercent >= 0 ? "+" : ""}
-                  {priceChangePercent.toFixed(2)}%
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Daily Sentiment Bar Chart */}
-          <div className="px-6 pb-6">
-            <h3 className="text-lg font-semibold mb-4">
-              Daily Average Sentiment (Past 7 Days)
-            </h3>
-            <div className="relative h-96 bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-lg shadow-md p-6">
-              {dailySentimentBars.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-400">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-                    <div>Loading sentiment data...</div>
+                    {sentiment.avg_score ? sentiment.avg_score.toFixed(2) : '--'}
                   </div>
                 </div>
-              ) : (
-                <svg className="w-full h-full" viewBox="0 0 780 360">
-                  {/* Y-axis gridlines and labels */}
-                  <g>
-                    {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
-                      const yPos = 40 + i * 60;
-                      return (
-                        <g key={i}>
-                          <line
-                            x1="60"
-                            y1={yPos}
-                            x2="720"
-                            y2={yPos}
-                            stroke={value === 0 ? "#374151" : "#e5e7eb"}
-                            strokeWidth={value === 0 ? "2" : "1"}
-                          />
-                          <text
-                            x="50"
-                            y={yPos + 5}
-                            textAnchor="end"
-                            fill="#6b7280"
-                            fontSize="12"
-                            fontWeight={value === 0 ? "600" : "400"}
-                          >
-                            {value.toFixed(1)}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </g>
-
-                  {/* Bars */}
-                  {dailySentimentBars.map((bar, i) => {
-                    const barWidth = 70;
-                    const spacing = (660 - barWidth * dailySentimentBars.length) / (dailySentimentBars.length + 1);
-                    const x = 60 + spacing + i * (barWidth + spacing);
-                    const zeroY = 160;
-                    
-                    const score = Math.max(-0.4, Math.min(0.4, bar.score));
-                    const barHeight = Math.abs(score) * 300;
-                    const barY = score >= 0 ? zeroY - barHeight : zeroY;
-                    
-                    const isHovered = hoveredBar?.index === i;
-                    const fillColor = bar.score >= 0 ? "#10b981" : "#ef4444";
-
-                    return (
-                      <g key={i}>
-                        <rect
-                          x={x}
-                          y={barY}
-                          width={barWidth}
-                          height={barHeight}
-                          fill={fillColor}
-                          opacity={isHovered ? "1" : "0.85"}
-                          className="cursor-pointer"
-                          onMouseEnter={() => setHoveredBar({ ...bar, x, y: barY, index: i })}
-                          onMouseLeave={() => setHoveredBar(null)}
-                          rx="3"
-                        />
-                        
-                        <text
-                          x={x + barWidth / 2}
-                          y="330"
-                          textAnchor="middle"
-                          fill="#6b7280"
-                          fontSize="11"
-                        >
-                          {bar.label}
-                        </text>
-
-                        {bar.count > 0 && (
-                          <>
-                            <circle
-                              cx={x + barWidth / 2}
-                              cy={score >= 0 ? barY - 15 : barY + barHeight + 15}
-                              r="12"
-                              fill="#3b82f6"
-                            />
-                            <text
-                              x={x + barWidth / 2}
-                              y={score >= 0 ? barY - 10 : barY + barHeight + 20}
-                              textAnchor="middle"
-                              fill="white"
-                              fontSize="10"
-                              fontWeight="bold"
-                            >
-                              {bar.count}
-                            </text>
-                          </>
-                        )}
-                      </g>
-                    );
-                  })}
-                </svg>
-              )}
-              
-              {hoveredBar && (
-                <div
-                  className="absolute bg-white border-2 border-blue-300 rounded-xl p-4 shadow-2xl pointer-events-none z-20"
-                  style={{
-                    left: `${Math.min(hoveredBar.x, 600)}px`,
-                    top: `${Math.max(20, hoveredBar.y - 110)}px`,
-                    minWidth: "200px",
-                  }}
-                >
-                  <div className="text-sm font-semibold text-gray-700">{hoveredBar.date}</div>
-                  <div className={`text-3xl font-bold mt-1 ${
-                    hoveredBar.score >= 0 ? "text-green-600" : "text-red-600"
-                  }`}>
-                    {hoveredBar.score >= 0 ? "+" : ""}{hoveredBar.score.toFixed(3)}
-                  </div>
-                  <div className="text-xs text-gray-600 mt-2 flex items-center">
-                    <span className="font-semibold">Articles:</span>
-                    <span className="ml-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
-                      {hoveredBar.count}
-                    </span>
-                  </div>
+                <div>
+                  <div className="text-sm text-gray-600">News Articles</div>
+                  <div className="text-lg font-semibold">{news.length}</div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Overall Sentiment */}
-          <div className="px-6 pb-6">
-            <h3 className="text-lg font-semibold mb-4">Overall Sentiment</h3>
-            <div className="flex items-center space-x-8">
-              <div>
-                <div className="text-sm text-gray-600">Average Sentiment Score</div>
-                <div
-                  className={`text-4xl font-bold ${
-                    (sentiment.avg_score || 0) >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }`}
-                >
-                  {sentiment.avg_score ? sentiment.avg_score.toFixed(2) : "--"}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-gray-600">News Articles</div>
-                <div className="text-lg font-semibold">{news.length}</div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Right Sidebar - Related News */}
-      <div className="w-1/3 p-6">
-        <div className="bg-white border-l border-gray-200 rounded-lg shadow-sm p-4">
+        {/* Right Sidebar - Related News */}
+        <div className="w-1/3 p-6">
+          <div className="bg-white border-l border-gray-200 rounded-lg shadow-sm p-4">
           <h3 className="text-lg font-semibold mb-4">Related News</h3>
-          <div className="max-h-screen overflow-y-auto">
-            {relatedNews.length === 0 ? (
+          <div className="space-y-4 max-h-screen overflow-y-auto">
+            {news.length === 0 ? (
               <div className="text-gray-400">No news found for {ticker}</div>
             ) : (
-              relatedNews.map((item, idx) => (
-                <div key={item.id || idx} className="mb-4 p-3 border-b border-gray-200">
-                  <a 
-                    href={item.link || '#'} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm font-semibold text-blue-600 hover:underline"
-                  >
-                    {item.title || 'Untitled'}
-                  </a>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {item.source} • {new Date(item.publishedAt).toLocaleDateString()}
+              news.map((article, index) => (
+                <div key={index} className="border-b border-gray-100 pb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
+                      <a 
+                        href={article.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="hover:text-blue-600"
+                      >
+                        {article.title}
+                      </a>
+                    </h4>
+                    {article.sentiment_score !== undefined && article.sentiment_score !== null && (
+                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold whitespace-nowrap border ${
+                        article.sentiment_score > 0 ? 'text-green-600 border-green-600 bg-green-50' : 
+                        article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
+                        'text-gray-600 border-gray-600 bg-gray-50'
+                      }`}>
+                        Sentiment Score: {article.sentiment_score.toFixed(2)}
+                      </span>
+                    )}
                   </div>
-                  
-                  {item.tickers && item.tickers.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {item.tickers.map((tickerSymbol, tidx) => (
-                        <span 
-                          key={tidx}
-                          className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded"
-                        >
-                          {tickerSymbol}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className={`text-xs mt-2 font-semibold ${
-                    item.sentimentScore >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    Sentiment score: {item.sentimentScore >= 0 ? 'Positive' : 'Negative'} ({item.sentimentScore.toFixed(2)})
-                  </div>
+                  <p className="text-xs text-gray-600">
+                    {article.publish_date} | {article.provider}
+                  </p>
                 </div>
               ))
             )}
@@ -1055,8 +731,8 @@ return (
         </div>
       </div>
     </div>
-  </div>
-);
+   </div> 
+  );
 };
 
 export default FinancialDashboard;
