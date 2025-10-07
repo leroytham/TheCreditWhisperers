@@ -54,7 +54,7 @@ export default function LoginCard() {
       <main className="login-container">
         <section className="card">
           <h1 className="card-title">
-            Welcome to <span className="ubs-red">UBS News Screener</span>
+            Welcome to <span className="ubs-red">News Screener</span>
             <br />
             <span className="muted">please sign in.</span>
           </h1>
