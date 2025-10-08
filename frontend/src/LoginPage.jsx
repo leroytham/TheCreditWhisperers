@@ -47,23 +47,19 @@ export default function LoginCard() {
   return (
     <div className="login-page">
       <header className="header">
-        <img
-        //   src="/ubs-logo.png" // UBS LOGO
-          alt="UBS Logo"
-          className="ubs-logo"
-        />
+        {/* REMOVED: UBS Logo */}
         <span className="notif">Notification</span>
       </header>
 
       <main className="login-container">
         <section className="card">
           <h1 className="card-title">
-            Welcome to <span className="ubs-red">UBS News Screener</span>
+            Welcome to <span className="ubs-red">News Screener</span>
             <br />
             <span className="muted">please sign in.</span>
           </h1>
 
-          <form onSubmit={handleSubmit} className="form">
+          {/* <form onSubmit={handleSubmit} className="form">
             <label className="field">
               <input
                 type="text"
@@ -101,19 +97,46 @@ export default function LoginCard() {
                 Sign in
               </button>
             </div>
-          </form>
+          </form> */}
+
+
+          {/* <div className="row center" style={{ marginTop: "1rem" }}>
+            <button
+              type="button"
+              className="btn microsoft-btn"
+              onClick={() => window.location.replace("http://localhost:8000/login")}              >
+              Sign in with Microsoft
+            </button>
+          </div> */}
+
+        <div className="row center" style={{ marginTop: "1rem" }}>
+          <button
+            type="button"
+            className="btn microsoft-btn"
+            onClick={() => window.location.replace("http://localhost:8000/login")}
+          >
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg"
+              alt="Microsoft"
+              className="ms-logo"
+            />
+            <span>Sign in with Microsoft</span>
+          </button>
+        </div>
+
+
 
           {message && <p className="message">{message}</p>}
 
-          <div className="links">
+          {/* <div className="links">
             <a href="#">Forgot <span>username</span> or <span>password</span>?</a>
-          </div>
+          </div> */}
 
-          <div className="register">
+          {/* <div className="register">
                     <Link to="/signup" className="register-link">
                         Register for Access <span aria-hidden="true" className="chev">›</span>
                     </Link>
-                    </div>
+                    </div> */}
         </section>
       </main>
 
