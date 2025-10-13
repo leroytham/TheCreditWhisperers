@@ -257,8 +257,8 @@ const PerformanceView = ({ context, onBack }) => {
     const measure = () => {
       const el = chartContainerRef.current;
       if (!el) return;
-      const w = Math.max(300, el.clientWidth - 120); // leave paddings for left/right margins
-      setDynamicChartWidth(Math.min(1000, w));
+      const w = Math.max(300, el.clientWidth - 40); 
+      setDynamicChartWidth(w);
     };
     measure();
     window.addEventListener('resize', measure);
@@ -506,7 +506,7 @@ const PerformanceView = ({ context, onBack }) => {
 
   // Chart dimensions (must be defined before timeline generation)
   const chartWidth = dynamicChartWidth;
-  const chartHeight = 250;
+  const chartHeight = 520;
 
   const generateTimelinePoints = () => {
     if (chartData.length === 0) return [];
@@ -589,9 +589,9 @@ const PerformanceView = ({ context, onBack }) => {
 
 return (
     <div className="space-y-6 w-full px-6 py-6">
-      <div className="flex gap-8">
-        {/* LEFT COLUMN (60% width) */}
-        <div className="flex-grow space-y-8" style={{ flex: '1.5' }}>
+      <div className="flex gap-6">
+        {/* LEFT COLUMN (50% width) */}
+        <div className="flex-grow space-y-6" style={{ flex: '1.8' }}>
           {/* Header + Chart Combined */}
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
             {/* Header Section */}
@@ -689,7 +689,7 @@ return (
                     </div>
                   </div>
 
-                  <div ref={chartContainerRef} className="relative bg-white border border-gray-200 rounded-lg shadow-md" style={{ height: '600px', padding: '1.5rem' }}>
+                  <div ref={chartContainerRef} className="relative bg-white border border-gray-200 rounded-lg shadow-md" style={{ height: '650px', padding: '0.75rem' }}>
                     {(!chartData || chartData.length === 0) ? (
                       <div className="flex items-center justify-center h-full text-gray-400">
                         <div className="text-center">No chart data</div>
@@ -705,7 +705,7 @@ return (
                           </defs>
                           <g className="text-gray-400 text-xs">
                             {[...Array(6)].map((_, i) => {
-                              const yPos = 40 + (i * ((chartHeight) / 5));
+                              const yPos = 30 + (i * ((chartHeight) / 5));
                               const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
                               return (
                                 <g key={i}>
@@ -812,7 +812,7 @@ return (
                             <g key={`timeline-${i}`}>
                               <circle
                                 cx={point.x}
-                                cy="310"
+                                cy={30 + chartHeight + 20}
                                 r="8"
                                 fill="#f9fafb"
                                 stroke="#d1d5db"
@@ -820,13 +820,13 @@ return (
                               />
                               <circle
                                 cx={point.x}
-                                cy="310"
+                                cy={30 + chartHeight + 20}
                                 r="3"
                                 fill="#3b82f6"
                               />
                               <text
                                 x={point.x}
-                                y="330"
+                                y={30 + chartHeight + 40}
                                 textAnchor="middle"
                                 fill="#374151"
                                 fontSize="11"
@@ -1013,7 +1013,7 @@ return (
         </div>
 
         {/* RIGHT COLUMN - Related News */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6" style={{ flex: '1', minWidth: '450px', maxWidth: '600px' }}>
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6" style={{ flex: '1', minWidth: '420px', maxWidth: '720px' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Related News</h3>
             <div className="text-sm text-gray-500">{companyName || 'S&P 500'}</div>
