@@ -587,371 +587,353 @@ const PerformanceView = ({ context, onBack }) => {
   const currentPricePoint = priceData1Y && priceData1Y.length ? priceData1Y[priceData1Y.length - 1] : null;
   const currentPrice = currentPricePoint ? (currentPricePoint.close ?? currentPricePoint.price ?? null) : null;
 
-  return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto p-4">
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-        <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-black">← Back to Sector Selection</button>
-        <div>
-          <h1 className="text-2xl font-bold text-black">{countryName} - {sectorName}</h1>
-          {/* Build a deduplicated subtitle: prefer indexName, ticker (if different), then companyName */}
-          {(() => {
-            const parts = [];
-            if (indexName) parts.push(indexName);
-            if (sector?.ticker && sector.ticker !== indexName && sector.ticker !== companyName) parts.push(sector.ticker);
-            // if (companyName && companyName !== indexName && companyName !== sector?.ticker) parts.push(companyName);
-            if (parts.length === 0) return null;
-            return <p className="text-sm text-gray-500 mb-2">{parts.join(' · ')}</p>;
-          })()}
-          <div className="flex items-end space-x-3">
-            <div className="text-3xl font-bold">{currentPrice !== null ? Number(currentPrice).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'}</div>
-            <div className={`text-sm ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>{currency} · {priceChange >= 0 ? '▲' : '▼'} {priceChange.toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-          {loading ? (
-            <div className="flex items-center justify-center h-40 text-gray-400">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-                <div>Loading performance data...</div>
+return (
+    <div className="space-y-6 w-full px-6 py-6">
+      <div className="flex gap-8">
+        {/* LEFT COLUMN (60% width) */}
+        <div className="flex-grow space-y-8" style={{ flex: '1.5' }}>
+          {/* Header + Chart Combined */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            {/* Header Section */}
+            <div className="p-6 border-b border-gray-200">
+              <button onClick={onBack} className="mb-4 text-sm text-gray-500 hover:text-black">← Back to Sector Selection</button>
+              <div>
+                <h1 className="text-2xl font-bold text-black">{countryName} - {sectorName}</h1>
+                {(() => {
+                  const parts = [];
+                  if (indexName) parts.push(indexName);
+                  if (sector?.ticker && sector.ticker !== indexName && sector.ticker !== companyName) parts.push(sector.ticker);
+                  if (parts.length === 0) return null;
+                  return <p className="text-sm text-gray-500 mb-2">{parts.join(' · ')}</p>;
+                })()}
+                <div className="flex items-end space-x-4 mt-2">
+                  <div className="text-4xl font-bold">{currentPrice !== null ? Number(currentPrice).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'}</div>
+                  <div className={`text-xl ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} 
+                    <span className="ml-1">{priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%</span>
+                  </div>
+                </div>
+                <p className="text-gray-600 text-sm mt-2">
+                  As of {currentChartPoint ? new Date(currentChartPoint.date).toLocaleString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                    timeZoneName: 'short'
+                  }) : 'Loading...'} · {currency}
+                </p>
               </div>
             </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4">
-      {/* Left side: timeframe buttons */}
-      <div className="flex items-center space-x-2">
-        {TIMEFRAMES.map(tf => (
-          <button
-            key={tf}
-            onClick={() => setTimeframe(tf)}
-            className={`px-2 py-1 text-sm rounded ${
-              timeframe === tf
-                ? 'bg-blue-500 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {tf}
-          </button>
-        ))}
-      </div>
 
-      {/* Right side: sentiment + toggle */}
-      <div className="flex items-center space-x-4">
-        {/* Sentiment */}
-        {sentimentAvg !== null && (
-          <div
-            className={`text-sm font-medium ${
-              sentimentAvg >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            Avg Sentiment: {Number(sentimentAvg).toFixed(2)}
-          </div>
-        )}
-
-        {/* Major Events toggle */}
-        <div className="flex items-center space-x-2">
-          <label
-            htmlFor="toggle-events"
-            className="text-sm text-gray-600 select-none"
-          >
-            Major Events
-          </label>
-          <button
-            id="toggle-events"
-            onClick={() => setShowEvents(prev => !prev)}
-            className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors duration-200 ${
-              showEvents ? 'bg-blue-500' : 'bg-gray-300'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                showEvents ? 'translate-x-5' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-    </div>
-
-
-              <div ref={chartContainerRef} className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
-                {(!chartData || chartData.length === 0) ? (
-                  <div className="flex items-center justify-center h-full text-gray-400">
-                    <div className="text-center">No chart data</div>
+            {/* Chart Section */}
+            <div className="p-6">
+              {loading ? (
+                <div className="flex items-center justify-center h-96 text-gray-400">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                    <div>Loading chart data...</div>
+                    <div className="text-xs mt-1">Fetching {ticker} data...</div>
                   </div>
-                ) : (
-                  <>
-                  <svg className="w-full h-full" style={{ overflow: 'visible' }}>
-                    <defs>
-                      <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0.18 }} />
-                        <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0 }} />
-                      </linearGradient>
-                    </defs>
-                    <g className="text-gray-400 text-xs">
-                      {[...Array(6)].map((_, i) => {
-                        const yPos = 40 + (i * ((chartHeight) / 5));
-                        const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
-                        return (
-                          <g key={i}>
-                            <line
-                              x1="60"
-                              y1={yPos}
-                              x2={60 + chartWidth}
-                              y2={yPos}
-                              stroke="#e5e7eb"
-                              strokeWidth="1"
-                            />
-                            <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
-                              {price.toLocaleString(undefined, {maximumFractionDigits: 2})}
-                            </text>
-                          </g>
-                        );
-                      })}
-                      {timelinePoints.map((point, i) => (
-                        <line
-                          key={`v-${i}`}
-                          x1={point.x}
-                          y1="40"
-                          x2={point.x}
-                          y2={40 + chartHeight}
-                          stroke="#e5e7eb"
-                          strokeWidth="1"
-                        />
-                      ))}
-                    </g>
-
-                    {/* Area */}
-                    {chartData.length > 0 && (
-                      <path
-                        d={`M 60 ${40 + chartHeight} ${chartData
-                          .map((point, i) => {
-                            const x = 60 + (i * (chartWidth / Math.max(1, chartData.length - 1)));
-                            const y = (40 + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
-                            return `L ${x} ${y}`;
-                          })
-                          .join(' ')} L ${60 + ((chartData.length - 1) * (chartWidth / Math.max(1, chartData.length - 1)))} ${40 + chartHeight} Z`}
-                        fill="url(#chartGradient)"
-                      />
-                    )}
-
-                    {/* Line */}
-                    {chartData.length > 0 && (
-                      <path
-                        d={`M ${60} ${(40 + chartHeight) - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)} ${chartData
-                          .slice(1)
-                          .map((point, i) => {
-                            const x = 60 + ((i + 1) * (chartWidth / Math.max(1, chartData.length - 1)));
-                            const y = (40 + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
-                            return `L ${x} ${y}`;
-                          })
-                          .join(' ')}`}
-                        fill="none"
-                        stroke={priceChange >= 0 ? '#16a34a' : '#dc2626'}
-                        strokeWidth="3"
-                        style={{ filter: 'drop-shadow(0 2px 4px rgba(22,163,74,0.08))' }}
-                      />
-                    )}
-
-                    {/* Interactive Hover Areas and Points */}
-                    {chartData.map((point, i) => {
-                      const x = 60 + (i * (chartWidth / Math.max(1, chartData.length - 1)));
-                      const y = (40 + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
-                      const isHovered = hoveredPoint?.xIndex === i;
-                      return (
-                        <g key={i}>
-                          <rect
-                            x={x - 10}
-                            y="40"
-                            width="20"
-                            height="250"
-                            fill="transparent"
-                            className="cursor-crosshair"
-                            onMouseEnter={() => setHoveredPoint({ ...point, x, y, xIndex: i, price: point.y, date: point.date, time: point.time })}
-                            onMouseLeave={() => setHoveredPoint(null)}
-                          />
-                          {isHovered && (
-                            <>
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r="5"
-                                fill={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
-                                stroke="white"
-                                strokeWidth="2"
-                                style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.15))' }}
-                              />
-                              <line
-                                x1={x}
-                                y1="40"
-                                x2={x}
-                                y2={40 + chartHeight}
-                                stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
-                                strokeWidth="1"
-                                strokeDasharray="3,3"
-                              />
-                            </>
-                          )}
-                        </g>
-                      );
-                    })}
-
-                    {/* Timeline Circles and Labels */}
-                    {timelinePoints.map((point, i) => (
-                      <g key={`timeline-${i}`}>
-                        <circle
-                          cx={point.x}
-                          cy="310"
-                          r="8"
-                          fill="#f9fafb"
-                          stroke="#d1d5db"
-                          strokeWidth="2"
-                        />
-                        <circle
-                          cx={point.x}
-                          cy="310"
-                          r="3"
-                          fill="#3b82f6"
-                        />
-                        <text
-                          x={point.x}
-                          y="330"
-                          textAnchor="middle"
-                          fill="#374151"
-                          fontSize="11"
-                          fontWeight="bold"
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      {TIMEFRAMES.map(tf => (
+                        <button
+                          key={tf}
+                          onClick={() => setTimeframe(tf)}
+                          className={`px-2 py-1 text-sm rounded ${
+                            timeframe === tf
+                              ? 'bg-blue-500 text-white'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
                         >
-                          {point.label}
-                        </text>
-                      </g>
-                    ))}
-
-                    {/* Significant Event Markers */}
-                    {showEvents && eventMarkers.map((marker, i) => (
-                      <g key={`event-${i}`} className="cursor-pointer group">
-                        {/* Marker line */}
-                        <line
-                          x1={marker.x}
-                          y1="40"
-                          x2={marker.x}
-                          y2={40 + chartHeight}
-                          stroke={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
-                          strokeWidth="1.5"
-                          strokeDasharray="4,2"
-                          opacity="0.6"
-                        />
-                        {/* Small event circle */}
-                        <circle
-                          cx={marker.x}
-                          cy={marker.y}
-                          r="5"
-                          fill={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
-                          stroke="white"
-                          strokeWidth="2"
-                        />
-                        {/* Hover tooltip for event */}
-                        <g className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <rect
-                            x={marker.x - 70}
-                            y={marker.y - 60}
-                            width="140"
-                            height="48"
-                            rx="6"
-                            fill="white"
-                            stroke="#d1d5db"
-                            strokeWidth="1"
-                            filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
+                          {tf}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      {sentimentAvg !== null && (
+                        <div
+                          className={`text-sm font-medium ${
+                            sentimentAvg >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          Avg Sentiment: {Number(sentimentAvg).toFixed(2)}
+                        </div>
+                      )}
+                      <div className="flex items-center space-x-2">
+                        <label
+                          htmlFor="toggle-events"
+                          className="text-sm text-gray-600 select-none"
+                        >
+                          Major Events
+                        </label>
+                        <button
+                          id="toggle-events"
+                          onClick={() => setShowEvents(prev => !prev)}
+                          className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors duration-200 ${
+                            showEvents ? 'bg-blue-500' : 'bg-gray-300'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                              showEvents ? 'translate-x-5' : 'translate-x-1'
+                            }`}
                           />
-                          <text
-                            x={marker.x}
-                            y={marker.y - 42}
-                            textAnchor="middle"
-                            fill="#111827"
-                            fontSize="11"
-                            fontWeight="bold"
-                          >
-                            {marker.trend} Move ({marker.pct.toFixed(2)}%)
-                          </text>
-                          <text
-                            x={marker.x}
-                            y={marker.y - 28}
-                            textAnchor="middle"
-                            fill="#6b7280"
-                            fontSize="10"
-                          >
-                            {marker.date}
-                          </text>
-                        </g>
-                      </g>
-                    ))}
-
-                  </svg>
-                  {/* Hover tooltip - positioned absolutely inside the chart container */}
-                  {tooltip && (
-                    <div style={{ position: 'absolute', left: `${tooltip.left}px`, top: `${tooltip.top}px`, width: `220px`, zIndex: 50 }}>
-                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-semibold text-xs text-gray-700">{companyName || determineTicker()}</div>
-                          <div className={`text-xs font-bold ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>{tooltip.change >= 0 ? '▲' : '▼'} {tooltip.change.toFixed(2)}</div>
-                        </div>
-                        <div className="text-xs text-gray-500 mb-1">{tooltip.dateStr}</div>
-                        <div className="flex items-baseline justify-between">
-                          <div className="text-lg font-bold">{Number(hoveredPoint.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-                          <div className={`text-xs ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>{tooltip.changePct >= 0 ? '+' : ''}{tooltip.changePct.toFixed(2)}%</div>
-                        </div>
-                        {/* {hoveredPoint.volume !== undefined && (
-                          <div className="text-xs text-gray-500 mt-2">Vol: {Number(hoveredPoint.volume).toLocaleString()}</div>
-                        )} */}
+                        </button>
                       </div>
                     </div>
-                  )}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+                  </div>
 
-        <div className="col-span-1 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Related News</h3>
-            <div className="text-sm text-gray-500">{companyName}</div>
-          </div>
-          {error && <div className="text-sm text-red-500 mb-2">{error}</div>}
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {(!news || news.length === 0) ? (
-              <div className="text-gray-400">No news found for {sectorName} ({determineTicker()})</div>
-            ) : (
-              news.map((article, index) => (
-                <div key={index} className="border-b border-gray-100 pb-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
-                      <a href={article.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
-                        {article.title}
-                      </a>
-                    </h4>
-                    {article.sentiment_score !== undefined && article.sentiment_score !== null && (
-                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold whitespace-nowrap border ${
-                        article.sentiment_score > 0 ? 'text-green-600 border-green-600 bg-green-50' : 
-                        article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
-                        'text-gray-600 border-gray-600 bg-gray-50'
-                      }`}>
-                        Sentiment Score: {article.sentiment_score.toFixed(2)}
-                      </span>
+                  <div ref={chartContainerRef} className="relative bg-white border border-gray-200 rounded-lg shadow-md" style={{ height: '600px', padding: '1.5rem' }}>
+                    {(!chartData || chartData.length === 0) ? (
+                      <div className="flex items-center justify-center h-full text-gray-400">
+                        <div className="text-center">No chart data</div>
+                      </div>
+                    ) : (
+                      <>
+                        <svg className="w-full h-full" style={{ overflow: 'visible' }}>
+                          <defs>
+                            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0.18 }} />
+                              <stop offset="100%" style={{ stopColor: priceChange >= 0 ? '#16a34a' : '#dc2626', stopOpacity: 0 }} />
+                            </linearGradient>
+                          </defs>
+                          <g className="text-gray-400 text-xs">
+                            {[...Array(6)].map((_, i) => {
+                              const yPos = 40 + (i * ((chartHeight) / 5));
+                              const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
+                              return (
+                                <g key={i}>
+                                  <line
+                                    x1="60"
+                                    y1={yPos}
+                                    x2={60 + chartWidth}
+                                    y2={yPos}
+                                    stroke="#e5e7eb"
+                                    strokeWidth="1"
+                                  />
+                                  <text x="50" y={yPos + 5} textAnchor="end" fill="#9ca3af" fontSize="11" fontWeight="bold">
+                                    {price.toLocaleString(undefined, {maximumFractionDigits: 2})}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                            {timelinePoints.map((point, i) => (
+                              <line
+                                key={`v-${i}`}
+                                x1={point.x}
+                                y1="40"
+                                x2={point.x}
+                                y2={40 + chartHeight}
+                                stroke="#e5e7eb"
+                                strokeWidth="1"
+                              />
+                            ))}
+                          </g>
+
+                          {chartData.length > 0 && (
+                            <path
+                              d={`M 60 ${40 + chartHeight} ${chartData
+                                .map((point, i) => {
+                                  const x = 60 + (i * (chartWidth / Math.max(1, chartData.length - 1)));
+                                  const y = (40 + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+                                  return `L ${x} ${y}`;
+                                })
+                                .join(' ')} L ${60 + ((chartData.length - 1) * (chartWidth / Math.max(1, chartData.length - 1)))} ${40 + chartHeight} Z`}
+                              fill="url(#chartGradient)"
+                            />
+                          )}
+
+                          {chartData.length > 0 && (
+                            <path
+                              d={`M ${60} ${(40 + chartHeight) - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)} ${chartData
+                                .slice(1)
+                                .map((point, i) => {
+                                  const x = 60 + ((i + 1) * (chartWidth / Math.max(1, chartData.length - 1)));
+                                  const y = (40 + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+                                  return `L ${x} ${y}`;
+                                })
+                                .join(' ')}`}
+                              fill="none"
+                              stroke={priceChange >= 0 ? '#16a34a' : '#dc2626'}
+                              strokeWidth="3"
+                              style={{ filter: 'drop-shadow(0 2px 4px rgba(22,163,74,0.08))' }}
+                            />
+                          )}
+
+                          {chartData.map((point, i) => {
+                            const x = 60 + (i * (chartWidth / Math.max(1, chartData.length - 1)));
+                            const y = (40 + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+                            const isHovered = hoveredPoint?.xIndex === i;
+                            return (
+                              <g key={i}>
+                                <rect
+                                  x={x - 10}
+                                  y="40"
+                                  width="20"
+                                  height="250"
+                                  fill="transparent"
+                                  className="cursor-crosshair"
+                                  onMouseEnter={() => setHoveredPoint({ ...point, x, y, xIndex: i, price: point.y, date: point.date, time: point.time })}
+                                  onMouseLeave={() => setHoveredPoint(null)}
+                                />
+                                {isHovered && (
+                                  <>
+                                    <circle
+                                      cx={x}
+                                      cy={y}
+                                      r="5"
+                                      fill={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
+                                      stroke="white"
+                                      strokeWidth="2"
+                                      style={{ filter: 'drop-shadow(0 2px 4px rgba(59,130,246,0.15))' }}
+                                    />
+                                    <line
+                                      x1={x}
+                                      y1="40"
+                                      x2={x}
+                                      y2={40 + chartHeight}
+                                      stroke={priceChange >= 0 ? '#3b82f6' : '#ef4444'}
+                                      strokeWidth="1"
+                                      strokeDasharray="3,3"
+                                    />
+                                  </>
+                                )}
+                              </g>
+                            );
+                          })}
+
+                          {timelinePoints.map((point, i) => (
+                            <g key={`timeline-${i}`}>
+                              <circle
+                                cx={point.x}
+                                cy="310"
+                                r="8"
+                                fill="#f9fafb"
+                                stroke="#d1d5db"
+                                strokeWidth="2"
+                              />
+                              <circle
+                                cx={point.x}
+                                cy="310"
+                                r="3"
+                                fill="#3b82f6"
+                              />
+                              <text
+                                x={point.x}
+                                y="330"
+                                textAnchor="middle"
+                                fill="#374151"
+                                fontSize="11"
+                                fontWeight="bold"
+                              >
+                                {point.label}
+                              </text>
+                            </g>
+                          ))}
+
+                          {showEvents && eventMarkers.map((marker, i) => (
+                            <g key={`event-${i}`} className="cursor-pointer group">
+                              <line
+                                x1={marker.x}
+                                y1="40"
+                                x2={marker.x}
+                                y2={40 + chartHeight}
+                                stroke={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
+                                strokeWidth="1.5"
+                                strokeDasharray="4,2"
+                                opacity="0.6"
+                              />
+                              <circle
+                                cx={marker.x}
+                                cy={marker.y}
+                                r="5"
+                                fill={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
+                                stroke="white"
+                                strokeWidth="2"
+                              />
+                              <g className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <rect
+                                  x={marker.x - 70}
+                                  y={marker.y - 60}
+                                  width="140"
+                                  height="48"
+                                  rx="6"
+                                  fill="white"
+                                  stroke="#d1d5db"
+                                  strokeWidth="1"
+                                  filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
+                                />
+                                <text
+                                  x={marker.x}
+                                  y={marker.y - 42}
+                                  textAnchor="middle"
+                                  fill="#111827"
+                                  fontSize="11"
+                                  fontWeight="bold"
+                                >
+                                  {marker.trend} Move ({marker.pct.toFixed(2)}%)
+                                </text>
+                                <text
+                                  x={marker.x}
+                                  y={marker.y - 28}
+                                  textAnchor="middle"
+                                  fill="#6b7280"
+                                  fontSize="10"
+                                >
+                                  {marker.date}
+                                </text>
+                              </g>
+                            </g>
+                          ))}
+                        </svg>
+
+                        <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
+                          <div className="text-base font-bold text-blue-600">
+                            {currentPrice !== null ? Number(currentPrice).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'} {currency}
+                          </div>
+                          <div className="text-xs text-gray-600">{currentChartPoint?.date || '--'}</div>
+                          <div className={`text-xs mt-1 ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
+                          </div>
+                        </div>
+
+                        {tooltip && (
+                          <div
+                            className="absolute bg-white border border-blue-200 rounded-lg p-3 shadow-xl pointer-events-none"
+                            style={{
+                              left: `${tooltip.left}px`,
+                              top: `${tooltip.top}px`,
+                              width: '160px',
+                              zIndex: 50
+                            }}
+                          >
+                            <div className="text-base font-bold text-blue-600">
+                              {Number(hoveredPoint.price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} {currency}
+                            </div>
+                            <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
+                            <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
+                            <div className={`text-xs mt-1 ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {tooltip.changePct >= 0 ? '+' : ''}{tooltip.changePct.toFixed(2)}%
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
-                  <p className="text-xs text-gray-600">{article.publish_date} | {article.provider}</p>
-                </div>
-              ))
-            )}
+                </>
+              )}
+            </div>
           </div>
-        {/* top constituent area */}
-        </div>
-          <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-4">
+
+          {/* Top Constituents */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold">Top Constituents</h3>
               <span className="text-sm text-gray-500">{sectorName}</span>
             </div>
@@ -978,8 +960,8 @@ const PerformanceView = ({ context, onBack }) => {
                       <td className="py-2 text-right">
                         {c.marketCap ? `$${(c.marketCap / 1e9).toFixed(1)}B` : '--'}
                       </td>
-                      <td className={`py-2 text-right ${c.percentChange.toFixed(2) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {c.percentChange.toFixed(2) !== null ? `${c.percentChange.toFixed(2) > 0 ? '+' : ''}${c.percentChange.toFixed(2)}%` : '--'}
+                      <td className={`py-2 text-right ${c.percentChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {c.percentChange !== null ? `${c.percentChange > 0 ? '+' : ''}${c.percentChange.toFixed(2)}%` : '--'}
                       </td>
                     </tr>
                   ))}
@@ -988,9 +970,9 @@ const PerformanceView = ({ context, onBack }) => {
             )}
           </div>
 
-          {/* Significant Events section */}
-          <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-4">
+          {/* Significant Events */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold">Significant Events</h3>
               <span className="text-sm text-gray-500">{sectorName}</span>
             </div>
@@ -1028,8 +1010,43 @@ const PerformanceView = ({ context, onBack }) => {
               </div>
             )}
           </div>
+        </div>
 
-
+        {/* RIGHT COLUMN - Related News */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6" style={{ flex: '1', minWidth: '450px', maxWidth: '600px' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Related News</h3>
+            <div className="text-sm text-gray-500">{companyName || 'S&P 500'}</div>
+          </div>
+          {error && <div className="text-sm text-red-500 mb-2">{error}</div>}
+          <div className="space-y-4" style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+            {(!news || news.length === 0) ? (
+              <div className="text-gray-400">No news found for {sectorName} ({determineTicker()})</div>
+            ) : (
+              news.map((article, index) => (
+                <div key={index} className="border-b border-gray-100 pb-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
+                      <a href={article.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+                        {article.title}
+                      </a>
+                    </h4>
+                    {article.sentiment_score !== undefined && article.sentiment_score !== null && (
+                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold whitespace-nowrap border ${
+                        article.sentiment_score > 0 ? 'text-green-600 border-green-600 bg-green-50' : 
+                        article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
+                        'text-gray-600 border-gray-600 bg-gray-50'
+                      }`}>
+                        Sentiment Score: {article.sentiment_score.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600">{article.publish_date} | {article.provider}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
