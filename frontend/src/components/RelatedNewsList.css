@@ -1,0 +1,107 @@
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.news-card {
+  background-color: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+.news-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+}
+
+.news-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.news-meta {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.news-summary {
+  font-size: 0.9rem;
+  color: #374151;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.news-tickers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tickers-label {
+  font-size: 0.8rem;
+  color: #4b5563;
+  margin-right: 2px;
+}
+
+.ticker-tag {
+  background-color: #f1f5f9;
+  color: #334155;
+  font-size: 0.75rem;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  border: 1px solid #e2e8f0;
+}
+
+/* Sentiment pills */
+.sentiment-pill {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+}
+
+.sentiment-pos {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.sentiment-neg {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.sentiment-neu {
+  background-color: #f3f4f6;
+  color: #374151;
+  border-color: #e5e7eb;
+}
+
+.no-news {
+  color: #6b7280;
+  font-size: 0.9rem;
+  padding: 8px;
+}
+
+.news-title a.news-title-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s ease, text-decoration 0.15s ease;
+}
+
+.news-title a.news-title-link:hover {
+  color: #2563eb; /* soft blue */
+  text-decoration: underline;
+}
