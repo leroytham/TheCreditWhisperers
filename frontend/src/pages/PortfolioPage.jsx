@@ -939,7 +939,7 @@ const PerformanceView = ({ context, onBack }) => {
                         article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
                         'text-gray-600 border-gray-600 bg-gray-50'
                       }`}>
-                        {article.sentiment_score > 0 ? '+' : ''}{Number(article.sentiment_score).toFixed(2)}
+                        Sentiment Score: {article.sentiment_score.toFixed(2)}
                       </span>
                     )}
                   </div>
