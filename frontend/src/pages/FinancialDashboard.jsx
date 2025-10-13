@@ -528,8 +528,8 @@ const FinancialDashboard = () => {
 
                       {/* Y-axis labels and grid lines */}
                       <g className="text-gray-400 text-xs">
-                        {[1.0, 0.5, 0, -0.5, -1.0].map((value, i) => {
-                          const yPos = 40 + (i * 62.5);
+                        {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
+                          const yPos = 40 + (i * 65);
                           return (
                             <g key={i}>
                               <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
@@ -546,8 +546,8 @@ const FinancialDashboard = () => {
                         const barWidth = 70;
                         const barSpacing = (680) / dailySentimentBars.length;
                         const x = 70 + (i * barSpacing) + (barSpacing - barWidth) / 2;
-                        const zeroY = 165; // Middle of chart (0 value) - centered in 250px range
-                        const scoreHeight = Math.abs(bar.score) * 125; // Scale: 1.0 = 125px (full range -1 to 1)
+                        const zeroY = 170; // Middle of chart (0 value)
+                        const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
                         const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
                         const barColor = bar.score > 0 ? '#22c55e' : bar.score < 0 ? '#ef4444' : '#9ca3af';
 
