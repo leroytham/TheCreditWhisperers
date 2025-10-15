@@ -2,9 +2,11 @@
 from fastapi import APIRouter, HTTPException
 import yfinance as yf
 
-# Import the shared instance of your new service
+# Import the modular services
 from app.services.news_service import news_service_instance
-from app.services.data_processing_service import data_service_instance
+from app.services.stock_data_service import stock_data_service
+from app.services.sentiment_service import sentiment_service
+from app.services.market_analysis_service import market_analysis_service
 
 # Create an instance of the API Router. All endpoints will be attached to this.
 router = APIRouter()
@@ -47,13 +49,13 @@ def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
     """
     try:
         # 1. Fetch 1 year of data from the service
-        full_data = data_service_instance.get_stock_data(ticker)
+        full_data = stock_data_service.get_stock_data(ticker)
         if full_data is None:
             raise HTTPException(status_code=404, detail=f"Data not found for ticker {ticker}")
 
         # 2. Filter data based on the requested timeframe
-        filtered_data = data_service_instance.filter_data_by_timeframe(full_data, timeframe)
-        
+        filtered_data = stock_data_service.filter_data_by_timeframe(full_data, timeframe)
+
         # 3. Convert DataFrame to JSON for the response
         # We reset the index to make the 'Date' a regular column
         json_data = filtered_data.reset_index().to_dict(orient="records")
@@ -71,13 +73,13 @@ def get_stock_news_and_sentiment(ticker: str):
     """
     try:
         # 1. Fetch recent news using the service
-        news_articles = data_service_instance.get_ticker_news(ticker)
+        news_articles = news_service_instance.get_ticker_news(ticker)
         if not news_articles:
             return {"ticker": ticker, "message": "No recent news found."}
 
-        # 2. Call the NEW advanced sentiment analysis method
-        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
-        
+        # 2. Call the advanced sentiment analysis method
+        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+
         # 3. Return the rich data structure from the new method
         return {"ticker": ticker, **sentiment_results}
 
@@ -93,13 +95,13 @@ def get_top_constituents_for_sector(sector_ticker: str):
     """
     try:
         # The API layer calls the service to perform the logic
-        constituents = data_service_instance.get_sector_top_constituents(sector_ticker)
-        
+        constituents = stock_data_service.get_sector_top_constituents(sector_ticker)
+
         if not constituents:
              return {"sector_ticker": sector_ticker, "constituents": []}
-             
+
         return {"sector_ticker": sector_ticker, "constituents": constituents}
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -114,7 +116,7 @@ def get_significant_events_for_ticker(ticker: str):
     """
     try:
         # The API layer makes a single call to the service
-        events_with_news = data_service_instance.analyze_significant_events(ticker)
+        events_with_news = market_analysis_service.analyze_significant_events(ticker)
 
         if not events_with_news:
             return {"ticker": ticker, "message": "No significant events found matching the criteria."}
@@ -131,14 +133,14 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
     Example: /api/price?ticker=AAPL&timeframe=1Y
     """
     try:
-        # Fetch stock data using the data processing service
-        stock_data = data_service_instance.get_stock_data(ticker)
+        # Fetch stock data using the stock data service
+        stock_data = stock_data_service.get_stock_data(ticker)
 
         if stock_data is None or stock_data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
 
         # Filter by timeframe if needed
-        filtered_data = data_service_instance.filter_data_by_timeframe(stock_data, timeframe)
+        filtered_data = stock_data_service.filter_data_by_timeframe(stock_data, timeframe)
 
         # Convert to the format expected by frontend
         prices = []
@@ -167,14 +169,14 @@ def get_news_data(ticker: str):
     Example: /api/news?ticker=AAPL
     """
     try:
-        # Fetch news articles using the data processing service
-        news_articles = data_service_instance.get_ticker_news(ticker)
+        # Fetch news articles using the news service
+        news_articles = news_service_instance.get_ticker_news(ticker)
 
         if not news_articles:
             return {"ticker": ticker, "news": [], "avg_score": 0}
 
         # Analyze sentiment - this adds sentiment fields to the articles
-        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
+        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
         articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
 
         # Format news for frontend - use field names that match frontend expectations
@@ -209,7 +211,7 @@ def get_daily_sentiment(ticker: str):
         from datetime import datetime, timedelta, timezone
 
         # Fetch news articles
-        news_articles = data_service_instance.get_ticker_news(ticker)
+        news_articles = news_service_instance.get_ticker_news(ticker)
 
         # Initialize all 7 days with empty data
         today = datetime.now(timezone.utc).date()
@@ -223,7 +225,7 @@ def get_daily_sentiment(ticker: str):
             return {"ticker": ticker, "daily": daily_data}
 
         # Analyze sentiment to get scores
-        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
+        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
         articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
 
         # Group articles by date with full details for the frontend
@@ -270,13 +272,13 @@ def get_news_models(ticker: str):
     """
     try:
         # Fetch news articles
-        news_articles = data_service_instance.get_ticker_news(ticker)
+        news_articles = news_service_instance.get_ticker_news(ticker)
 
         if not news_articles:
             return {"ticker": ticker, "news": [], "message": "No news found"}
 
         # Analyze sentiment - this creates News model objects
-        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
+        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
         news_objects = sentiment_results.get("news_objects", [])
 
         # Convert News objects to dict format for JSON response

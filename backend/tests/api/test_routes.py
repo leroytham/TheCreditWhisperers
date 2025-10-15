@@ -6,22 +6,23 @@ from unittest.mock import MagicMock, patch
 # This import will now work because app/main.py exists
 from app.main import app
 
-# We need to patch the service instances where they are created
-# This ensures that any endpoint that uses them gets our mock instead
-data_service_patch = patch('app.api.routes.data_service_instance', new_callable=MagicMock)
+# Patch the new modular services
 news_service_patch = patch('app.api.routes.news_service_instance', new_callable=MagicMock)
+sentiment_service_patch = patch('app.api.routes.sentiment_service', new_callable=MagicMock)
+market_analysis_service_patch = patch('app.api.routes.market_analysis_service', new_callable=MagicMock)
 
 # The client will make requests to our FastAPI app
 client = TestClient(app)
 
 def test_get_sentiment_success():
     """Tests the happy path for the /sentiment endpoint."""
-    with data_service_patch as mock_data_service:
-        # Arrange: Configure the mock to return specific data
-        mock_data_service.get_ticker_news.return_value = [{"title": "Good News!"}]
-        mock_data_service.analyze_sentiment_with_weights.return_value = {
+    with news_service_patch as mock_news_service, sentiment_service_patch as mock_sentiment_service:
+        # Arrange: Configure the mocks to return specific data
+        mock_news_service.get_ticker_news.return_value = [{"title": "Good News!"}]
+        mock_sentiment_service.analyze_sentiment_with_weights.return_value = {
             "overall_weighted_score": 0.75,
-            "articles_with_sentiment": [{"title": "Good News!", "sentiment_label": "positive"}]
+            "articles_with_sentiment": [{"title": "Good News!", "sentiment_label": "positive"}],
+            "news_objects": []
         }
 
         # Act: Make a fake HTTP GET request
@@ -35,9 +36,9 @@ def test_get_sentiment_success():
 
 def test_get_significant_events_error():
     """Tests an error case for the /significant-events endpoint."""
-    with data_service_patch as mock_data_service:
+    with market_analysis_service_patch as mock_market_service:
         # Arrange: Configure the mock to raise an exception
-        mock_data_service.analyze_significant_events.side_effect = Exception("Finnhub API limit reached")
+        mock_market_service.analyze_significant_events.side_effect = Exception("Finnhub API limit reached")
 
         # Act
         response = client.get("/api/stocks/NVDA/significant-events")

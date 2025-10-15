@@ -2,22 +2,23 @@
 
 import torch
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
 
 # Import your existing model classes
 from app.models import News, SentimentScore
 
+
 class NewsService:
     """
     A service to fetch, categorize, and analyze financial news articles.
-    
+
     This class is designed as a singleton to ensure the machine learning
     model is loaded only once.
     """
     _instance = None
-    
+
     def __new__(cls):
         # The singleton pattern ensures we only ever have one instance of this class.
         if cls._instance is None:
@@ -30,7 +31,7 @@ class NewsService:
         """Initializes the service and loads the ML model into memory."""
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"NewsService is using device: {self.device}")
-        
+
         # Load the sentence transformer model
         self.model = SentenceTransformer("all-MiniLM-L6-v2", device=self.device)
 
@@ -44,13 +45,156 @@ class NewsService:
             "Other": "general corporate news"
         }
         self.cat_names = list(self.categories.keys())
-        
+
         # Pre-compute embeddings for the categories for faster comparison
         self.cat_embeddings = self.model.encode(
             list(self.categories.values()),
             convert_to_tensor=True,
             device=self.device
         )
+
+    def get_ticker_news(self, ticker: str, count: int = 100) -> list[dict]:
+        """
+        Gets recent news for a ticker from the last 7 days.
+
+        Args:
+            ticker: Stock ticker symbol
+            count: Number of articles to fetch from yfinance (default 100)
+
+        Returns:
+            List of news article dictionaries with title, link, provider, publish_date, image
+        """
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            # Fetch more articles to ensure we have coverage across 7 days
+            raw_news = ticker_obj.get_news(count=count)
+            if not raw_news:
+                return []
+
+            news_list = []
+            # Get news from the last 7 days (from 6 days ago to today)
+            today = datetime.now(timezone.utc).date()
+            seven_days_ago = today - timedelta(days=6)
+
+            for article in raw_news:
+                if not article:
+                    continue
+
+                # Handle new yfinance API structure where content is nested
+                content = article.get("content", article) if isinstance(article, dict) else None
+                if not content:
+                    continue
+
+                # Parse the publish date
+                pub_date_str = content.get("pubDate") or content.get("providerPublishTime")
+                if not pub_date_str:
+                    continue
+
+                # Handle ISO format dates (e.g., "2025-10-14T18:57:08Z")
+                try:
+                    if isinstance(pub_date_str, str) and 'T' in pub_date_str:
+                        pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).date()
+                    elif isinstance(pub_date_str, (int, float)):
+                        pub_date = datetime.fromtimestamp(pub_date_str).date()
+                    else:
+                        continue
+                except Exception:
+                    continue
+
+                # Include news from the last 7 days (6 days ago through today)
+                if seven_days_ago <= pub_date <= today:
+                    # Extract thumbnail URL safely
+                    thumbnail = content.get("thumbnail") or {}
+                    resolutions = thumbnail.get("resolutions") or []
+                    image_url = None
+                    if resolutions:
+                        image_url = next((res.get('url') for res in resolutions if isinstance(res, dict) and res.get('url')), None)
+
+                    # Extract provider name safely
+                    provider_info = content.get("provider") or {}
+                    if isinstance(provider_info, dict):
+                        provider_name = provider_info.get("displayName", "Unknown")
+                    else:
+                        provider_name = content.get("publisher", "Unknown")
+
+                    news_list.append({
+                        "title": content.get("title"),
+                        "link": content.get("previewUrl") or content.get("link"),
+                        "provider": provider_name,
+                        "publish_date": pub_date.strftime("%Y-%m-%d"),
+                        "image": image_url
+                    })
+
+            print(f"Fetched {len(news_list)} news articles for {ticker} from the last 7 days")
+            return news_list
+        except Exception as e:
+            print(f"Error fetching news for {ticker}: {e}")
+            return []
+
+    def fetch_news_around_date(
+        self,
+        ticker: str,
+        target_date: str,
+        window: int = 2,
+        count: int = 20
+    ) -> list[dict]:
+        """
+        Fetches news articles around a specific date.
+
+        Args:
+            ticker: Stock ticker symbol
+            target_date: Target date in "YYYY-MM-DD" format
+            window: Number of days before and after to search
+            count: Maximum number of articles to return
+
+        Returns:
+            List of news articles near the target date
+        """
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            raw_news = ticker_obj.get_news(count=100)
+            if not raw_news:
+                return []
+
+            target = datetime.strptime(target_date, "%Y-%m-%d").date()
+            start_date = target - timedelta(days=window)
+            end_date = target + timedelta(days=window)
+
+            filtered_news = []
+            for article in raw_news:
+                if not article:
+                    continue
+
+                content = article.get("content", article) if isinstance(article, dict) else None
+                if not content:
+                    continue
+
+                pub_date_str = content.get("pubDate") or content.get("providerPublishTime")
+                if not pub_date_str:
+                    continue
+
+                try:
+                    if isinstance(pub_date_str, str) and 'T' in pub_date_str:
+                        pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).date()
+                    elif isinstance(pub_date_str, (int, float)):
+                        pub_date = datetime.fromtimestamp(pub_date_str).date()
+                    else:
+                        continue
+                except Exception:
+                    continue
+
+                if start_date <= pub_date <= end_date:
+                    filtered_news.append({
+                        "title": content.get("title"),
+                        "link": content.get("previewUrl") or content.get("link"),
+                        "provider": content.get("provider", {}).get("displayName", "Unknown"),
+                        "publish_date": pub_date.strftime("%Y-%m-%d")
+                    })
+
+            return filtered_news[:count]
+        except Exception as e:
+            print(f"Error fetching news around date for {ticker}: {e}")
+            return []
 
     def get_categorized_news(self, ticker: str, start_date: str, end_date: str) -> list[News]:
         """
