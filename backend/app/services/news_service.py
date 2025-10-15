@@ -8,6 +8,8 @@ import numpy as np
 
 # Import your existing model classes
 from app.models import News, SentimentScore
+from app.core.cache import cache_result
+from app.core.config import settings
 
 
 class NewsService:
@@ -53,9 +55,11 @@ class NewsService:
             device=self.device
         )
 
+    @cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="ticker_news")
     def get_ticker_news(self, ticker: str, count: int = 100) -> list[dict]:
         """
         Gets recent news for a ticker from the last 7 days.
+        Results are cached in Redis for NEWS_CACHE_TTL seconds.
 
         Args:
             ticker: Stock ticker symbol
@@ -131,6 +135,7 @@ class NewsService:
             print(f"Error fetching news for {ticker}: {e}")
             return []
 
+    @cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="news_around_date")
     def fetch_news_around_date(
         self,
         ticker: str,
@@ -140,6 +145,7 @@ class NewsService:
     ) -> list[dict]:
         """
         Fetches news articles around a specific date.
+        Results are cached in Redis for NEWS_CACHE_TTL seconds.
 
         Args:
             ticker: Stock ticker symbol

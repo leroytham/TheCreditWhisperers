@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from .stock_data_service import stock_data_service
+from app.core.cache import cache_result
+from app.core.config import settings
 
 
 class MarketAnalysisService:
@@ -58,6 +60,7 @@ class MarketAnalysisService:
 
         return moves
 
+    @cache_result(ttl=3600, key_prefix="significant_events")  # Cache for 1 hour
     def analyze_significant_events(
         self,
         ticker: str,
@@ -66,6 +69,7 @@ class MarketAnalysisService:
     ) -> list[dict]:
         """
         Identifies significant price moves for a ticker and finds correlated news.
+        Results are cached in Redis for 1 hour.
 
         This method:
         1. Fetches 1 year of historical data
@@ -128,6 +132,7 @@ class MarketAnalysisService:
 
         return final_results
 
+    @cache_result(ttl=1800, key_prefix="finnhub_news")  # Cache for 30 minutes
     def fetch_finnhub_news(
         self,
         ticker: str,
@@ -136,6 +141,7 @@ class MarketAnalysisService:
     ) -> list[dict]:
         """
         Fetches news from Finnhub API around a specific date.
+        Results are cached in Redis for 30 minutes.
 
         Args:
             ticker: Stock ticker symbol

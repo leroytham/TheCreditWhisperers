@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 import yfinance as yf
 from yahooquery import Ticker as YQTicker
 
+from app.core.cache import cache_result
+from app.core.config import settings
+
 
 class StockDataService:
     """
@@ -28,9 +31,11 @@ class StockDataService:
             '^GSPE': 'XLE',       # Energy
         }
 
+    @cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="stock_data")
     def get_stock_data(self, ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame | None:
         """
         Downloads historical stock data for a ticker.
+        Results are cached in Redis for PRICE_CACHE_TTL seconds.
 
         Args:
             ticker: Stock ticker symbol
@@ -85,9 +90,11 @@ class StockDataService:
 
         return df[(df.index >= start_date) & (df.index <= end_date)]
 
+    @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents")
     def get_sector_top_constituents(self, sector_ticker: str) -> list[dict]:
         """
         Fetches the top 10 holdings for a given S&P 500 sector ticker.
+        Results are cached in Redis for SECTOR_CACHE_TTL seconds.
 
         Args:
             sector_ticker: S&P 500 sector ticker (e.g., "^SP500-45" for Tech)
@@ -138,9 +145,11 @@ class StockDataService:
             print(f"Error fetching constituents for {etf_ticker}: {e}")
             return []
 
+    @cache_result(ttl=settings.COMPANY_INFO_CACHE_TTL, key_prefix="company_info")
     def get_company_info(self, ticker: str) -> dict | None:
         """
         Gets company information for a ticker.
+        Results are cached in Redis for COMPANY_INFO_CACHE_TTL seconds (24 hours).
 
         Args:
             ticker: Stock ticker symbol
