@@ -1,6 +1,6 @@
 # app/api/routes.py
 from fastapi import APIRouter, HTTPException
-# ... other imports
+import yfinance as yf
 
 # Import the shared instance of your new service
 from app.services.news_service import news_service_instance
@@ -115,11 +115,230 @@ def get_significant_events_for_ticker(ticker: str):
     try:
         # The API layer makes a single call to the service
         events_with_news = data_service_instance.analyze_significant_events(ticker)
-        
+
         if not events_with_news:
             return {"ticker": ticker, "message": "No significant events found matching the criteria."}
-            
+
         return {"ticker": ticker, "events": events_with_news}
-        
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.get("/price")
+def get_price_data(ticker: str, timeframe: str = "1Y"):
+    """
+    API endpoint to get historical price data for a ticker.
+    Example: /api/price?ticker=AAPL&timeframe=1Y
+    """
+    try:
+        # Fetch stock data using the data processing service
+        stock_data = data_service_instance.get_stock_data(ticker)
+
+        if stock_data is None or stock_data.empty:
+            raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
+
+        # Filter by timeframe if needed
+        filtered_data = data_service_instance.filter_data_by_timeframe(stock_data, timeframe)
+
+        # Convert to the format expected by frontend
+        prices = []
+        for idx, row in filtered_data.iterrows():
+            prices.append({
+                "date": idx.strftime("%Y-%m-%d"),
+                "price": float(row['Close'])
+            })
+
+        return {
+            "ticker": ticker,
+            "company_name": ticker,  # Could be enhanced with actual company name
+            "currency": "USD",
+            "prices": prices
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.get("/news")
+def get_news_data(ticker: str):
+    """
+    API endpoint to get recent news and sentiment for a ticker.
+    Example: /api/news?ticker=AAPL
+    """
+    try:
+        # Fetch news articles using the data processing service
+        news_articles = data_service_instance.get_ticker_news(ticker)
+
+        if not news_articles:
+            return {"ticker": ticker, "news": [], "avg_score": 0}
+
+        # Analyze sentiment - this adds sentiment fields to the articles
+        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
+        articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+        # Format news for frontend - use field names that match frontend expectations
+        formatted_news = []
+        for article in articles_with_sentiment:
+            formatted_news.append({
+                "title": article.get("title", ""),  # Frontend expects "title"
+                "provider": article.get("provider", "Unknown"),
+                "sentiment_score": article.get("sentiment_score_raw", 0),  # Frontend expects "sentiment_score"
+                "sentiment_label": article.get("sentiment_label", "neutral"),
+                "link": article.get("link", ""),
+                "publish_date": article.get("publish_date", ""),
+                "image": article.get("image", "")
+            })
+
+        return {
+            "ticker": ticker,
+            "news": formatted_news,
+            "avg_score": sentiment_results.get("overall_weighted_score", 0)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.get("/daily-sentiment")
+def get_daily_sentiment(ticker: str):
+    """
+    API endpoint to get daily sentiment data for a ticker.
+    Example: /api/daily-sentiment?ticker=AAPL
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        # Fetch news articles
+        news_articles = data_service_instance.get_ticker_news(ticker)
+
+        # Initialize all 7 days with empty data
+        today = datetime.now(timezone.utc).date()
+        daily_data = {}
+        for i in range(7):
+            date = today - timedelta(days=6-i)
+            date_str = date.strftime("%Y-%m-%d")
+            daily_data[date_str] = {"score": 0, "count": 0, "headlines": []}
+
+        if not news_articles:
+            return {"ticker": ticker, "daily": daily_data}
+
+        # Analyze sentiment to get scores
+        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
+        articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+        # Group articles by date with full details for the frontend
+        for article in articles_with_sentiment:
+            date = article.get("publish_date")
+            if not date:
+                continue
+
+            # Only add to daily_data if it's within our 7-day window
+            if date not in daily_data:
+                continue
+
+            sentiment_score = article.get("sentiment_score_raw", 0)
+            daily_data[date]["score"] += sentiment_score
+            daily_data[date]["count"] += 1
+            daily_data[date]["headlines"].append({
+                "title": article.get("title", ""),
+                "provider": article.get("provider", "Unknown"),
+                "sentiment_score": sentiment_score,
+                "link": article.get("link", "")
+            })
+
+        # Calculate average scores and sort headlines by sentiment magnitude
+        for date, data in daily_data.items():
+            if data["count"] > 0:
+                data["score"] = data["score"] / data["count"]
+            # Sort headlines by absolute sentiment score (most polar first)
+            data["headlines"].sort(key=lambda x: abs(x["sentiment_score"]), reverse=True)
+
+        return {
+            "ticker": ticker,
+            "daily": daily_data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.get("/news-models")
+def get_news_models(ticker: str):
+    """
+    API endpoint that returns News objects using the proper model structure.
+    This demonstrates that we're using the News and SentimentScore models.
+    Example: /api/news-models?ticker=AAPL
+    """
+    try:
+        # Fetch news articles
+        news_articles = data_service_instance.get_ticker_news(ticker)
+
+        if not news_articles:
+            return {"ticker": ticker, "news": [], "message": "No news found"}
+
+        # Analyze sentiment - this creates News model objects
+        sentiment_results = data_service_instance.analyze_sentiment_with_weights(news_articles)
+        news_objects = sentiment_results.get("news_objects", [])
+
+        # Convert News objects to dict format for JSON response
+        formatted_news = []
+        for news_obj in news_objects:
+            formatted_news.append({
+                "headline": news_obj.headline,
+                "source": news_obj.source,
+                "sentiment_score": {
+                    "value": news_obj.sentiment_score.value,
+                    "label": news_obj.sentiment_score.label,
+                    "source": news_obj.sentiment_score.source,
+                    "confidence": news_obj.sentiment_score.confidence,
+                    "timestamp": news_obj.sentiment_score.timestamp.isoformat()
+                },
+                "link": getattr(news_obj, 'link', None),
+                "publish_date": getattr(news_obj, 'publish_date', None),
+                "image": getattr(news_obj, 'image', None)
+            })
+
+        return {
+            "ticker": ticker,
+            "news": formatted_news,
+            "overall_score": sentiment_results.get("overall_weighted_score", 0),
+            "sentiment_counts": sentiment_results.get("sentiment_counts", {}),
+            "message": "Using News and SentimentScore models from app.models"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.get("/search-ticker")
+def search_ticker(q: str):
+    """
+    API endpoint to search for ticker symbols.
+    Example: /api/search-ticker?q=AAPL
+    """
+    try:
+        # Use yfinance to search for tickers
+        # Note: yfinance doesn't have a built-in search, so we'll return a simple response
+        # In production, you might want to use a proper ticker search API
+
+        if not q or len(q) < 1:
+            return {"quotes": []}
+
+        # Simple implementation: try to get info for the ticker
+        try:
+            ticker_obj = yf.Ticker(q.upper())
+            info = ticker_obj.info
+
+            if info and "symbol" in info:
+                return {
+                    "quotes": [{
+                        "symbol": info.get("symbol", q.upper()),
+                        "shortname": info.get("shortName", q.upper()),
+                        "longname": info.get("longName", "")
+                    }]
+                }
+        except:
+            pass
+
+        return {"quotes": []}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")

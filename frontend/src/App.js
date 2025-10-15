@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
-import SignupCard from "./SignupCard";
-import LoginCard from "./LoginPage";
+import SignupCard from "./components/auth/SignupCard";
+import LoginCard from "./components/auth/LoginPage";
 import FinancialDashboard from "./pages/FinancialDashboard";
 import PortfolioPage from "./pages/PortfolioPage";
 

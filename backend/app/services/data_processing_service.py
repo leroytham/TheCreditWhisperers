@@ -18,7 +18,7 @@ os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 warnings.filterwarnings('ignore')
 from transformers import pipeline
 
-from app.models import News, SentimentScore # Assuming you might integrate these later
+from app.models import News, SentimentScore
 
 class DataProcessingService:
     """
@@ -102,44 +102,97 @@ class DataProcessingService:
             
         return df[(df.index >= start_date) & (df.index <= end_date)]
 
-    def get_ticker_news(self, ticker: str, count: int = 20) -> list[dict]:
-        """Gets recent news for a ticker from the last 7 days."""
+    def get_ticker_news(self, ticker: str, count: int = 100) -> list[dict]:
+        """Gets recent news for a ticker from the last 7 days.
+
+        Args:
+            ticker: Stock ticker symbol
+            count: Number of articles to fetch from yfinance (default 100, which is the maximum yfinance allows)
+        """
         try:
             ticker_obj = yf.Ticker(ticker)
+            # Fetch more articles to ensure we have coverage across 7 days
             raw_news = ticker_obj.get_news(count=count)
             if not raw_news:
                 return []
-            
+
             news_list = []
-            seven_days_ago = (datetime.utcnow() - timedelta(days=7)).date()
-            
+            # Get news from the last 7 days (from 6 days ago to today)
+            from datetime import timezone
+            today = datetime.now(timezone.utc).date()
+            seven_days_ago = today - timedelta(days=6)
+
             for article in raw_news:
-                pub_date = datetime.fromtimestamp(article["providerPublishTime"]).date()
-                if pub_date >= seven_days_ago:
+                if not article:
+                    continue
+
+                # Handle new yfinance API structure where content is nested
+                content = article.get("content", article) if isinstance(article, dict) else None
+                if not content:
+                    continue
+
+                # Parse the publish date
+                pub_date_str = content.get("pubDate") or content.get("providerPublishTime")
+                if not pub_date_str:
+                    continue
+
+                # Handle ISO format dates (e.g., "2025-10-14T18:57:08Z")
+                try:
+                    if isinstance(pub_date_str, str) and 'T' in pub_date_str:
+                        pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).date()
+                    elif isinstance(pub_date_str, (int, float)):
+                        pub_date = datetime.fromtimestamp(pub_date_str).date()
+                    else:
+                        continue
+                except Exception:
+                    continue
+
+                # Include news from the last 7 days (6 days ago through today)
+                if seven_days_ago <= pub_date <= today:
+                    # Extract thumbnail URL safely
+                    thumbnail = content.get("thumbnail") or {}
+                    resolutions = thumbnail.get("resolutions") or []
+                    image_url = None
+                    if resolutions:
+                        image_url = next((res.get('url') for res in resolutions if isinstance(res, dict) and res.get('url')), None)
+
+                    # Extract provider name safely
+                    provider_info = content.get("provider") or {}
+                    if isinstance(provider_info, dict):
+                        provider_name = provider_info.get("displayName", "Unknown")
+                    else:
+                        provider_name = content.get("publisher", "Unknown")
+
                     news_list.append({
-                        "title": article.get("title"),
-                        "link": article.get("link"),
-                        "provider": article.get("publisher"),
+                        "title": content.get("title"),
+                        "link": content.get("previewUrl") or content.get("link"),
+                        "provider": provider_name,
                         "publish_date": pub_date.strftime("%Y-%m-%d"),
-                        "image": next((res.get('url') for res in article.get('thumbnail', {}).get('resolutions', []) if res), None)
+                        "image": image_url
                     })
+
+            print(f"Fetched {len(news_list)} news articles for {ticker} from the last 7 days")
             return news_list
-        except Exception:
+        except Exception as e:
+            print(f"Error fetching news for {ticker}: {e}")
             return []
 
     def analyze_sentiment_with_weights(self, news_articles: list[dict]) -> dict:
         """
         Analyzes sentiment with recency weighting using the loaded FinBERT model.
+        Returns dictionaries for backward compatibility, but also creates News objects.
         """
         if not news_articles:
             return {
                 "articles_with_sentiment": [],
+                "news_objects": [],
                 "overall_weighted_score": 0.0,
                 "sentiment_counts": {},
                 "daily_average_sentiment": {}
             }
 
         results = []
+        news_objects = []  # List of News model objects
         weighted_total = 0
         weight_sum = 0
         sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
@@ -158,7 +211,7 @@ class DataProcessingService:
             if not title:
                 continue
 
-            # IMPORTANT: Use the model loaded by the service instance
+            # IMPORTANT: Use the FinBERT model loaded by the service instance
             sentiment_scores = self.finbert(title, truncation=True, return_all_scores=True)[0]
             scores_dict = {r['label'].lower(): r['score'] for r in sentiment_scores}
 
@@ -183,12 +236,30 @@ class DataProcessingService:
                     weight_sum += recency_weight
                     daily_scores[pub_date].append(raw_score * recency_weight)
 
+            # Add sentiment data to the dictionary (backward compatibility)
             article["sentiment_label"] = label
             article["sentiment_confidence"] = confidence
             article["sentiment_score_raw"] = raw_score
             article["sentiment_weight"] = recency_weight
             results.append(article)
             sentiment_counts[label] += 1
+
+            # Create proper News object with SentimentScore model
+            sentiment_score_obj = SentimentScore(
+                value=raw_score,
+                source="FinBERT (ProsusAI)",
+                confidence=confidence
+            )
+            news_obj = News(
+                headline=title,
+                source=article.get("provider", "Unknown"),
+                sentiment_score=sentiment_score_obj
+            )
+            # Store additional metadata on the News object
+            news_obj.link = article.get("link")
+            news_obj.publish_date = pub_date_str
+            news_obj.image = article.get("image")
+            news_objects.append(news_obj)
 
         daily_avg_sentiment = {}
         for i in range(7):
@@ -200,6 +271,7 @@ class DataProcessingService:
 
         return {
             "articles_with_sentiment": results,
+            "news_objects": news_objects,  # Proper News model objects
             "overall_weighted_score": avg_score,
             "sentiment_counts": sentiment_counts,
             "daily_average_sentiment": daily_avg_sentiment,

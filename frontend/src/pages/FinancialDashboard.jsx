@@ -17,6 +17,7 @@ const FinancialDashboard = () => {
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
   const [dailySentiment, setDailySentiment] = useState({});
+  const [significantEvents, setSignificantEvents] = useState([]);
   const [lastFetched, setLastFetched] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -75,6 +76,26 @@ const FinancialDashboard = () => {
         setDailySentiment(data.daily || {});
       })
       .catch(err => console.error('Error fetching daily sentiment:', err));
+
+    // Fetch significant events
+    fetch(`/api/stocks/${ticker}/significant-events`)
+      .then(res => res.json())
+      .then(data => {
+        const rawEvents = data.events || [];
+        // Transform events to match UI expectations
+        const transformedEvents = rawEvents.map(event => {
+          const movePct = event.total_move_pct * 100;
+          return {
+            ...event,
+            trend: movePct >= 0 ? 'Upward' : 'Downward',
+            total_move_pct: movePct,
+            end_date: event.start_date,
+            days: 1
+          };
+        });
+        setSignificantEvents(transformedEvents);
+      })
+      .catch(err => console.error('Error fetching significant events:', err));
   }, [ticker]);
 
   // Filter priceData for selected timeframe
@@ -465,6 +486,47 @@ const FinancialDashboard = () => {
                         </text>
                       </g>
                     ))}
+
+                    {/* Significant Event Markers */}
+                    {significantEvents.map((event, i) => {
+                      // Find matching price point by date
+                      const eventDate = new Date(event.start_date);
+                      const pricePoint = chartData.find(p => {
+                        const pointDate = new Date(p.date);
+                        return pointDate.toDateString() === eventDate.toDateString();
+                      });
+
+                      if (!pricePoint) return null;
+
+                      const xPos = 60 + ((pricePoint.index / (chartData.length - 1)) * 660);
+                      const isUpward = event.trend === 'Upward';
+
+                      return (
+                        <g key={`event-${i}`} className="cursor-pointer">
+                          {/* Event marker triangle */}
+                          <path
+                            d={isUpward
+                              ? `M ${xPos} 35 L ${xPos - 6} 25 L ${xPos + 6} 25 Z`  // Up triangle
+                              : `M ${xPos} 35 L ${xPos - 6} 45 L ${xPos + 6} 45 Z`  // Down triangle
+                            }
+                            fill={isUpward ? '#10b981' : '#ef4444'}
+                            stroke="white"
+                            strokeWidth="1.5"
+                          />
+                          {/* Event line */}
+                          <line
+                            x1={xPos}
+                            y1={isUpward ? 25 : 45}
+                            x2={xPos}
+                            y2="290"
+                            stroke={isUpward ? '#10b981' : '#ef4444'}
+                            strokeWidth="1"
+                            strokeDasharray="4,4"
+                            opacity="0.4"
+                          />
+                        </g>
+                      );
+                    })}
                   </svg>
                 )}
                 {/* Tooltip */}
@@ -690,8 +752,44 @@ const FinancialDashboard = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Related News */}
-        <div className="w-1/3 p-6">
+        {/* Right Sidebar - Significant Events & Related News */}
+        <div className="w-1/3 p-6 space-y-6">
+          {/* Significant Events */}
+          <div className="bg-white border-l border-gray-200 rounded-lg shadow-sm p-4">
+            <h3 className="text-lg font-semibold mb-4">Significant Events</h3>
+            {significantEvents.length === 0 ? (
+              <div className="text-gray-400 text-sm">No significant events found for {ticker}</div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {significantEvents.slice(0, 5).map((event, idx) => (
+                  <div key={idx} className="border-b border-gray-100 pb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-sm font-semibold text-gray-800">
+                        <span className={`inline-block w-3 h-3 rounded-full mr-2 ${
+                          event.trend === 'Upward' ? 'bg-green-500' : 'bg-red-500'
+                        }`}></span>
+                        {event.trend} Move · {event.total_move_pct.toFixed(2)}%
+                      </h4>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-2">{event.start_date}</p>
+                    {event.news && event.news.length > 0 && (
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        {event.news.slice(0, 2).map((n, i) => (
+                          <li key={i} className="pl-2 border-l-2 border-blue-200">
+                            <a href={n.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+                              {n.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Related News */}
           <div className="bg-white border-l border-gray-200 rounded-lg shadow-sm p-4">
           <h3 className="text-lg font-semibold mb-4">Related News</h3>
           <div className="space-y-4 max-h-screen overflow-y-auto">

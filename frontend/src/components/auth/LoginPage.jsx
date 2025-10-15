@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import './index.css'; 
+import '../../index.css';
 import { Link } from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
 
@@ -113,14 +113,19 @@ export default function LoginCard() {
           <button
             type="button"
             className="btn microsoft-btn"
-            onClick={() => window.location.replace("http://localhost:8000/login")}
+            onClick={() => {
+              // Temporary bypass: Set a mock user in sessionStorage
+              const mockUser = { username: "dev_user", email: "dev@example.com" };
+              sessionStorage.setItem("user", JSON.stringify(mockUser));
+              navigate("/financial_dashboard");
+            }}
           >
             <img
               src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg"
               alt="Microsoft"
               className="ms-logo"
             />
-            <span>Sign in with Microsoft</span>
+            <span>Sign in with Microsoft (Dev Bypass)</span>
           </button>
         </div>
 

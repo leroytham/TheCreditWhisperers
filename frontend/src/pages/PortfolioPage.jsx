@@ -237,12 +237,15 @@ const PerformanceView = ({ context, onBack }) => {
   const [currency, setCurrency] = useState('USD');
   const [news, setNews] = useState([]);
   const [sentimentAvg, setSentimentAvg] = useState(null);
+  const [dailySentiment, setDailySentiment] = useState({});
   const [error, setError] = useState(null);
 
   const TIMEFRAMES = ['5D', '1M', '3M', '6M', 'YTD', '1Y'];
   const NUM_X_AXIS_POINTS = 6;
   const [timeframe, setTimeframe] = useState('1M');
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [hoveredBar, setHoveredBar] = useState(null);
+  const [visibleHeadlines, setVisibleHeadlines] = useState(5);
   const chartContainerRef = useRef(null);
   const [dynamicChartWidth, setDynamicChartWidth] = useState(660);
   const [topConstituents, setTopConstituents] = useState([]);
@@ -352,13 +355,17 @@ const PerformanceView = ({ context, onBack }) => {
     const fetchNews = fetch(`http://localhost:5001/news?ticker=${encodeURIComponent(newsTicker)}`)
     .then(r => r.json());
 
-    // fetch significant news api
-    const fetchAnalysis = fetch(
-      `http://localhost:5001/analyze?ticker=${encodeURIComponent(newsTicker)}&history_period=${encodeURIComponent(timeframe)}`
-    ).then(r => r.json());
-    
+    // fetch daily sentiment
+    const fetchDailySentiment = fetch(`/api/daily-sentiment?ticker=${encodeURIComponent(newsTicker)}`)
+    .then(r => r.json());
 
-    Promise.allSettled([fetchPrice, fetchNews, fetchConstituents, fetchAnalysis]).then(([priceRes, newsRes, constRes, analysisRes]) => {
+    // fetch significant events api
+    const fetchAnalysis = fetch(
+      `/api/stocks/${encodeURIComponent(newsTicker)}/significant-events`
+    ).then(r => r.json());
+
+
+    Promise.allSettled([fetchPrice, fetchNews, fetchConstituents, fetchDailySentiment, fetchAnalysis]).then(([priceRes, newsRes, constRes, dailySentimentRes, analysisRes]) => {
       if (!mounted) return;
       // Price result
       if (priceRes.status === 'fulfilled' && priceRes.value) {
@@ -402,9 +409,35 @@ const PerformanceView = ({ context, onBack }) => {
         console.error('Top constituent fetch failed', constRes.reason || constRes.value);
       }
 
-      // significant news portion
-      if (analysisRes.status === "fulfilled" && analysisRes.value && analysisRes.value.success) {
-        setTopEvents(analysisRes.value.events || []);
+      // daily sentiment
+      if (dailySentimentRes.status === 'fulfilled' && dailySentimentRes.value) {
+        setDailySentiment(dailySentimentRes.value.daily || {});
+      } else {
+        console.error('Daily sentiment fetch failed', dailySentimentRes.reason || dailySentimentRes.value);
+      }
+
+      // significant events portion
+      if (analysisRes.status === "fulfilled" && analysisRes.value) {
+        // Handle both old format (with success field) and new format (with ticker field)
+        const rawEvents = analysisRes.value.events || [];
+
+        // Transform events to match frontend expectations
+        const transformedEvents = rawEvents.map(event => {
+          const startDate = new Date(event.start_date);
+          const endDate = new Date(event.start_date); // Backend only provides start_date
+          const movePct = event.total_move_pct * 100; // Convert to percentage
+
+          return {
+            ...event,
+            trend: movePct >= 0 ? 'Upward' : 'Downward',
+            total_move_pct: movePct,
+            end_date: event.start_date, // Use start_date as end_date for now
+            days: 1 // Default to 1 day since we only have start_date
+          };
+        });
+
+        setTopEvents(transformedEvents);
+        console.log(`Loaded ${transformedEvents.length} significant events for ${newsTicker}`);
       } else {
         console.error("Analysis fetch failed", analysisRes.reason || analysisRes.value);
       }
@@ -532,6 +565,36 @@ const PerformanceView = ({ context, onBack }) => {
 
   const timelinePoints = generateTimelinePoints();
 
+  // Generate daily sentiment bar chart data
+  const generateDailySentimentBars = () => {
+    if (!dailySentiment || Object.keys(dailySentiment).length === 0) {
+      return [];
+    }
+
+    // Sort by date and get last 7 days
+    const sortedDates = Object.keys(dailySentiment).sort();
+    const last7Days = sortedDates.slice(-7);
+
+    return last7Days.map((date, index) => {
+      const dayData = dailySentiment[date];
+      const score = dayData.score || 0;
+      const count = dayData.count || 0;
+      const headlines = dayData.headlines || [];
+      const dateObj = new Date(date);
+      const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      return {
+        date: date,
+        label: label,
+        score: score,
+        count: count,
+        headlines: headlines,
+        index: index
+      };
+    });
+  };
+
+  const dailySentimentBars = generateDailySentimentBars();
 
   // Compute event marker positions
   const eventMarkers = React.useMemo(() => {
@@ -913,44 +976,275 @@ const PerformanceView = ({ context, onBack }) => {
               </div>
             </>
           )}
+
+          {/* Daily Sentiment Bar Chart */}
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold mb-4">Daily Average Sentiment (Past 7 Days)</h3>
+            <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md p-6">
+              {dailySentimentBars.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                    <div>Loading sentiment data...</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <svg className="w-full h-full">
+                    {/* Y-axis label - moved to left side, rotated */}
+                    <text
+                      x="-180"
+                      y="15"
+                      fill="#6b7280"
+                      fontSize="11"
+                      fontWeight="600"
+                      transform="rotate(-90)"
+                      textAnchor="middle"
+                    >
+                      Average Sentiment Score
+                    </text>
+
+                    {/* Y-axis labels and grid lines */}
+                    <g className="text-gray-400 text-xs">
+                      {[0.4, 0.2, 0, -0.2, -0.4].map((value, i) => {
+                        const yPos = 40 + (i * 65);
+                        return (
+                          <g key={i}>
+                            <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
+                            <text x="60" y={yPos + 4} textAnchor="end" fill="#6b7280" fontSize="12" fontWeight="500">
+                              {value.toFixed(1)}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </g>
+
+                    {/* Bars with score labels */}
+                    {dailySentimentBars.map((bar, i) => {
+                      const barWidth = 70;
+                      const barSpacing = (680) / dailySentimentBars.length;
+                      const x = 70 + (i * barSpacing) + (barSpacing - barWidth) / 2;
+                      const zeroY = 170; // Middle of chart (0 value)
+                      const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
+                      const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
+                      const barColor = bar.score > 0 ? '#22c55e' : bar.score < 0 ? '#ef4444' : '#9ca3af';
+
+                      return (
+                        <g key={i}>
+                          {/* Bar */}
+                          <rect
+                            x={x}
+                            y={barY}
+                            width={barWidth}
+                            height={Math.max(scoreHeight, 3)}
+                            fill={barColor}
+                            opacity="0.85"
+                            rx="3"
+                            className="cursor-pointer transition-opacity"
+                            style={{ opacity: hoveredBar === i ? 1 : 0.85 }}
+                            onMouseEnter={() => setHoveredBar(i)}
+                            onMouseLeave={() => setHoveredBar(null)}
+                          />
+                          {/* Score label above bar */}
+                          <text
+                            x={x + barWidth / 2}
+                            y={bar.score >= 0 ? barY - 8 : barY + scoreHeight + 18}
+                            textAnchor="middle"
+                            fill="#374151"
+                            fontSize="12"
+                            fontWeight="600"
+                          >
+                            {bar.score.toFixed(2)}
+                          </text>
+                          {/* Date label on X-axis */}
+                          <text
+                            x={x + barWidth / 2}
+                            y="325"
+                            textAnchor="middle"
+                            fill="#374151"
+                            fontSize="12"
+                            fontWeight="500"
+                          >
+                            {bar.label}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+
+                  {/* Hover Tooltip */}
+                  {hoveredBar !== null && dailySentimentBars[hoveredBar] && (
+                    <div
+                      className="absolute bg-white border-2 border-blue-400 rounded-lg shadow-2xl p-4 z-30 overflow-y-auto"
+                      style={{
+                        left: `${Math.min(Math.max(70 + (hoveredBar * (680 / dailySentimentBars.length)) + ((680 / dailySentimentBars.length) / 2) - 150, 20), 600)}px`,
+                        top: '100px',
+                        width: '320px',
+                        maxHeight: '400px'
+                      }}
+                      onMouseEnter={() => setHoveredBar(hoveredBar)}
+                      onMouseLeave={() => {
+                        setHoveredBar(null);
+                        setVisibleHeadlines(5); // Reset when leaving
+                      }}
+                    >
+                      <div className="mb-3 pb-2 border-b border-gray-200">
+                        <div className="text-sm font-semibold text-gray-700">{dailySentimentBars[hoveredBar].label}</div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-xs text-gray-600">Sentiment Score:</span>
+                          <span className={`text-sm font-bold ${dailySentimentBars[hoveredBar].score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {dailySentimentBars[hoveredBar].score.toFixed(3)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-xs text-gray-600">Articles Analyzed:</span>
+                          <span className="text-sm font-semibold text-blue-600">{dailySentimentBars[hoveredBar].count}</span>
+                        </div>
+                      </div>
+
+                      {dailySentimentBars[hoveredBar].headlines && dailySentimentBars[hoveredBar].headlines.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-gray-700 mb-2">
+                            Most Polar Headlines (Top {Math.min(visibleHeadlines, dailySentimentBars[hoveredBar].headlines.length)})
+                          </div>
+                          <div className="space-y-3">
+                            {dailySentimentBars[hoveredBar].headlines.slice(0, visibleHeadlines).map((headline, idx) => (
+                              <div key={idx} className="border-l-2 border-blue-300 pl-2 py-1">
+                                <a
+                                  href={headline.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-gray-800 hover:text-blue-600 hover:underline leading-tight block cursor-pointer transition-colors"
+                                  style={{ pointerEvents: 'auto', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                                >
+                                  {headline.title}
+                                </a>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className="text-xs text-gray-500">{headline.provider}</span>
+                                  <span className={`text-xs font-semibold ${headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {headline.sentiment_score >= 0 ? '+' : ''}{headline.sentiment_score.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* View More Button */}
+                          {visibleHeadlines < dailySentimentBars[hoveredBar].headlines.length && (
+                            <button
+                              onClick={() => setVisibleHeadlines(prev => prev + 5)}
+                              className="mt-3 w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded transition-colors"
+                            >
+                              View More ({dailySentimentBars[hoveredBar].headlines.length - visibleHeadlines} remaining)
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="col-span-1 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Related News</h3>
-            <div className="text-sm text-gray-500">{companyName}</div>
-          </div>
-          {error && <div className="text-sm text-red-500 mb-2">{error}</div>}
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {(!news || news.length === 0) ? (
-              <div className="text-gray-400">No news found for {sectorName} ({determineTicker()})</div>
+        <div className="col-span-1 space-y-6">
+          {/* Significant Events */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Significant Events</h3>
+              <span className="text-sm text-gray-500">{sectorName}</span>
+            </div>
+
+            {(!topEvents || topEvents.length === 0) ? (
+              <div className="text-gray-400 text-sm">No significant events found.</div>
             ) : (
-              news.map((article, index) => (
-                <div key={index} className="border-b border-gray-100 pb-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
-                      <a href={article.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
-                        {article.title}
-                      </a>
-                    </h4>
-                    {article.sentiment_score !== undefined && article.sentiment_score !== null && (
-                      <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold whitespace-nowrap border ${
-                        article.sentiment_score > 0 ? 'text-green-600 border-green-600 bg-green-50' : 
-                        article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
-                        'text-gray-600 border-gray-600 bg-gray-50'
-                      }`}>
-                        {article.sentiment_score > 0 ? '+' : ''}{Number(article.sentiment_score).toFixed(2)}
-                      </span>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {topEvents.slice(0, 5).map((event, idx) => (
+                  <div key={idx} className="border-b border-gray-100 pb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-sm font-semibold text-gray-800">
+                        <span className={`inline-block w-3 h-3 rounded-full mr-2 ${
+                          event.trend === 'Upward' ? 'bg-green-500' : 'bg-red-500'
+                        }`}></span>
+                        {event.trend} Move · {event.total_move_pct.toFixed(2)}%
+                      </h4>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-2">{event.start_date}</p>
+
+                    {event.news && event.news.length > 0 && (
+                      <ul className="text-xs text-gray-600 space-y-1">
+                        {event.news.slice(0, 2).map((n, i) => (
+                          <li key={i} className="pl-2 border-l-2 border-blue-200">
+                            <a href={n.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+                              {n.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
-                  <p className="text-xs text-gray-600">{article.publish_date} | {article.provider}</p>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
-        {/* top constituent area */}
+
+          {/* Related News */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Related News</h3>
+              <div className="text-sm text-gray-500">{companyName}</div>
+            </div>
+            {error && <div className="text-sm text-red-500 mb-2">{error}</div>}
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {(!news || news.length === 0) ? (
+                <div className="text-gray-400">No news found for {sectorName} ({determineTicker()})</div>
+              ) : (
+                news.map((article, index) => (
+                  <div key={index} className="border-b border-gray-100 pb-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="text-sm font-medium text-gray-900 leading-5 flex-1">
+                        <a href={article.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+                          {article.title}
+                        </a>
+                      </h4>
+                      {article.sentiment_score !== undefined && article.sentiment_score !== null && (
+                        <span className={`ml-2 px-2 py-1 rounded text-xs font-semibold whitespace-nowrap border ${
+                          article.sentiment_score > 0 ? 'text-green-600 border-green-600 bg-green-50' :
+                          article.sentiment_score < 0 ? 'text-red-600 border-red-600 bg-red-50' :
+                          'text-gray-600 border-gray-600 bg-gray-50'
+                        }`}>
+                          {article.sentiment_score > 0 ? '+' : ''}{Number(article.sentiment_score).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600">{article.publish_date} | {article.provider}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Overall Sentiment Stats */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+            <h3 className="text-lg font-semibold mb-4">Overall Sentiment</h3>
+            <div className="flex items-center space-x-8">
+              <div>
+                <div className="text-sm text-gray-600">Average Sentiment Score</div>
+                <div className={`text-4xl font-bold ${
+                  (sentimentAvg || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {sentimentAvg !== null ? sentimentAvg.toFixed(2) : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">News Articles</div>
+                <div className="text-lg font-semibold">{news.length}</div>
+              </div>
+            </div>
+          </div>
         </div>
-          <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
+          <div className="col-span-3 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Top Constituents</h3>
               <span className="text-sm text-gray-500">{sectorName}</span>
@@ -987,49 +1281,6 @@ const PerformanceView = ({ context, onBack }) => {
               </table>
             )}
           </div>
-
-          {/* Significant Events section */}
-          <div className="col-span-4 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Significant Events</h3>
-              <span className="text-sm text-gray-500">{sectorName}</span>
-            </div>
-
-            {(!topEvents || topEvents.length === 0) ? (
-              <div className="text-gray-400 text-sm">No significant events found.</div>
-            ) : (
-              <div className="space-y-6">
-                {topEvents.slice(0, 5).map((event, idx) => (
-                  <div key={idx} className="border-b border-gray-100 pb-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="text-sm font-semibold text-gray-800">
-                        {event.trend} Move · {event.total_move_pct.toFixed(2)}%
-                      </h4>
-                      <span className="text-xs text-gray-500">
-                        {event.start_date} → {event.end_date} ({event.days} days)
-                      </span>
-                    </div>
-
-                    {event.news && event.news.length > 0 ? (
-                      <ul className="ml-2 list-disc text-sm text-gray-700 space-y-1">
-                        {event.news.slice(0, 3).map((n, i) => (
-                          <li key={i}>
-                            <a href={n.link} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
-                              [{n.date}] {n.title} ({n.publisher})
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-gray-400">No related news.</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-
       </div>
     </div>
   );
