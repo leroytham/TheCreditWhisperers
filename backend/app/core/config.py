@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # API Keys
     FINNHUB_API_TOKEN: Optional[str] = None
     APPLICATION_ID: Optional[str] = None
+    DIRECTORY_ID: Optional[str] = None
     CLIENT_SECRET: Optional[str] = None
 
     # Database
@@ -51,7 +52,8 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
-        case_sensitive = True
+        case_sensitive = False  # Case-insensitive for better compatibility
+        extra = "ignore"  # Ignore extra fields in .env
 
 
 # Create a singleton instance

@@ -313,34 +313,65 @@ def get_news_models(ticker: str):
 @router.get("/search-ticker")
 def search_ticker(q: str):
     """
-    API endpoint to search for ticker symbols.
-    Example: /api/search-ticker?q=AAPL
+    API endpoint to search for ticker symbols with fuzzy matching.
+    Example: /api/search-ticker?q=appl
+
+    This uses Yahoo Finance's search endpoint to find matching tickers.
+    Returns quotes with symbol, name, and quoteType fields.
     """
     try:
-        # Use yfinance to search for tickers
-        # Note: yfinance doesn't have a built-in search, so we'll return a simple response
-        # In production, you might want to use a proper ticker search API
-
         if not q or len(q) < 1:
             return {"quotes": []}
 
-        # Simple implementation: try to get info for the ticker
+        # Use yahooquery's search functionality for fuzzy matching
+        from yahooquery import search
+
         try:
-            ticker_obj = yf.Ticker(q.upper())
-            info = ticker_obj.info
+            # Search using yahooquery
+            results = search(q)
 
-            if info and "symbol" in info:
-                return {
-                    "quotes": [{
-                        "symbol": info.get("symbol", q.upper()),
-                        "shortname": info.get("shortName", q.upper()),
-                        "longname": info.get("longName", "")
-                    }]
-                }
-        except:
-            pass
+            if not results or 'quotes' not in results:
+                return {"quotes": []}
 
-        return {"quotes": []}
+            # Format results to match expected structure
+            formatted_quotes = []
+            for quote in results.get('quotes', []):
+                # Only include valid quotes with symbols
+                if quote.get('symbol'):
+                    formatted_quotes.append({
+                        "symbol": quote.get('symbol', ''),
+                        "shortname": quote.get('shortname', quote.get('longname', '')),
+                        "longname": quote.get('longname', quote.get('shortname', '')),
+                        "quoteType": quote.get('quoteType', quote.get('typeDisp', 'EQUITY')),
+                        "exchange": quote.get('exchDisp', quote.get('exchange', '')),
+                        "sector": quote.get('sector', ''),
+                        "industry": quote.get('industry', '')
+                    })
+
+            return {"quotes": formatted_quotes}
+
+        except Exception as search_error:
+            # Fallback to exact match with yfinance if yahooquery fails
+            try:
+                ticker_obj = yf.Ticker(q.upper())
+                info = ticker_obj.info
+
+                if info and "symbol" in info:
+                    return {
+                        "quotes": [{
+                            "symbol": info.get("symbol", q.upper()),
+                            "shortname": info.get("shortName", q.upper()),
+                            "longname": info.get("longName", ""),
+                            "quoteType": info.get("quoteType", "EQUITY"),
+                            "exchange": info.get("exchange", ""),
+                            "sector": info.get("sector", ""),
+                            "industry": info.get("industry", "")
+                        }]
+                    }
+            except:
+                pass
+
+            return {"quotes": []}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")

@@ -152,13 +152,22 @@ const FinancialDashboard = () => {
       return;
     }
     setSuggestionsLoading(true);
-    fetch(`/api/search-ticker?q=${searchTerm}`)
-      .then(res => res.json())
-      .then(data => {
-        setSuggestions(data.quotes || []);
-      })
-      .catch(() => setSuggestions([]))
-      .finally(() => setSuggestionsLoading(false));
+
+    // Use a debounced timeout to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      fetch(`/api/search-ticker?q=${searchTerm}`)
+        .then(res => res.json())
+        .then(data => {
+          setSuggestions(data.quotes || []);
+        })
+        .catch(() => setSuggestions([]))
+        .finally(() => setSuggestionsLoading(false));
+    }, 300); // 300ms debounce
+
+    return () => {
+      clearTimeout(timeoutId);
+      setSuggestionsLoading(false);
+    };
   }, [searchTerm]);
 
   // Generate chart coordinates from backend data
