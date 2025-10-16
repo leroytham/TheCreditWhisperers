@@ -10,7 +10,7 @@ import { useSignificantEvents } from '../features/entity/hooks/useSignificantEve
 import { DEFAULT_TICKER } from '../features/shared/utils/constants';
 
 /**
- * FinancialDashboard - Main entity analysis page
+ * EntityPage - Main entity analysis page
  *
  * This file has been refactored from a monolithic 845-line file into a modular,
  * entity-based architecture for better maintainability and scalability.
@@ -29,7 +29,7 @@ import { DEFAULT_TICKER } from '../features/shared/utils/constants';
  *   - SignificantEvents/: Event list sidebar
  *   - RelatedNews/: News feed sidebar
  */
-const FinancialDashboard = () => {
+const EntityPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [ticker, setTicker] = useState(DEFAULT_TICKER);
@@ -95,4 +95,4 @@ const FinancialDashboard = () => {
   );
 };
 
-export default FinancialDashboard;
+export default EntityPage;

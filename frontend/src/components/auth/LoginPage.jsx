@@ -28,7 +28,7 @@ export default function LoginCard() {
       if (data.success) {
         setMessage("Login successful!");
         sessionStorage.setItem("user", JSON.stringify(data.user));
-        navigate("/financial_dashboard");
+        navigate("/entity");
 
         if (remember) {
           localStorage.setItem("user", JSON.stringify(data.user));
@@ -117,7 +117,7 @@ export default function LoginCard() {
               // Temporary bypass: Set a mock user in sessionStorage
               const mockUser = { username: "dev_user", email: "dev@example.com" };
               sessionStorage.setItem("user", JSON.stringify(mockUser));
-              navigate("/financial_dashboard");
+              navigate("/entity");
             }}
           >
             <img

@@ -19,7 +19,7 @@ const SectorHeader = ({ onLogout }) => {
             </button>
             <button
               className="text-gray-600 hover:text-gray-900"
-              onClick={() => navigate("/financial_dashboard")}
+              onClick={() => navigate("/entity")}
             >
               ENTITY
             </button>
