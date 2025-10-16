@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import EntityHeader from '../features/entity/components/EntityHeader/EntityHeader';
+import AppHeader from '../components/layout/AppHeader';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
 import { SignificantEvents, RelatedNews } from '../features/shared/components';
 import { usePriceData } from '../features/entity/hooks/usePriceData';
@@ -31,8 +31,8 @@ import { DEFAULT_TICKER } from '../features/shared/utils/constants';
  */
 const EntityPage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [ticker, setTicker] = useState(DEFAULT_TICKER);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
 
   // Session management
   useEffect(() => {
@@ -43,6 +43,14 @@ const EntityPage = () => {
       navigate('/login');
     }
   }, [navigate, searchParams]);
+
+  // Update ticker from URL parameter
+  useEffect(() => {
+    const tickerParam = searchParams.get('ticker');
+    if (tickerParam) {
+      setTicker(tickerParam.toUpperCase().trim());
+    }
+  }, [searchParams]);
 
   // Logout handler
   const handleLogout = () => {
@@ -55,7 +63,9 @@ const EntityPage = () => {
 
   // Ticker selection handler
   const handleTickerSelect = (symbol) => {
-    setTicker(symbol.toUpperCase().trim());
+    const newTicker = symbol.toUpperCase().trim();
+    setTicker(newTicker);
+    setSearchParams({ ticker: newTicker });
   };
 
   // Fetch all data using custom hooks
@@ -67,7 +77,12 @@ const EntityPage = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <EntityHeader onLogout={handleLogout} onTickerSelect={handleTickerSelect} />
+      <AppHeader
+        activeTab="entity"
+        onLogout={handleLogout}
+        onTickerSelect={handleTickerSelect}
+        showEntitySearch={true}
+      />
 
       <div className="flex">
         {/* Main Content */}

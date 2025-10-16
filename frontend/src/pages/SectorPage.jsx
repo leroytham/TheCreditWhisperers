@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import SectorHeader from "../features/sector/components/SectorHeader";
+import AppHeader from "../components/layout/AppHeader";
 import SectorSelector from "../features/sector/components/SectorSelector/SectorSelector";
 import PerformanceView from "../features/sector/components/PerformanceView/PerformanceView";
 
@@ -58,7 +58,7 @@ const SectorPage = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <SectorHeader onLogout={handleLogout} />
+      <AppHeader activeTab="sector" onLogout={handleLogout} />
 
       {/* Main content */}
       <main className="p-4">

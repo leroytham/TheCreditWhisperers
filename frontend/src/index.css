@@ -2,16 +2,66 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #f3f4f6;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* ============================================ */
+/* UNIFIED HEADER STYLES                        */
+/* ============================================ */
+
+/* Active main navigation link style */
+.active-main-nav {
+  color: #111827;
+  font-weight: 600;
+}
+
+/* Active sub-navigation link style */
+.active-sub-nav {
+  border-bottom: 2px solid #111827;
+  color: #111827;
+  font-weight: 600;
+}
+
+/* Hide scrollbars utility class */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Yellow striped pattern for performance comparison bars */
+.striped-bar {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #FCD34D,
+    #FCD34D 4px,
+    rgba(252, 211, 77, 0.5) 4px,
+    rgba(252, 211, 77, 0.5) 8px
+  );
+}
+
+/* Red striped pattern for negative performance comparison bars */
+.striped-bar-red {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #F87171,
+    #F87171 4px,
+    rgba(248, 113, 113, 0.5) 4px,
+    rgba(248, 113, 113, 0.5) 8px
+  );
 }
 
 
