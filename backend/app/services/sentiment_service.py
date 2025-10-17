@@ -48,10 +48,10 @@ class SentimentService:
             text: Text to analyze
 
         Returns:
-            Dictionary with 'label', 'confidence', and 'score' keys
+            Dictionary with 'label', 'confidence', 'score', and 'scores_dict' keys
         """
         if not text:
-            return {"label": "neutral", "confidence": 0.0, "score": 0.0}
+            return {"label": "neutral", "confidence": 0.0, "score": 0.0, "scores_dict": {}}
 
         sentiment_scores = self.finbert(text, truncation=True, return_all_scores=True)[0]
         scores_dict = {r['label'].lower(): r['score'] for r in sentiment_scores}
@@ -59,13 +59,14 @@ class SentimentService:
         label = max(scores_dict, key=scores_dict.get)
         confidence = scores_dict[label]
 
-        # Calculate a raw score ranging from -1 (very negative) to +1 (very positive)
-        if label == "positive":
-            raw_score = scores_dict["positive"]
-        elif label == "negative":
-            raw_score = -scores_dict["negative"]
-        else:
-            raw_score = scores_dict["positive"] - scores_dict["negative"]
+        # --- NEW CALCULATION: Weighted Polarity Score (WPS) ---
+        # This formula modulates the score by the model's confidence (1 - neutral probability).
+        p_pos = scores_dict.get("positive", 0.0)
+        p_neg = scores_dict.get("negative", 0.0)
+        p_neu = scores_dict.get("neutral", 0.0)
+        
+        # wps = (P(positive) - P(negative)) * (1 - P(neutral))
+        raw_score = (p_pos - p_neg) * (1 - p_neu)
 
         return {
             "label": label,
@@ -133,11 +134,17 @@ class SentimentService:
 
         for article in news_articles:
             title = article.get("title", "")
-            if not title:
+            summary = article.get("summary", "")
+
+            # Combine title and summary for a more comprehensive analysis.
+            # The FinBERT model can handle longer texts, so this provides more context.
+            text_to_analyze = f"{title}. {summary}".strip()
+
+            if not text_to_analyze or text_to_analyze == ".":
                 continue
 
             # Analyze sentiment using FinBERT
-            sentiment_result = self.analyze_sentiment(title)
+            sentiment_result = self.analyze_sentiment(text_to_analyze)
 
             label = sentiment_result["label"]
             confidence = sentiment_result["confidence"]
@@ -204,3 +211,4 @@ class SentimentService:
 
 # Create a singleton instance
 sentiment_service = SentimentService()
+
