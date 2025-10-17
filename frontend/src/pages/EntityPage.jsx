@@ -33,6 +33,7 @@ const EntityPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
+  const [activeSubTab, setActiveSubTab] = useState('overview');
 
   // Session management
   useEffect(() => {
@@ -66,7 +67,17 @@ const EntityPage = () => {
     const newTicker = symbol.toUpperCase().trim();
     setTicker(newTicker);
     setSearchParams({ ticker: newTicker });
+    setActiveSubTab('overview'); // Reset to overview when ticker changes
   };
+
+  // Sub-navigation items
+  const subNavItems = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'performance', label: 'Performance' },
+    { id: 'sentiment', label: 'Sentiment' },
+    { id: 'news', label: 'News' },
+    { id: 'events', label: 'Events' },
+  ];
 
   // Fetch all data using custom hooks
   const { priceData1Y, companyName, currency, lastFetched } = usePriceData(ticker);
@@ -84,28 +95,54 @@ const EntityPage = () => {
         showEntitySearch={true}
       />
 
-      <div className="flex">
-        {/* Main Content */}
-        <div className="w-2/3 p-6">
-          <PerformanceView
-            ticker={ticker}
-            companyName={companyName}
-            currency={currency}
-            priceData1Y={priceData1Y}
-            lastFetched={lastFetched}
-            dailySentiment={dailySentiment}
-            sentiment={sentiment}
-            news={news}
-            significantEvents={significantEvents}
-          />
+      {/* Sub Navigation */}
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex space-x-8 overflow-x-auto">
+            {subNavItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveSubTab(item.id)}
+                className={`py-3 px-1 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                  activeSubTab === item.id
+                    ? 'border-gray-900 text-gray-900 font-semibold'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
+      </nav>
 
-        {/* Right Sidebar - Significant Events & Related News */}
-        <div className="w-1/3 p-6 space-y-6">
-          <SignificantEvents events={significantEvents} ticker={ticker} />
-          <RelatedNews news={news} ticker={ticker} />
-        </div>
-      </div>
+      {/* Main Content */}
+      <main className="p-4 sm:p-6 lg:p-8">
+        {/* Page Header */}
+        <section className="flex justify-between items-center py-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              {companyName || ticker}
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {companyName && ticker !== companyName ? ticker : `${currency} Currency`}
+            </p>
+          </div>
+        </section>
+
+        <PerformanceView
+          ticker={ticker}
+          companyName={companyName}
+          currency={currency}
+          priceData1Y={priceData1Y}
+          lastFetched={lastFetched}
+          dailySentiment={dailySentiment}
+          sentiment={sentiment}
+          news={news}
+          significantEvents={significantEvents}
+          activeTab={activeSubTab}
+        />
+      </main>
     </div>
   );
 };

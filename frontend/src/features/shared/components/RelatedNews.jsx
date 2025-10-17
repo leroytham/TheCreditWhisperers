@@ -18,7 +18,7 @@ const RelatedNews = ({
   ticker,
   companyName,
   error,
-  className = 'bg-white border-l border-gray-200 rounded-lg shadow-sm p-4'
+  className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
 }) => {
   const displayName = companyName || ticker;
 

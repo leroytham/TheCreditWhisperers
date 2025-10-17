@@ -18,7 +18,7 @@ const SignificantEvents = ({
   events,
   ticker,
   sectorName,
-  className = 'bg-white border-l border-gray-200 rounded-lg shadow-sm p-4',
+  className = 'bg-white border border-gray-200 rounded-lg shadow p-6',
   maxEvents = MAX_EVENTS_DISPLAY
 }) => {
   const displayName = sectorName || ticker;
@@ -40,11 +40,11 @@ const SignificantEvents = ({
   return (
     <div className={className}>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Significant Events</h3>
-        {displayName && <span className="text-sm text-gray-500">{displayName}</span>}
+        <h3 className="text-lg font-semibold text-gray-900">Significant Events</h3>
+        {displayName && <span className="text-sm text-gray-600">{displayName}</span>}
       </div>
 
-      <div className="space-y-4 max-h-96 overflow-y-auto">
+      <div className="space-y-4 flex-1 overflow-y-auto" role="list" aria-label="Significant market events">
         {events.slice(0, maxEvents).map((event, idx) => (
           <div key={idx} className="border-b border-gray-100 pb-3">
             {/* Event Header */}

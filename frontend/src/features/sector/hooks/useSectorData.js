@@ -37,10 +37,10 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
     const fetchPrice = fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`)
       .then(r => r.json());
 
-    const fetchConstituents = fetch(`http://localhost:5001/top-constituents?ticker=${encodeURIComponent(newsTicker)}`)
+    const fetchConstituents = fetch(`/api/top-constituents?ticker=${encodeURIComponent(newsTicker)}`)
       .then(r => r.json());
 
-    const fetchNews = fetch(`http://localhost:5001/news?ticker=${encodeURIComponent(newsTicker)}`)
+    const fetchNews = fetch(`/api/news?ticker=${encodeURIComponent(newsTicker)}`)
       .then(r => r.json());
 
     const fetchDailySentiment = fetch(`/api/daily-sentiment?ticker=${encodeURIComponent(newsTicker)}`)

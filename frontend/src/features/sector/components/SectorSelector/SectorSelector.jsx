@@ -33,7 +33,6 @@ const SectorSelector = ({ onSectorSelect }) => {
 
   return (
     <div
-      className="mt-8"
       style={{
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
         WebkitFontSmoothing: 'antialiased',
@@ -41,13 +40,13 @@ const SectorSelector = ({ onSectorSelect }) => {
       }}
     >
       <div
-        className="flex w-full bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden"
+        className="flex w-full bg-white border border-gray-200 rounded-lg shadow overflow-hidden"
         style={{ minHeight: '60vh' }}
       >
         {/* Left: Country selection */}
         <div className="w-1/3 border-r border-gray-200 overflow-y-auto no-scrollbar">
           <div className="p-6 sticky top-0 bg-white border-b border-gray-200 z-10">
-            <h1 className="text-3xl font-bold text-black tracking-tight">Country</h1>
+            <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Country</h2>
           </div>
           <CountryList
             regions={regions}
