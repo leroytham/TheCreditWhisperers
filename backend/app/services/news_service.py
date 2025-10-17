@@ -5,6 +5,8 @@ import yfinance as yf
 from datetime import datetime, timedelta, timezone
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
+import requests
+from bs4 import BeautifulSoup
 
 # Import your existing model classes
 from app.models import News, SentimentScore
@@ -55,6 +57,34 @@ class NewsService:
             device=self.device
         )
 
+    def _scrape_article_content(self, url: str) -> str:
+        """
+        Scrapes the main content from a given news article URL.
+        This is a best-effort scrape and may not work for all sources.
+        """
+        if not url:
+            return ""
+        try:
+            # Use a common user-agent to avoid being blocked
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Find all paragraph tags, which usually contain the article text
+            paragraphs = soup.find_all('p')
+            
+            # Join the text from all paragraphs to form the article body
+            article_text = ' '.join([p.get_text() for p in paragraphs])
+            
+            return article_text.strip()
+        except Exception as e:
+            print(f"Failed to scrape article content from {url}: {e}")
+            return ""
+
     @cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="ticker_news")
     def get_ticker_news(self, ticker: str, count: int = 100) -> list[dict]:
         """
@@ -66,7 +96,7 @@ class NewsService:
             count: Number of articles to fetch from yfinance (default 100)
 
         Returns:
-            List of news article dictionaries with title, link, provider, publish_date, image
+            List of news article dictionaries with title, link, provider, publish_date, image, and full body content.
         """
         try:
             ticker_obj = yf.Ticker(ticker)
@@ -121,12 +151,22 @@ class NewsService:
                     else:
                         provider_name = content.get("publisher", "Unknown")
 
+                    link = content.get("previewUrl") or content.get("link")
+                    
+                    # Scrape the full article content from the link
+                    body_content = self._scrape_article_content(link)
+
+                    # If scraping fails, fall back to the summary from the API
+                    if not body_content:
+                        body_content = content.get("summary", "")
+
                     news_list.append({
                         "title": content.get("title"),
-                        "link": content.get("previewUrl") or content.get("link"),
+                        "link": link,
                         "provider": provider_name,
                         "publish_date": pub_date.strftime("%Y-%m-%d"),
-                        "image": image_url
+                        "image": image_url,
+                        "body": body_content
                     })
 
             print(f"Fetched {len(news_list)} news articles for {ticker} from the last 7 days")
@@ -259,3 +299,4 @@ class NewsService:
 
 # Create a single, shared instance of the service that the whole app can use.
 news_service_instance = NewsService()
+
