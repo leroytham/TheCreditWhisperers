@@ -1,6 +1,7 @@
 # app/api/routes.py
 from fastapi import APIRouter, HTTPException
 import yfinance as yf
+from datetime import datetime
 
 # Import the modular services
 from app.services.news_service import news_service_instance
@@ -154,7 +155,8 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
             "ticker": ticker,
             "company_name": ticker,  # Could be enhanced with actual company name
             "currency": "USD",
-            "prices": prices
+            "prices": prices,
+            "last_fetched": datetime.now().isoformat()
         }
 
     except HTTPException:

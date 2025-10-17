@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PriceChart, SentimentChart, OverallSentiment, SignificantEvents, RelatedNews } from '../../../shared/components';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
-import { formatDateTime, formatPrice, getPriceChangeColor, getPriceChangeArrow } from '../../../shared/utils/formatters';
+import { formatDateTime, formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
 
 /**
@@ -30,14 +30,19 @@ const PerformanceView = ({
     setPriceData(filtered);
   }, [priceData1Y, timeframe]);
 
-  const { currentPrice, priceChange, priceChangePercent } = calculatePriceChange(
-    priceData.map((point, i) => ({
-      x: i,
-      y: parseFloat(point.close) || parseFloat(point.price) || 0,
-      date: point.date,
-      time: point.time
-    }))
-  );
+  // Create chart data from price data
+  const chartData = priceData.map((point, i) => ({
+    x: i,
+    y: parseFloat(point.close) || parseFloat(point.price) || 0,
+    date: point.date,
+    time: point.time
+  }));
+
+  // Calculate price changes
+  const { priceChange, priceChangePercent } = calculatePriceChange(chartData);
+
+  // Get current price object (includes y, date, time)
+  const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
 
   // Check if data is loading
   const isLoading = !priceData1Y || priceData1Y.length === 0;
@@ -72,7 +77,7 @@ const PerformanceView = ({
                   {getPriceChangeArrow(priceChange)} {Math.abs(priceChange).toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  {currentPrice ? formatDateTime(currentPrice.date) : 'Loading...'}
+                  As of {currentPrice ? formatFullTimestamp(currentPrice.date) : 'Loading...'}
                 </p>
               </div>
 

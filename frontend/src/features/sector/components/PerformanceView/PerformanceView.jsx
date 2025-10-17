@@ -5,6 +5,7 @@ import { usePriceData } from '../../hooks/usePriceData';
 import { useSentimentData } from '../../hooks/useSentimentData';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { PriceChart, SentimentChart, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
+import { formatFullTimestamp } from '../../../shared/utils/formatters';
 import PerformanceHeader from './PerformanceHeader';
 import TopConstituents from './TopConstituents';
 
@@ -35,7 +36,8 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview' }) => {
     companyName,
     currency,
     loading,
-    error
+    error,
+    lastFetched
   } = useSectorData(ticker, timeframe);
 
   // Process price data based on timeframe
@@ -43,15 +45,12 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview' }) => {
     chartData,
     priceRange,
     priceChange,
-    priceChangePercent
+    priceChangePercent,
+    currentPrice
   } = usePriceData(priceData1Y, timeframe);
 
   // Process sentiment data
   const { sentimentBars } = useSentimentData(dailySentiment, 7);
-
-  // Current price from full dataset
-  const currentPricePoint = priceData1Y && priceData1Y.length ? priceData1Y[priceData1Y.length - 1] : null;
-  const displayPrice = currentPricePoint ? (currentPricePoint.close ?? currentPricePoint.price ?? null) : null;
 
   // Render content based on active tab
   const renderContent = () => {
@@ -99,13 +98,13 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview' }) => {
               <div className="bg-white border border-gray-200 rounded-lg shadow p-6 lg:col-start-1 lg:row-start-1 h-full">
                 <h3 className="text-sm font-medium text-gray-600 mb-2">Current Price</h3>
                 <div className="text-3xl font-bold text-gray-900 mb-2">
-                  {displayPrice !== null ? `${currency} ${displayPrice.toFixed(2)}` : '--'}
+                  {currentPrice ? `${currency} ${currentPrice.toFixed(2)}` : '--'}
                 </div>
                 <div className={`text-sm font-medium ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  {currentPricePoint ? currentPricePoint.date : 'Loading...'}
+                  As of {lastFetched ? formatFullTimestamp(lastFetched) : 'Loading...'}
                 </p>
               </div>
 

@@ -82,7 +82,7 @@ export const COLORS = {
 };
 
 // API polling interval (milliseconds) - entity specific
-export const PRICE_POLL_INTERVAL = 15000; // 15 seconds
+export const PRICE_POLL_INTERVAL = 5000; // 5 seconds
 
 // Search debounce delay (milliseconds) - entity specific
 export const SEARCH_DEBOUNCE_DELAY = 300;

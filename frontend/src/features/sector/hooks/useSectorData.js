@@ -19,9 +19,11 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
     topConstituents: [],
     topEvents: [],
     companyName: '',
-    currency: 'USD'
+    currency: 'USD',
+    lastFetched: null
   });
 
+  // Fetch all data once when ticker changes
   useEffect(() => {
     if (!ticker) {
       setLoading(false);
@@ -61,6 +63,7 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
           newData.priceData1Y = p.prices || [];
           newData.companyName = p.company_name || '';
           newData.currency = p.currency || 'USD';
+          newData.lastFetched = p.last_fetched || null;
         } else {
           console.error('Price fetch failed', priceRes.reason || priceRes.value);
           setError(prev => prev ? prev + ' | price failed' : 'price failed');
@@ -127,8 +130,37 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
         }
       });
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker]);
+
+  // Poll only price data every 5 seconds
+  useEffect(() => {
+    if (!ticker) return;
+
+    const pollPriceData = async () => {
+      try {
+        const response = await fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`);
+        const priceData = await response.json();
+
+        // Update only price-related data, preserve everything else
+        setData(prev => ({
+          ...prev,
+          priceData1Y: priceData.prices || prev.priceData1Y,
+          companyName: priceData.company_name || prev.companyName,
+          currency: priceData.currency || prev.currency,
+          lastFetched: priceData.last_fetched || prev.lastFetched
+        }));
+      } catch (err) {
+        console.error('Error polling price data:', err);
+      }
+    };
+
+    const intervalId = setInterval(pollPriceData, 5000);
+
+    return () => clearInterval(intervalId);
   }, [ticker]);
 
   return {
