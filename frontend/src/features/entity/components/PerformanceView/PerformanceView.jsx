@@ -1,3 +1,5 @@
+// src/features/entity/components/PerformanceView/PerformanceView.jsx
+
 import React, { useState, useEffect } from 'react';
 import { PriceChart, SentimentChart, OverallSentiment, SignificantEvents, RelatedNews } from '../../../shared/components';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
@@ -10,6 +12,7 @@ import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
  *
  * Main performance display container with charts and controls
  */
+
 const PerformanceView = ({
   ticker,
   companyName,
@@ -19,7 +22,8 @@ const PerformanceView = ({
   sentiment,
   news,
   significantEvents,
-  activeTab = 'overview'
+  activeTab = 'overview',
+  setActiveTab,
 }) => {
   const [timeframe, setTimeframe] = useState('1Y');
   const [priceData, setPriceData] = useState([]);
@@ -29,7 +33,7 @@ const PerformanceView = ({
     const filtered = filterPriceDataByTimeframe(priceData1Y, timeframe);
     setPriceData(filtered);
   }, [priceData1Y, timeframe]);
-
+  
   // Create chart data from price data
   const chartData = priceData.map((point, i) => ({
     x: i,
@@ -130,7 +134,14 @@ const PerformanceView = ({
 
             {/* Bottom Row: [News - Full Width] */}
             <div className="mb-8">
-              <RelatedNews news={news} ticker={ticker} />
+              <RelatedNews
+                news={news}
+                displayName={companyName}
+                loading={!news}
+                error={null}
+                isOverview={true}
+                onViewMore={() => setActiveTab('news')}
+              />
             </div>
           </>
         );
@@ -184,8 +195,13 @@ const PerformanceView = ({
       case 'news':
         return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <RelatedNews news={news} ticker={ticker} />
-            <SignificantEvents events={significantEvents} ticker={ticker} />
+            <RelatedNews
+                news={news}
+                displayName={companyName}
+                loading={!news}
+                error={null}
+                isOverview={false}
+            />
           </div>
         );
 

@@ -9,3 +9,12 @@ export { default as SentimentChart } from './SentimentChart';
 export { default as OverallSentiment } from './OverallSentiment';
 export { default as RelatedNews } from './RelatedNews';
 export { default as SignificantEvents } from './SignificantEvents';
+
+// Newly added components for the news feed redesign
+export { default as NewsCard } from './NewsCard';
+export { default as NewsSkeleton } from './NewsSkeleton';
+export { default as NewsEmpty } from './NewsEmpty';
+export { default as NewsError } from './NewsError';
+export { default as SentimentBadge } from './SentimentBadge';
+export { default as NewsToolbar } from './NewsToolbar';
+

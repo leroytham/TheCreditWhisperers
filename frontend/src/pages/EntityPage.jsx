@@ -1,3 +1,5 @@
+// src/pages/EntityPage.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/layout/AppHeader';
@@ -141,6 +143,7 @@ const EntityPage = () => {
           news={news}
           significantEvents={significantEvents}
           activeTab={activeSubTab}
+          setActiveTab={setActiveSubTab} // Pass the setter function
         />
       </main>
     </div>

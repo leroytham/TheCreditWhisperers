@@ -1,3 +1,5 @@
+// src/features/shared/utils/constants.js
+
 /**
  * Shared Constants
  *
@@ -91,4 +93,4 @@ export const SEARCH_DEBOUNCE_DELAY = 300;
 export const MIN_SEARCH_LENGTH = 2;
 
 // Default ticker - entity specific
-export const DEFAULT_TICKER = 'AAPL';
+export const DEFAULT_TICKER = 'UBS';

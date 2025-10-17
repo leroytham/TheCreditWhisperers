@@ -1,3 +1,5 @@
+// src/pages/SectorPage.jsx
+
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AppHeader from "../components/layout/AppHeader";
@@ -19,6 +21,7 @@ import PerformanceView from "../features/sector/components/PerformanceView/Perfo
  *   - PerformanceView/: Charts, news, events, constituents display
  *   - SectorHeader: Top navigation bar
  */
+
 const SectorPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -140,6 +143,7 @@ const SectorPage = () => {
             context={performanceContext}
             onBack={handleBack}
             activeTab={activeSubTab}
+            setActiveTab={setActiveSubTab} // Pass the setter function
           />
         )}
       </main>

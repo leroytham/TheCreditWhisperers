@@ -1,3 +1,5 @@
+// src/features/sector/components/PerformanceView/PerformanceView.jsx
+
 import React, { useState } from 'react';
 import { resolveSectorTicker } from '../../utils/tickerResolver';
 import { useSectorData } from '../../hooks/useSectorData';
@@ -12,7 +14,7 @@ import TopConstituents from './TopConstituents';
 /**
  * PerformanceView component - orchestrates the sector performance dashboard
  */
-const PerformanceView = ({ context, onBack, activeTab = 'overview' }) => {
+const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab }) => {
   const countryCode = context?.countryCode || '';
   const countryName = context?.countryName || '';
   const sector = context?.sector || null;
@@ -160,7 +162,13 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview' }) => {
 
             {/* Bottom Row: [News - Full Width] */}
             <div className="mb-8">
-              <RelatedNews news={news} companyName={companyName} error={error} />
+              <RelatedNews
+                news={news}
+                displayName={companyName}
+                error={error}
+                isOverview={true}
+                onViewMore={() => setActiveTab('news')}
+              />
             </div>
 
             {/* Top Holdings Section - Full Width */}
@@ -229,9 +237,13 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview' }) => {
 
       case 'news':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <RelatedNews news={news} companyName={companyName} error={error} />
-            <SignificantEvents events={topEvents} sectorName={sectorName} />
+          <div className="grid grid-cols-1 gap-8">
+            <RelatedNews
+                news={news}
+                displayName={companyName}
+                error={error}
+                isOverview={false}
+            />
           </div>
         );
 
