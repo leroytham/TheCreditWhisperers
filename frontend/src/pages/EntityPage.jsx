@@ -22,14 +22,14 @@ import { DEFAULT_TICKER } from '../features/shared/utils/constants';
  * - features/entity/utils/: Chart helpers, timeframe filters, formatters
  * - features/entity/hooks/: Data fetching hooks (usePriceData, useNewsData, useDailySentiment, useSignificantEvents, useTickerSearch)
  * - features/entity/components/: UI components organized by feature
- *   - EntityHeader/: Top navigation bar
- *   - EntitySearch/: Ticker search with autocomplete
- *   - PerformanceView/: Charts and metrics display container
- *   - PriceChart/: Interactive price chart
- *   - SentimentChart/: Daily sentiment bar chart
- *   - OverallSentiment/: Sentiment summary metrics
- *   - SignificantEvents/: Event list sidebar
- *   - RelatedNews/: News feed sidebar
+ * - EntityHeader/: Top navigation bar
+ * - EntitySearch/: Ticker search with autocomplete
+ * - PerformanceView/: Charts and metrics display container
+ * - PriceChart/: Interactive price chart
+ * - SentimentChart/: Daily sentiment bar chart
+ * - OverallSentiment/: Sentiment summary metrics
+ * - SignificantEvents/: Event list sidebar
+ * - RelatedNews/: News feed sidebar
  */
 const EntityPage = () => {
   const navigate = useNavigate();
@@ -82,7 +82,7 @@ const EntityPage = () => {
   ];
 
   // Fetch all data using custom hooks
-  const { priceData1Y, companyName, currency, lastFetched } = usePriceData(ticker);
+  const { priceData1Y, companyName, currency, lastFetched, exchange, market, marketState } = usePriceData(ticker);
   const { news, sentiment } = useNewsData(ticker);
   const { dailySentiment } = useDailySentiment(ticker);
   const { significantEvents } = useSignificantEvents(ticker);
@@ -121,14 +121,18 @@ const EntityPage = () => {
       {/* Main Content */}
       <main className="p-4 sm:p-6 lg:p-8">
         {/* Page Header */}
-        <section className="flex justify-between items-center py-6">
+        <section className="py-6">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-3xl font-bold text-gray-900">
               {companyName || ticker}
             </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              {companyName && ticker !== companyName ? ticker : `${currency} Currency`}
-            </p>
+            <div className="mt-1 flex items-center space-x-2 text-base text-gray-500">
+              <span>{ticker}:{exchange}</span>
+              <span aria-hidden="true">·</span>
+              <span>{market} ({currency})</span>
+              <span aria-hidden="true">·</span>
+              <span>{marketState}</span>
+            </div>
           </div>
         </section>
 
