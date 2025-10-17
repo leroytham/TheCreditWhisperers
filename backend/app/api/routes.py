@@ -67,14 +67,14 @@ def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
 
 
 @router.get("/stocks/{ticker}/sentiment")
-def get_stock_news_and_sentiment(ticker: str):
+async def get_stock_news_and_sentiment(ticker: str):
     """
     API endpoint to get recent news and its advanced, weighted FinBERT sentiment analysis.
     Example: /stocks/TSLA/sentiment
     """
     try:
         # 1. Fetch recent news using the service
-        news_articles = news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service_instance.get_ticker_news(ticker)
         if not news_articles:
             return {"ticker": ticker, "message": "No recent news found."}
 
@@ -165,14 +165,14 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/news")
-def get_news_data(ticker: str):
+async def get_news_data(ticker: str):
     """
     API endpoint to get recent news and sentiment for a ticker.
     Example: /api/news?ticker=AAPL
     """
     try:
         # Fetch news articles using the news service
-        news_articles = news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service_instance.get_ticker_news(ticker)
 
         if not news_articles:
             return {"ticker": ticker, "news": [], "avg_score": 0}
@@ -204,7 +204,7 @@ def get_news_data(ticker: str):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/daily-sentiment")
-def get_daily_sentiment(ticker: str):
+async def get_daily_sentiment(ticker: str):
     """
     API endpoint to get daily sentiment data for a ticker.
     Example: /api/daily-sentiment?ticker=AAPL
@@ -213,7 +213,7 @@ def get_daily_sentiment(ticker: str):
         from datetime import datetime, timedelta, timezone
 
         # Fetch news articles
-        news_articles = news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service_instance.get_ticker_news(ticker)
 
         # Initialize all 7 days with empty data
         today = datetime.now(timezone.utc).date()
@@ -266,7 +266,7 @@ def get_daily_sentiment(ticker: str):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/news-models")
-def get_news_models(ticker: str):
+async def get_news_models(ticker: str):
     """
     API endpoint that returns News objects using the proper model structure.
     This demonstrates that we're using the News and SentimentScore models.
@@ -274,7 +274,7 @@ def get_news_models(ticker: str):
     """
     try:
         # Fetch news articles
-        news_articles = news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service_instance.get_ticker_news(ticker)
 
         if not news_articles:
             return {"ticker": ticker, "news": [], "message": "No news found"}

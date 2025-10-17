@@ -7,17 +7,22 @@ from sentence_transformers import SentenceTransformer, util
 import numpy as np
 import requests
 from bs4 import BeautifulSoup
+import os
+from dotenv import load_dotenv
+import asyncio
+import aiohttp
+import random
+
 
 # Import your existing model classes
 from app.models import News, SentimentScore
-from app.core.cache import cache_result
+from app.core.cache import async_cache_result, cache_result
 from app.core.config import settings
 
 
 class NewsService:
     """
-    A service to fetch, categorize, and analyze financial news articles.
-
+    A service to fetch, categorize, and analyze financial news articles from multiple sources.
     This class is designed as a singleton to ensure the machine learning
     model is loaded only once.
     """
@@ -32,7 +37,29 @@ class NewsService:
         return cls._instance
 
     def _initialize(self):
-        """Initializes the service and loads the ML model into memory."""
+        """Initializes the service, loads the ML model, and API keys."""
+        load_dotenv()
+        self.finnhub_api_token = os.getenv("FINNHUB_API_TOKEN")
+        self.news_api_key = os.getenv("NEWS_API_KEY")
+        self.alpha_vantage_api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+        self.marketaux_api_key = os.getenv("MARKETAUX_API_KEY")
+
+        if not self.finnhub_api_token:
+            print("WARNING: FINNHUB_API_TOKEN not found. News fetching from Finnhub will be disabled.")
+        if not self.news_api_key:
+            print("WARNING: NEWS_API_KEY not found. News fetching from News API will be disabled.")
+        if not self.alpha_vantage_api_key:
+            print("WARNING: ALPHA_VANTAGE_API_KEY not found. News fetching from Alpha Vantage will be disabled.")
+        if not self.marketaux_api_key:
+            print("WARNING: MARKETAUX_API_KEY not found. News fetching from MarketAux will be disabled.")
+
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
+        ]
+
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"NewsService is using device: {self.device}")
 
@@ -57,123 +84,248 @@ class NewsService:
             device=self.device
         )
 
-    def _scrape_article_content(self, url: str) -> str:
+    async def _scrape_article_content(self, session: aiohttp.ClientSession, url: str) -> str:
         """
-        Scrapes the main content from a given news article URL.
-        This is a best-effort scrape and may not work for all sources.
+        Asynchronously scrapes the main content from a given news article URL.
+        Includes rate-limiting politeness delay and user-agent rotation.
         """
         if not url:
             return ""
         try:
-            # Use a common user-agent to avoid being blocked
+            # Politeness delay to avoid overwhelming servers
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+            
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                'User-Agent': random.choice(self.user_agents)
             }
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.content, 'html.parser')
-
-            # Find all paragraph tags, which usually contain the article text
-            paragraphs = soup.find_all('p')
-            
-            # Join the text from all paragraphs to form the article body
-            article_text = ' '.join([p.get_text() for p in paragraphs])
-            
-            return article_text.strip()
+            async with session.get(url, headers=headers, timeout=15) as response:
+                if response.status >= 400:
+                    print(f"Failed to scrape {url} with status {response.status}")
+                    return ""
+                html = await response.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                paragraphs = soup.find_all('p')
+                article_text = ' '.join([p.get_text() for p in paragraphs])
+                return article_text.strip()
+        except asyncio.TimeoutError:
+            print(f"Timeout error when scraping {url}")
+            return ""
+        except aiohttp.ClientError as e:
+            print(f"Client error scraping {url}: {e}")
+            return ""
         except Exception as e:
-            print(f"Failed to scrape article content from {url}: {e}")
+            print(f"Generic error scraping {url}: {e}")
             return ""
 
-    @cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="ticker_news")
-    def get_ticker_news(self, ticker: str, count: int = 100) -> list[dict]:
-        """
-        Gets recent news for a ticker from the last 7 days.
-        Results are cached in Redis for NEWS_CACHE_TTL seconds.
-
-        Args:
-            ticker: Stock ticker symbol
-            count: Number of articles to fetch from yfinance (default 100)
-
-        Returns:
-            List of news article dictionaries with title, link, provider, publish_date, image, and full body content.
-        """
+    def _get_yfinance_news_sync(self, ticker: str, count: int):
+        """Helper for running blocking yfinance calls in a thread."""
+        ticker_obj = yf.Ticker(ticker)
+        return ticker_obj.get_news(count=count)
+        
+    async def _fetch_yfinance_news(self, session: aiohttp.ClientSession, ticker: str, count: int, seven_days_ago: datetime.date, today: datetime.date) -> list[dict]:
+        """Fetches and processes news from Yahoo Finance asynchronously."""
         try:
-            ticker_obj = yf.Ticker(ticker)
-            # Fetch more articles to ensure we have coverage across 7 days
-            raw_news = ticker_obj.get_news(count=count)
-            if not raw_news:
-                return []
+            raw_news = await asyncio.to_thread(self._get_yfinance_news_sync, ticker, count)
+            if not raw_news: return []
 
             news_list = []
-            # Get news from the last 7 days (from 6 days ago to today)
-            today = datetime.now(timezone.utc).date()
-            seven_days_ago = today - timedelta(days=6)
+            scrape_tasks = []
+            articles_to_process = []
 
             for article in raw_news:
-                if not article:
-                    continue
-
-                # Handle new yfinance API structure where content is nested
                 content = article.get("content", article) if isinstance(article, dict) else None
-                if not content:
-                    continue
+                if not content: continue
 
-                # Parse the publish date
                 pub_date_str = content.get("pubDate") or content.get("providerPublishTime")
-                if not pub_date_str:
-                    continue
+                if not pub_date_str: continue
 
-                # Handle ISO format dates (e.g., "2025-10-14T18:57:08Z")
                 try:
                     if isinstance(pub_date_str, str) and 'T' in pub_date_str:
                         pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).date()
                     elif isinstance(pub_date_str, (int, float)):
                         pub_date = datetime.fromtimestamp(pub_date_str).date()
-                    else:
-                        continue
-                except Exception:
-                    continue
+                    else: continue
+                except Exception: continue
 
-                # Include news from the last 7 days (6 days ago through today)
                 if seven_days_ago <= pub_date <= today:
-                    # Extract thumbnail URL safely
-                    thumbnail = content.get("thumbnail") or {}
-                    resolutions = thumbnail.get("resolutions") or []
-                    image_url = None
-                    if resolutions:
-                        image_url = next((res.get('url') for res in resolutions if isinstance(res, dict) and res.get('url')), None)
-
-                    # Extract provider name safely
-                    provider_info = content.get("provider") or {}
-                    if isinstance(provider_info, dict):
-                        provider_name = provider_info.get("displayName", "Unknown")
-                    else:
-                        provider_name = content.get("publisher", "Unknown")
-
                     link = content.get("previewUrl") or content.get("link")
-                    
-                    # Scrape the full article content from the link
-                    body_content = self._scrape_article_content(link)
+                    articles_to_process.append((content, pub_date, link))
+                    scrape_tasks.append(self._scrape_article_content(session, link))
 
-                    # If scraping fails, fall back to the summary from the API
-                    if not body_content:
-                        body_content = content.get("summary", "")
+            scraped_contents = await asyncio.gather(*scrape_tasks)
 
-                    news_list.append({
-                        "title": content.get("title"),
-                        "link": link,
-                        "provider": provider_name,
-                        "publish_date": pub_date.strftime("%Y-%m-%d"),
-                        "image": image_url,
-                        "body": body_content
-                    })
+            for i, (content, pub_date, link) in enumerate(articles_to_process):
+                provider_info = content.get("provider") or {}
+                provider_name = provider_info.get("displayName", "Unknown") if isinstance(provider_info, dict) else content.get("publisher", "Unknown")
+                body_content = scraped_contents[i] or content.get("summary", "")
 
-            print(f"Fetched {len(news_list)} news articles for {ticker} from the last 7 days")
+                news_list.append({
+                    "title": content.get("title"), "link": link, "provider": provider_name,
+                    "publish_date": pub_date.strftime("%Y-%m-%d"), "body": body_content
+                })
             return news_list
         except Exception as e:
-            print(f"Error fetching news for {ticker}: {e}")
+            print(f"Error fetching news from yfinance for {ticker}: {e}")
             return []
+
+    async def _fetch_finnhub_news(self, session: aiohttp.ClientSession, ticker: str, start_date_str: str, end_date_str: str) -> list[dict]:
+        """Fetches and processes news from Finnhub asynchronously."""
+        if not self.finnhub_api_token: return []
+        
+        try:
+            url = f"https://finnhub.io/api/v1/company-news?symbol={ticker}&from={start_date_str}&to={end_date_str}&token={self.finnhub_api_token}"
+            async with session.get(url, timeout=10) as response:
+                response.raise_for_status()
+                raw_news = await response.json()
+                if not raw_news: return []
+
+                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_news]
+                
+                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+
+                news_list = []
+                for i, (article, _) in enumerate(scrape_tasks):
+                    body_content = results[i] or article.get("summary", "")
+                    news_list.append({
+                        "title": article.get("headline"), "link": article.get("url"), "provider": article.get("source"),
+                        "publish_date": datetime.fromtimestamp(article.get("datetime")).strftime('%Y-%m-%d'),
+                        "body": body_content
+                    })
+                return news_list
+        except Exception as e:
+            print(f"Error fetching news from Finnhub for {ticker}: {e}")
+            return []
+
+    async def _fetch_newsapi_news(self, session: aiohttp.ClientSession, ticker: str, start_date_str: str, end_date_str: str) -> list[dict]:
+        """Fetches and processes news from NewsAPI.org asynchronously."""
+        if not self.news_api_key: return []
+
+        try:
+            url = f"https://newsapi.org/v2/everything?q={ticker}&from={start_date_str}&to={end_date_str}&sortBy=publishedAt&apiKey={self.news_api_key}"
+            async with session.get(url, timeout=10) as response:
+                response.raise_for_status()
+                raw_news = (await response.json()).get("articles", [])
+                if not raw_news: return []
+                
+                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_news]
+                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+                
+                news_list = []
+                for i, (article, _) in enumerate(scrape_tasks):
+                    fallback_content = article.get("description") or article.get("content", "")
+                    body_content = results[i] or fallback_content
+                    news_list.append({
+                        "title": article.get("title"), "link": article.get("url"),
+                        "provider": article.get("source", {}).get("name"),
+                        "publish_date": datetime.fromisoformat(article.get("publishedAt").replace('Z', '+00:00')).strftime('%Y-%m-%d'),
+                        "body": body_content
+                    })
+                return news_list
+        except Exception as e:
+            print(f"Error fetching news from NewsAPI for {ticker}: {e}")
+            return []
+
+    async def _fetch_alpha_vantage_news(self, session: aiohttp.ClientSession, ticker: str) -> list[dict]:
+        """Fetches and processes news from Alpha Vantage asynchronously."""
+        if not self.alpha_vantage_api_key: return []
+        try:
+            url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={ticker}&apikey={self.alpha_vantage_api_key}"
+            async with session.get(url, timeout=10) as response:
+                response.raise_for_status()
+                raw_data = (await response.json()).get("feed", [])
+                if not raw_data: return []
+
+                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_data]
+                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+                
+                news_list = []
+                for i, (article, _) in enumerate(scrape_tasks):
+                    time_published = article.get("time_published", "")
+                    if time_published: pub_date = datetime.strptime(time_published, "%Y%m%dT%H%M%S").strftime('%Y-%m-%d')
+                    else: continue
+                    
+                    body_content = results[i] or article.get("summary", "")
+                    news_list.append({
+                        "title": article.get("title"), "link": article.get("url"), "provider": article.get("source"),
+                        "publish_date": pub_date, "body": body_content
+                    })
+                return news_list
+        except Exception as e:
+            print(f"Error fetching news from Alpha Vantage for {ticker}: {e}")
+            return []
+
+    async def _fetch_marketaux_news(self, session: aiohttp.ClientSession, ticker: str, start_date_str: str) -> list[dict]:
+        """Fetches and processes news from MarketAux asynchronously."""
+        if not self.marketaux_api_key: return []
+        try:
+            url = f"https://api.marketaux.com/v1/news/all?symbols={ticker}&published_after={start_date_str}&api_token={self.marketaux_api_key}"
+            async with session.get(url, timeout=10) as response:
+                response.raise_for_status()
+                raw_data = (await response.json()).get("data", [])
+                if not raw_data: return []
+
+                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_data]
+                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+                
+                news_list = []
+                for i, (article, _) in enumerate(scrape_tasks):
+                    pub_date_iso = article.get("published_at")
+                    if pub_date_iso: pub_date = datetime.fromisoformat(pub_date_iso).strftime('%Y-%m-%d')
+                    else: continue
+                    
+                    body_content = results[i] or article.get("snippet", "")
+                    news_list.append({
+                        "title": article.get("title"), "link": article.get("url"), "provider": article.get("source"),
+                        "publish_date": pub_date, "body": body_content
+                    })
+                return news_list
+        except Exception as e:
+            print(f"Error fetching news from MarketAux for {ticker}: {e}")
+            return []
+
+
+    @async_cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="ticker_news")
+    async def get_ticker_news(self, ticker: str, count: int = 100) -> list[dict]:
+        """
+        Gets recent news for a ticker from multiple sources concurrently, merging and deduplicating them.
+        """
+        today = datetime.now(timezone.utc).date()
+        seven_days_ago = today - timedelta(days=6)
+        start_date_str = seven_days_ago.strftime("%Y-%m-%d")
+        end_date_str = today.strftime("%Y-%m-%d")
+
+        async with aiohttp.ClientSession() as session:
+            # --- Create tasks to run concurrently ---
+            tasks = [
+                self._fetch_yfinance_news(session, ticker, count, seven_days_ago, today),
+                self._fetch_finnhub_news(session, ticker, start_date_str, end_date_str),
+                self._fetch_newsapi_news(session, ticker, start_date_str, end_date_str),
+                self._fetch_alpha_vantage_news(session, ticker),
+                self._fetch_marketaux_news(session, ticker, start_date_str)
+            ]
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+        # --- Combine and Deduplicate ---
+        all_news = {}
+        combined_sources = []
+        for res in results:
+            if isinstance(res, list):
+                combined_sources.extend(res)
+            else:
+                print(f"An error occurred in a fetch task: {res}")
+
+        for article in combined_sources:
+            if article and article.get("title"):
+                key = article["title"].lower().strip()
+                if key not in all_news:
+                    all_news[key] = article
+        
+        # Sort by date, newest first
+        sorted_news = sorted(all_news.values(), key=lambda x: x['publish_date'], reverse=True)
+        
+        print(f"Fetched and combined {len(sorted_news)} unique news articles for {ticker} from 5 sources.")
+        return sorted_news
 
     @cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="news_around_date")
     def fetch_news_around_date(
@@ -296,6 +448,7 @@ class NewsService:
                 news_model_list.append(news_item)
 
         return news_model_list
+
 
 # Create a single, shared instance of the service that the whole app can use.
 news_service_instance = NewsService()
