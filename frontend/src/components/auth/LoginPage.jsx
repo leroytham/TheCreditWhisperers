@@ -113,15 +113,11 @@ export default function LoginCard() {
           <button
             type="button"
             className="btn microsoft-btn"
-            // onClick={() => {
-            //   // Temporary bypass: Set a mock user in sessionStorage
-            //   const mockUser = { username: "dev_user", email: "dev@example.com" };
-            //   sessionStorage.setItem("user", JSON.stringify(mockUser));
-            //   navigate("/entity");
-            // }}
-
             onClick={() => {
-              window.location.href = "http://localhost:8000/api/login";
+              // Temporary bypass: Set a mock user in sessionStorage
+              const mockUser = { username: "dev_user", email: "dev@example.com" };
+              sessionStorage.setItem("user", JSON.stringify(mockUser));
+              navigate("/entity");
             }}
           >
             <img
