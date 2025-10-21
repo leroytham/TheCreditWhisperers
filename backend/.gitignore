@@ -1,15 +1,20 @@
 # Python virtual environment
 venv/
+env/
+.venv/
+.env/
+
+# Python cache and compiled files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 .Python
-env/
-
-# IDE
-.vscode/
-.idea/
 
 # Environment variables
 .env
@@ -20,6 +25,13 @@ env/
 
 # Dependencies
 node_modules/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
 
 # Logs
 *.log
@@ -33,3 +45,23 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+
+# Documentation
+docs/_build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json

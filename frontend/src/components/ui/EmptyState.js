@@ -1,0 +1,33 @@
+// frontend/src/components/ui/EmptyState.js
+
+import React from 'react';
+import { FileQuestion } from 'lucide-react';
+
+/**
+ * Empty State Component
+ * Displayed when there's no data to show
+ *
+ * @param {string} title - Empty state title
+ * @param {string} description - Empty state description
+ * @param {React.ReactNode} icon - Custom icon component
+ * @param {React.ReactNode} action - Optional action button
+ */
+const EmptyState = ({
+  title = 'No data found',
+  description = 'Try adjusting your filters or search criteria',
+  icon: Icon = FileQuestion,
+  action,
+}) => {
+  return (
+    <div className="flex flex-col items-center justify-center p-12 text-center">
+      <div className="flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+        <Icon className="w-8 h-8 text-gray-400" />
+      </div>
+      <h3 className="text-lg font-medium text-gray-900 mb-2">{title}</h3>
+      <p className="text-sm text-gray-500 max-w-sm mb-6">{description}</p>
+      {action && <div>{action}</div>}
+    </div>
+  );
+};
+
+export default EmptyState;
