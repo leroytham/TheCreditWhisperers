@@ -37,7 +37,7 @@ export const SENTIMENT_CHART_CONFIG = {
     top: 40,
     bottom: 80
   },
-  yAxisValues: [0.4, 0.2, 0, -0.2, -0.4],
+  yAxisValues: [1.0, 0.5, 0, -0.5, -1.0],
   barWidth: 70,
   daysToShow: 7
 };

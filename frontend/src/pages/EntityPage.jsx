@@ -3,39 +3,35 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/layout/AppHeader';
+import Sidebar from '../components/layout/Sidebar';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
-import { SignificantEvents, RelatedNews } from '../features/shared/components';
 import { usePriceData } from '../features/entity/hooks/usePriceData';
 import { useNewsData } from '../features/entity/hooks/useNewsData';
 import { useDailySentiment } from '../features/entity/hooks/useDailySentiment';
 import { useSignificantEvents } from '../features/entity/hooks/useSignificantEvents';
 import { DEFAULT_TICKER } from '../features/shared/utils/constants';
+import { useWatchlist } from '../hooks/useWatchlist';
+import { formatPrice, getPriceChangeColor, getPriceChangeArrow } from '../features/shared/utils/formatters';
+import { calculatePriceChange } from '../features/shared/utils/chartHelpers';
+import { OverallSentiment } from '../features/shared/components';
 
-/**
- * EntityPage - Main entity analysis page
- *
- * This file has been refactored from a monolithic 845-line file into a modular,
- * entity-based architecture for better maintainability and scalability.
- *
- * New directory structure:
- * - features/entity/config/: Constants and configuration
- * - features/entity/utils/: Chart helpers, timeframe filters, formatters
- * - features/entity/hooks/: Data fetching hooks (usePriceData, useNewsData, useDailySentiment, useSignificantEvents, useTickerSearch)
- * - features/entity/components/: UI components organized by feature
- * - EntityHeader/: Top navigation bar
- * - EntitySearch/: Ticker search with autocomplete
- * - PerformanceView/: Charts and metrics display container
- * - PriceChart/: Interactive price chart
- * - SentimentChart/: Daily sentiment bar chart
- * - OverallSentiment/: Sentiment summary metrics
- * - SignificantEvents/: Event list sidebar
- * - RelatedNews/: News feed sidebar
- */
 const EntityPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
   const [activeSubTab, setActiveSubTab] = useState('overview');
+
+  // Watchlist functionality
+  const { watchlist, addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
+  const isFollowing = isInWatchlist(ticker);
+
+  const handleFollowClick = () => {
+    if (isFollowing) {
+      removeFromWatchlist(ticker);
+    } else {
+      addToWatchlist(ticker, companyName);
+    }
+  };
 
   // Session management
   useEffect(() => {
@@ -69,27 +65,40 @@ const EntityPage = () => {
     const newTicker = symbol.toUpperCase().trim();
     setTicker(newTicker);
     setSearchParams({ ticker: newTicker });
-    setActiveSubTab('overview'); // Reset to overview when ticker changes
+    setActiveSubTab('overview');
   };
 
-  // Sub-navigation items
-  const subNavItems = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'performance', label: 'Performance' },
-    { id: 'sentiment', label: 'Sentiment' },
-    { id: 'news', label: 'News' },
-    { id: 'events', label: 'Events' },
-  ];
+  // Sub-navigation items - ALL TABS
+const subNavItems = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'sentiment', label: 'Sentiment' },
+  { id: 'news', label: 'News' },
+  { id: 'events', label: 'Events' },
+  { id: 'companyinfo', label: 'Company Info' },
+  { id: 'financials', label: 'Financials' },
+];
 
   // Fetch all data using custom hooks
-  const { priceData1Y, companyName, currency, lastFetched, exchange, market, marketState } = usePriceData(ticker);
+  const { priceData1Y, companyName, currency, lastFetched } = usePriceData(ticker);
   const { news, sentiment } = useNewsData(ticker);
   const { dailySentiment } = useDailySentiment(ticker);
   const { significantEvents } = useSignificantEvents(ticker);
 
+  // Calculate current price and changes for header
+  const chartData = priceData1Y?.map((point, i) => ({
+    x: i,
+    y: parseFloat(point.close) || parseFloat(point.price) || 0,
+    date: point.date,
+    time: point.time
+  })) || [];
+
+  const { priceChange, priceChangePercent } = calculatePriceChange(chartData);
+  const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Top Navigation Header */}
       <AppHeader
         activeTab="entity"
         onLogout={handleLogout}
@@ -97,59 +106,120 @@ const EntityPage = () => {
         showEntitySearch={true}
       />
 
-      {/* Sub Navigation */}
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8 overflow-x-auto">
-            {subNavItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveSubTab(item.id)}
-                className={`py-3 px-1 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                  activeSubTab === item.id
-                    ? 'border-gray-900 text-gray-900 font-semibold'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+      {/* Dashboard Layout: Sidebar + Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar 
+          currentTicker={ticker}
+          onTickerSelect={handleTickerSelect}
+          watchlist={watchlist}
+        />
+
+        {/* Main Content */}
+<main className="flex-1 overflow-y-auto bg-white">
+  {/* Company Header - Bloomberg Style with Sentiment */}
+  <div className="border-b border-gray-200 px-6 py-4">
+    <div className="flex items-start justify-between gap-8">
+      {/* Left Side - Company Info */}
+      <div className="flex-1">
+        {/* Company Name Row */}
+        <div className="flex items-center gap-3 mb-3">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {companyName || ticker}
+          </h1>
+          <button 
+            onClick={handleFollowClick}
+            className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${
+              isFollowing 
+                ? 'bg-gray-100 text-gray-900 border border-gray-300 hover:bg-gray-200' 
+                : 'bg-black text-white hover:bg-gray-800'
+            }`}
+          >
+            {isFollowing ? '✓ Following' : '+ Follow'}
+          </button>
+        </div>
+
+        {/* Ticker and Exchange Info */}
+        <p className="text-sm text-gray-600 mb-4">
+          {ticker}:{currency} · Nasdaq GS (USD) · Market closed
+        </p>
+
+        {/* Large Price Display */}
+        <div className="flex items-baseline gap-3 mb-2">
+          <div className="text-5xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {currentPrice ? formatPrice(currentPrice.y, currency) : '--'}
+          </div>
+          <div className={`flex items-center gap-2 text-xl font-semibold ${getPriceChangeColor(priceChange)}`}>
+            <span>{getPriceChangeArrow(priceChange)}</span>
+            <span>{Math.abs(priceChange).toFixed(2)}</span>
+            <span className="text-lg">
+              {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
+            </span>
           </div>
         </div>
-      </nav>
 
-      {/* Main Content */}
-      <main className="p-4 sm:p-6 lg:p-8">
-        {/* Page Header */}
-        <section className="py-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {companyName || ticker}
-            </h1>
-            <div className="mt-1 flex items-center space-x-2 text-base text-gray-500">
-              <span>{ticker}:{exchange}</span>
-              <span aria-hidden="true">·</span>
-              <span>{market} ({currency})</span>
-              <span aria-hidden="true">·</span>
-              <span>{marketState}</span>
-            </div>
-          </div>
-        </section>
+        {/* Timestamp */}
+        <p className="text-sm text-gray-500 italic">
+          As of {currentPrice?.date ? new Date(currentPrice.date).toLocaleString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true,
+            timeZoneName: 'short',
+            month: 'numeric',
+            day: 'numeric',
+            year: '2-digit'
+          }) : 'Loading...'}
+        </p>
+      </div>
 
-        <PerformanceView
-          ticker={ticker}
-          companyName={companyName}
-          currency={currency}
-          priceData1Y={priceData1Y}
-          lastFetched={lastFetched}
-          dailySentiment={dailySentiment}
+      {/* Right Side - Overall Sentiment */}
+      <div className="w-80 flex-shrink-0">
+        <OverallSentiment
           sentiment={sentiment}
-          news={news}
-          significantEvents={significantEvents}
-          activeTab={activeSubTab}
-          setActiveTab={setActiveSubTab} // Pass the setter function
+          newsCount={news?.length || 0}
+          className="bg-white border border-gray-200 rounded-lg p-4"
         />
-      </main>
+      </div>
+    </div>
+  </div>
+
+          {/* Sub Navigation */}
+          <nav className="bg-white border-b border-gray-200 px-6">
+            <div className="flex space-x-8">
+              {subNavItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSubTab(item.id)}
+                  className={`py-3 text-sm font-medium transition-colors border-b-2 ${
+                    activeSubTab === item.id
+                      ? 'text-gray-900 border-gray-900'
+                      : 'text-gray-600 hover:text-gray-900 border-transparent'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+
+          {/* Content Area */}
+          <div className="p-6">
+            <PerformanceView
+              ticker={ticker}
+              companyName={companyName}
+              currency={currency}
+              priceData1Y={priceData1Y}
+              lastFetched={lastFetched}
+              dailySentiment={dailySentiment}
+              sentiment={sentiment}
+              news={news}
+              significantEvents={significantEvents}
+              activeTab={activeSubTab}
+              setActiveTab={setActiveSubTab}
+            />
+          </div>
+        </main>
+      </div>
     </div>
   );
 };

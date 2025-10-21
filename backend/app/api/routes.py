@@ -1,5 +1,5 @@
 # app/api/routes.py
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 import yfinance as yf
 from datetime import datetime
 from pymongo import MongoClient

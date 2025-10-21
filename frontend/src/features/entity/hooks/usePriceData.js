@@ -11,9 +11,6 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
   const [priceData1Y, setPriceData1Y] = useState([]);
   const [companyName, setCompanyName] = useState('');
   const [currency, setCurrency] = useState('USD');
-  const [exchange, setExchange] = useState('');
-  const [market, setMarket] = useState('');
-  const [marketState, setMarketState] = useState('');
   const [lastFetched, setLastFetched] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -29,11 +26,8 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
         const data = await response.json();
 
         setPriceData1Y(data.prices || []);
-        setCompanyName(data.company_name || data.longname || data.shortname || '');
+        setCompanyName(data.company_name || '');
         setCurrency(data.currency || 'USD');
-        setExchange(data.exchange || '');
-        setMarket(data.market || '');
-        setMarketState(data.market_state || '');
         setLastFetched(new Date());
       } catch (err) {
         console.error('Error fetching price data:', err);
@@ -58,11 +52,8 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
         const data = await response.json();
 
         setPriceData1Y(data.prices || []);
-        setCompanyName(data.company_name || data.longname || data.shortname || '');
+        setCompanyName(data.company_name || '');
         setCurrency(data.currency || 'USD');
-        setExchange(data.exchange || '');
-        setMarket(data.market || '');
-        setMarketState(data.market_state || '');
         setLastFetched(new Date());
       } catch (err) {
         console.error('Error polling price data:', err);
@@ -76,9 +67,6 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
     priceData1Y,
     companyName,
     currency,
-    exchange,
-    market,
-    marketState,
     lastFetched,
     loading,
     error

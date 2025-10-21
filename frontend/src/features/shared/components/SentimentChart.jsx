@@ -19,7 +19,7 @@ const SentimentChart = ({
   dailySentiment,
   sentimentBars: preProcesedBars,
   daysToShow = SENTIMENT_CHART_CONFIG.daysToShow,
-  className = 'px-6 pb-6'
+  className = 'p-6'
 }) => {
   const [hoveredBar, setHoveredBar] = useState(null);
   const [visibleHeadlines, setVisibleHeadlines] = useState(DEFAULT_VISIBLE_HEADLINES);
@@ -64,7 +64,7 @@ const SentimentChart = ({
           {/* Y-axis labels and grid lines */}
           <g className="text-gray-400 text-xs">
             {SENTIMENT_CHART_CONFIG.yAxisValues.map((value, i) => {
-              const yPos = 40 + i * 65;
+              const yPos = 40 + i * 60;
               return (
                 <g key={i}>
                   <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
@@ -88,8 +88,8 @@ const SentimentChart = ({
             const barWidth = SENTIMENT_CHART_CONFIG.barWidth;
             const barSpacing = 680 / dailySentimentBars.length;
             const x = 70 + i * barSpacing + (barSpacing - barWidth) / 2;
-            const zeroY = 170; // Middle of chart (0 value)
-            const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
+            const zeroY = 160; // Middle of chart (0 value) - adjusted for new scale
+            const scoreHeight = Math.abs(bar.score) * 120; // Scale: 1.0 = 120px (total range 240px for -1 to 1)
             const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
             const barColor = getBarColor(bar.score);
 
@@ -141,7 +141,7 @@ const SentimentChart = ({
         {/* Hover Tooltip */}
         {hoveredBar !== null && dailySentimentBars[hoveredBar] && (
           <div
-            className="absolute bg-white border-2 border-blue-400 rounded-lg shadow-2xl p-4 z-30 overflow-y-auto"
+            className="absolute bg-white border-2 border-blue-400 rounded-lg shadow-2xl z-30"
             style={{
               left: `${Math.min(
                 Math.max(
@@ -153,9 +153,11 @@ const SentimentChart = ({
                 ),
                 600
               )}px`,
-              top: '100px',
+              top: '80px',
               width: '320px',
-              maxHeight: '400px'
+              maxHeight: '280px',
+              display: 'flex',
+              flexDirection: 'column'
             }}
             onMouseEnter={() => setHoveredBar(hoveredBar)}
             onMouseLeave={() => {
@@ -163,8 +165,8 @@ const SentimentChart = ({
               setVisibleHeadlines(DEFAULT_VISIBLE_HEADLINES);
             }}
           >
-            {/* Tooltip Header */}
-            <div className="mb-3 pb-2 border-b border-gray-200">
+            {/* Tooltip Header - Fixed at top */}
+            <div className="p-3 pb-2 border-b border-gray-200" style={{ flexShrink: 0 }}>
               <div className="text-sm font-semibold text-gray-700">
                 {dailySentimentBars[hoveredBar].label}
               </div>
@@ -188,61 +190,61 @@ const SentimentChart = ({
               </div>
             </div>
 
-            {/* Headlines List */}
+            {/* Headlines List - Scrollable */}
             {dailySentimentBars[hoveredBar].headlines &&
               dailySentimentBars[hoveredBar].headlines.length > 0 && (
-                <div>
-                  <div className="text-xs font-semibold text-gray-700 mb-2">
-                    Most Polar Headlines (Top{' '}
-                    {Math.min(visibleHeadlines, dailySentimentBars[hoveredBar].headlines.length)})
+                <>
+                  <div className="px-3 pt-2 pb-1" style={{ flexShrink: 0 }}>
+                    <div className="text-xs font-semibold text-gray-700">
+                      Most Polar Headlines (Top{' '}
+                      {Math.min(visibleHeadlines, dailySentimentBars[hoveredBar].headlines.length)})
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    {dailySentimentBars[hoveredBar].headlines
-                      .slice(0, visibleHeadlines)
-                      .map((headline, idx) => (
-                        <div key={idx} className="border-l-2 border-blue-300 pl-2 py-1">
-                          <a
-                            href={headline.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-gray-800 hover:text-blue-600 hover:underline leading-tight block cursor-pointer transition-colors"
-                            style={{
-                              pointerEvents: 'auto',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden'
-                            }}
-                          >
-                            {headline.title}
-                          </a>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-xs text-gray-500">{headline.provider}</span>
-                            <span
-                              className={`text-xs font-semibold ${
-                                headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
-                              }`}
+                  <div className="px-3 overflow-y-auto" style={{ flex: 1, minHeight: 0 }}>
+                    <div className="space-y-2 pb-2">
+                      {dailySentimentBars[hoveredBar].headlines
+                        .slice(0, visibleHeadlines)
+                        .map((headline, idx) => (
+                          <div key={idx} className="border-l-2 border-blue-300 pl-2 py-1">
+                            <a
+                              href={headline.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-gray-800 hover:text-blue-600 hover:underline leading-snug block cursor-pointer transition-colors"
+                              style={{ pointerEvents: 'auto' }}
                             >
-                              {headline.sentiment_score >= 0 ? '+' : ''}
-                              {headline.sentiment_score.toFixed(2)}
-                            </span>
+                              {headline.title}
+                            </a>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-xs text-gray-500">{headline.provider}</span>
+                              <span
+                                className={`text-xs font-semibold ${
+                                  headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
+                                }`}
+                              >
+                                {headline.sentiment_score >= 0 ? '+' : ''}
+                                {headline.sentiment_score.toFixed(2)}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                    </div>
                   </div>
 
-                  {/* View More Button */}
+                  {/* View More Button - Fixed at bottom */}
                   {visibleHeadlines < dailySentimentBars[hoveredBar].headlines.length && (
-                    <button
-                      onClick={() => setVisibleHeadlines((prev) => prev + 5)}
-                      className="mt-3 w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded transition-colors"
-                    >
-                      View More (
-                      {dailySentimentBars[hoveredBar].headlines.length - visibleHeadlines}{' '}
-                      remaining)
-                    </button>
+                    <div className="p-3 pt-2 border-t border-gray-200 bg-white rounded-b-lg" style={{ flexShrink: 0 }}>
+                      <button
+                        onClick={() => setVisibleHeadlines((prev) => prev + 5)}
+                        className="w-full py-2 px-3 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded transition-colors"
+                      >
+                        View More (
+                        {dailySentimentBars[hoveredBar].headlines.length - visibleHeadlines}{' '}
+                        remaining)
+                      </button>
+                    </div>
                   )}
-                </div>
+                </>
               )}
           </div>
         )}
