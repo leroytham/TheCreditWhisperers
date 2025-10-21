@@ -1,11 +1,7 @@
 # app/api/routes.py
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 import yfinance as yf
 from datetime import datetime
-
-import msal
-import os
-from fastapi.responses import RedirectResponse
 
 # Import the modular services
 from app.services.news_service import news_service_instance
@@ -13,14 +9,7 @@ from app.services.stock_data_service import stock_data_service
 from app.services.sentiment_service import sentiment_service
 from app.services.market_analysis_service import market_analysis_service
 
-
-CLIENT_ID = os.getenv("Application_ID", "<your-client-id>")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-
-
-
-
-
+# Create an instance of the API Router. All endpoints will be attached to this.
 router = APIRouter()
 
 # --- Example of a GET endpoint for categorized news ---
@@ -388,72 +377,3 @@ def search_ticker(q: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
-
-
-
-
-REDIRECT_URI = os.getenv("AZURE_REDIRECT_URI", "http://localhost:8000/api/auth/callback")
-AUTHORITY = "https://login.microsoftonline.com/common"
-SCOPES = ["user.read"]
-
-# Initialize MSAL Confidential Client
-cca = msal.ConfidentialClientApplication(
-    client_id=CLIENT_ID,
-    authority=AUTHORITY,
-    client_credential=CLIENT_SECRET,
-)
-
-
-@router.get("/login")
-def azure_login():
-    """
-    Redirects the user to Microsoft login page.
-    """
-    try:
-        auth_url = cca.get_authorization_request_url(
-            SCOPES,
-            redirect_uri=REDIRECT_URI,
-        )
-        return RedirectResponse(auth_url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Azure login init failed: {str(e)}")
-
-
-@router.get("/auth/callback")
-async def azure_auth_callback(request: Request):
-    """
-    Handles redirect from Azure after login.
-    Exchanges authorization code for access token, then redirects to frontend.
-    """
-    try:
-        code = request.query_params.get("code")
-        if not code:
-            raise HTTPException(status_code=400, detail="Missing authorization code")
-
-        result = cca.acquire_token_by_authorization_code(
-            code,
-            scopes=SCOPES,
-            redirect_uri=REDIRECT_URI,
-        )
-
-        if "error" in result:
-            print("Azure login error:", result)
-            return RedirectResponse("http://localhost:3000/login?error=azure_failed")
-
-        account = result.get("id_token_claims", {})
-        username = account.get("preferred_username", "unknown")
-
-        print("Azure Login Success:", username)
-
-        return RedirectResponse(
-            f"http://localhost:3000/portfolio?user={username}"
-        )
-
-    except Exception as e:
-        print("Azure login callback error:", e)
-        return RedirectResponse("http://localhost:3000/login?error=azure_failed")
-
-
-
-
-#python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
