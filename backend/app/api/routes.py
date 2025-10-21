@@ -2,6 +2,8 @@
 from fastapi import APIRouter, HTTPException, Request
 import yfinance as yf
 from datetime import datetime
+from pymongo import MongoClient
+import certifi
 
 import msal
 import os
@@ -18,7 +20,11 @@ CLIENT_ID = os.getenv("Application_ID", "<your-client-id>")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
 
-
+mongo_uri = os.getenv("MONGO_URI_PYTHON")
+client = MongoClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
+db = client["FYP"]  
+accounts_col = db["Account_Details"]
+holdings_col = db["Stock_Holding"]
 
 
 router = APIRouter()
@@ -444,6 +450,7 @@ async def azure_auth_callback(request: Request):
         username = account.get("preferred_username", "unknown")
 
         print("Azure Login Success:", username)
+        print("Account?: ", account)
 
         return RedirectResponse(
             f"http://localhost:3000/portfolio?user={username}"
@@ -456,4 +463,327 @@ async def azure_auth_callback(request: Request):
 
 
 
+@router.post("/portfolio/save")
+async def save_portfolio(data: dict):
+    """
+    Save a new portfolio (Account Details + Holdings) into MongoDB.
+    Only saves if ALL stock symbols are valid.
+    """
+    try:
+        username = data.get("username")
+        account = data.get("accountDetails")
+        holdings = data.get("holdings", [])
+
+        if not username or not account:
+            raise HTTPException(status_code=400, detail="Missing username or account details")
+
+        account_name = account["accountName"].strip()
+        account_no = account["accountNumber"].strip()
+
+        # 1️. Check if account already exists
+        existing_account = accounts_col.find_one({
+            "username": username,
+            "client_account_name": account_name,
+            "account_no": account_no
+        })
+
+        if existing_account:
+            raise HTTPException(status_code=400, detail="Account already exists for this user.")
+
+        # 2️. Validate ALL stock symbols before saving
+        invalid_symbols = []
+        for h in holdings:
+            symbol = h.get("symbol", "").upper().strip()
+            quantity = float(h.get("quantity", 0))
+            purchase_price = float(h.get("purchasePrice", 0))
+
+            if not symbol or quantity <= 0 or purchase_price <= 0:
+                invalid_symbols.append(symbol or "(empty)")
+                continue
+
+            # Validate using yfinance
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="1d")
+                if hist.empty:
+                    invalid_symbols.append(symbol)
+            except Exception:
+                invalid_symbols.append(symbol)
+
+        # 3️. If any invalid stock symbol, reject the entire save
+        if invalid_symbols:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid stock symbols detected: {', '.join(invalid_symbols)}. "
+                       f"Portfolio not saved."
+            )
+
+        # 4️. Insert account (all stocks are valid at this point)
+        account_record = {
+            "username": username,
+            "client_account_name": account_name,
+            "account_no": account_no,
+            "open_date": account["openDate"],
+            "created_at": datetime.utcnow()
+        }
+        accounts_col.insert_one(account_record)
+
+        # 5️. Insert holdings or merge if exists
+        holdings_added, holdings_updated = 0, 0
+
+        for h in holdings:
+            symbol = h["symbol"].upper().strip()
+            quantity = float(h["quantity"])
+            purchase_price = float(h["purchasePrice"])
+
+            existing_holding = holdings_col.find_one({
+                "username": username,
+                "client_account_name": account_name,
+                "symbol": symbol
+            })
+
+            if existing_holding:
+                # Weighted average update
+                old_qty = float(existing_holding["quantity"])
+                old_price = float(existing_holding["purchase_price"])
+                new_qty = old_qty + quantity
+                new_price = ((old_qty * old_price) + (quantity * purchase_price)) / new_qty
+
+                holdings_col.update_one(
+                    {
+                        "username": username,
+                        "client_account_name": account_name,
+                        "symbol": symbol
+                    },
+                    {"$set": {
+                        "quantity": new_qty,
+                        "purchase_price": round(new_price, 2),
+                        "updated_at": datetime.utcnow()
+                    }}
+                )
+                holdings_updated += 1
+            else:
+                holding_record = {
+                    "username": username,
+                    "client_account_name": account_name,
+                    "symbol": symbol,
+                    "quantity": quantity,
+                    "purchase_price": purchase_price,
+                    "created_at": datetime.utcnow()
+                }
+                holdings_col.insert_one(holding_record)
+                holdings_added += 1
+
+        return {
+            "message": "✅ Portfolio saved successfully!",
+            "account_added": True,
+            "holdings_added": holdings_added,
+            "holdings_updated": holdings_updated
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print("Error saving portfolio:", e)
+        raise HTTPException(status_code=500, detail=f"Failed to save portfolio: {str(e)}")
+
+
+
+
+
+@router.get("/accounts/{username}")
+async def get_accounts_for_user(username: str):
+    """
+    Get all client accounts for a given username.
+    Returns client_account_name and account_no.
+    """
+    try:
+        accounts = list(accounts_col.find(
+            {"username": username},
+            {"_id": 0, "client_account_name": 1, "account_no": 1}
+        ))
+
+        if not accounts:
+            return {"accounts": []}
+
+        return {"accounts": accounts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch accounts: {str(e)}")
+
+
+
+
+@router.get("/portfolio/{username}/{account_name}")
+async def get_portfolio_details(username: str, account_name: str):
+    """
+    Returns the account details and all holdings for this user/account.
+    """
+    try:
+        # Fetch account details
+        account = accounts_col.find_one(
+            {"username": username, "client_account_name": account_name},
+            {"_id": 0}
+        )
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        # Fetch holdings
+        holdings = list(holdings_col.find(
+            {"username": username, "client_account_name": account_name},
+            {"_id": 0}
+        ))
+
+        return {"account": account, "holdings": holdings}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch portfolio: {str(e)}")
+
+
+
+
+
+
+@router.put("/portfolio/update")
+async def update_portfolio(data: dict):
+    try:
+        username = data.get("username")
+        account = data.get("accountDetails")
+        holdings = data.get("holdings", [])
+
+        if not username or not account:
+            raise HTTPException(status_code=400, detail="Missing username or account details")
+
+        if not holdings:
+            raise HTTPException(status_code=400, detail="Holdings list is empty")
+
+        # Step 1: Validate all stock symbols
+        invalid_symbols = []
+        for h in holdings:
+            symbol = h.get("symbol")
+            if not symbol:
+                invalid_symbols.append("(empty symbol)")
+                continue
+
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            if not info or "shortName" not in info:
+                invalid_symbols.append(symbol)
+
+        if invalid_symbols:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid stock symbol(s): {', '.join(invalid_symbols)}"
+            )
+
+        # Step 2: Update the account details
+        result = accounts_col.update_one(
+            {"username": username, "client_account_name": account["accountName"]},
+            {"$set": {
+                "account_no": account.get("accountNumber"),
+                "open_date": account.get("openDate"),
+                "updated_at": datetime.utcnow()
+            }}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        # Step 3: Clear old holdings for this account
+        holdings_col.delete_many({
+            "username": username,
+            "client_account_name": account["accountName"]
+        })
+
+        # Step 4: Insert validated holdings
+        new_holdings = []
+        for h in holdings:
+            new_holdings.append({
+                "username": username,
+                "client_account_name": account["accountName"],
+                "symbol": h["symbol"].upper(),
+                "quantity": float(h["quantity"]) if h["quantity"] else 0,
+                "purchase_price": float(h["purchasePrice"]) if h["purchasePrice"] else 0,
+                "updated_at": datetime.utcnow()
+            })
+
+        if new_holdings:
+            holdings_col.insert_many(new_holdings)
+
+        return {"message": "Portfolio updated successfully!"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error updating portfolio:", e)
+        raise HTTPException(status_code=500, detail=f"Invalid Stock Symbol: {str(e)}")
+
+
+@router.get("/portfolio/holdings/{username}/{account_name}")
+async def get_portfolio_holdings(username: str, account_name: str):
+    """
+    Retrieve holdings for a user and account, aggregate duplicates,
+    calculate avg cost, market price, and P/L.
+    """
+    try:
+        holdings_cursor = holdings_col.find({
+            "username": username,
+            "client_account_name": account_name
+        })
+
+        holdings_list = list(holdings_cursor)
+        if not holdings_list:
+            return {"holdings": []}
+
+        aggregated = {}
+        for h in holdings_list:
+            symbol = h.get("symbol", "").upper()
+            qty = float(h.get("quantity", 0))
+            price = float(h.get("purchase_price", 0))
+            if symbol not in aggregated:
+                aggregated[symbol] = {"total_qty": 0, "total_cost": 0}
+            aggregated[symbol]["total_qty"] += qty
+            aggregated[symbol]["total_cost"] += qty * price
+
+        results = []
+        for symbol, data in aggregated.items():
+            total_qty = data["total_qty"]
+            avg_cost = round(data["total_cost"] / total_qty, 2) if total_qty > 0 else 0.0
+
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="1d")
+                market_price = round(float(hist["Close"].iloc[-1]), 2) if not hist.empty else None
+            except Exception:
+                market_price = None
+
+            if market_price:
+                pl_absolute = round(float((market_price - avg_cost) * total_qty), 2)
+                pl_percent = round(float(((market_price - avg_cost) / avg_cost) * 100), 2)
+                is_positive = bool(pl_absolute >= 0)
+            else:
+                pl_absolute, pl_percent, is_positive = None, None, None
+
+            results.append({
+                "symbol": symbol,
+                "quantity": round(float(total_qty), 2),
+                "averageCostPrice": float(avg_cost),
+                "marketPrice": float(market_price) if market_price else None,
+                "profitLoss": float(pl_absolute) if pl_absolute is not None else None,
+                "gainLossPercent": float(pl_percent) if pl_percent is not None else None,
+                "isPositive": bool(is_positive) if is_positive is not None else None,
+                "newsVolume": "N/A",
+                "sentiment": "N/A",
+                "position": "Long"
+            })
+
+        return {"holdings": results}
+
+    except Exception as e:
+        print("Error fetching holdings:", e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
+
+
+
+
 #python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+#source venv/bin/activate

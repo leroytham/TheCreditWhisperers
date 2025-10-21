@@ -33,6 +33,10 @@ const PortfolioPage = () => {
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
   const [isAddPortfolioModalOpen, setIsAddPortfolioModalOpen] = useState(false);
   const [isEditPortfolioModalOpen, setIsEditPortfolioModalOpen] = useState(false);
+  const [selectedAccountName, setSelectedAccountName] = useState(
+    sessionStorage.getItem("selectedAccountName") || ""
+  );
+
 
   // Session management
   useEffect(() => {
@@ -101,14 +105,18 @@ const PortfolioPage = () => {
           <div className="flex space-x-2">
             <button
               onClick={() => setIsEditPortfolioModalOpen(true)}
+              disabled={!selectedAccountName}
               className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
             >
               EDIT PORTFOLIO
             </button>
             <button
               onClick={() => setIsAddPortfolioModalOpen(true)}
-              className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-gray-800 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-            >
+              className={`px-4 py-2 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 
+                ${selectedAccountName
+                    ? "bg-gray-800 text-white hover:bg-gray-900"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"}`}
+              >
               ADD NEW PORTFOLIO
             </button>
           </div>

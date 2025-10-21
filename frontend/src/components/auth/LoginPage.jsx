@@ -129,7 +129,7 @@ export default function LoginCard() {
               alt="Microsoft"
               className="ms-logo"
             />
-            <span>Sign in with Microsoft (Dev Bypass)</span>
+            <span>Sign in with Microsoft</span>
           </button>
         </div>
 
