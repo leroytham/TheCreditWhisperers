@@ -1,113 +1,146 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, Search, User } from 'lucide-react';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { Copy, Info } from 'lucide-react';
 
+/**
+ * ClientInfoBar Component
+ *
+ * Displays client/account information with dropdown selector
+ */
 const ClientInfoBar = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [selectedAccount, setSelectedAccount] = useState({
+    id: 'MX555909',
+    name: 'Johnson J',
+  });
   const [searchTerm, setSearchTerm] = useState('');
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  // Fetch accounts for current logged-in user
-  useEffect(() => {
-    const username = sessionStorage.getItem('user');
-    if (!username) return;
+  const accounts = [
+    { id: 'MX555909', name: 'Johnson J' },
+    { id: 'MX555910', name: 'Johnson Family Trust' },
+    { id: 'MX555911', name: 'Johnson IRA' },
+  ];
 
-    const fetchAccounts = async () => {
-      try {
-        const response = await axios.get(`http://localhost:8000/api/accounts/${username}`);
-        setAccounts(response.data.accounts || []);
-      } catch (error) {
-        console.error('Failed to fetch accounts:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAccounts();
-  }, []);
-
-  // Filter accounts by search
   const filteredAccounts = accounts.filter(
-    (a) =>
-      a.client_account_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      a.account_no.toLowerCase().includes(searchTerm.toLowerCase())
+    (account) =>
+      account.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      account.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleAccountSelect = (account) => {
     setSelectedAccount(account);
     setIsDropdownOpen(false);
     setSearchTerm('');
-
-    // Store selected account name for later use
-    sessionStorage.setItem('selectedAccountName', account.client_account_name);
-    sessionStorage.setItem('selectedAccountNo', account.account_no);
   };
 
   return (
-    <section className="bg-white px-4 py-3 border-b border-gray-200 shadow-sm">
-      <div className="flex items-center justify-between">
-        {/* Client / Account Selector */}
-        <div className="relative flex-1 max-w-lg">
-          <button
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="w-full bg-gray-900 text-white flex items-center justify-between px-4 py-3 rounded-lg shadow hover:bg-gray-800 transition-all duration-150"
-          >
-            <div className="flex items-center space-x-3">
-              <User className="h-5 w-5 text-gray-300" />
-              <div className="flex flex-col text-left">
-                <span className="text-xs text-gray-400 uppercase tracking-wide">
-                  Client / Account
-                </span>
-                {selectedAccount ? (
-                  <span className="text-sm font-semibold text-gray-100">
-                    {selectedAccount.account_no} — {selectedAccount.client_account_name}
-                  </span>
-                ) : (
-                  <span className="text-sm italic text-gray-400">
-                    {loading ? 'Loading accounts...' : 'Select an account'}
-                  </span>
-                )}
-              </div>
-            </div>
-            <ChevronDown className="h-5 w-5 text-gray-300" />
-          </button>
-
-          {/* Dropdown Menu */}
-          {isDropdownOpen && (
-            <div className="absolute top-full mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden animate-fadeIn">
-              <div className="p-3 border-b border-gray-100 flex items-center space-x-2">
-                <Search className="h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search accounts..."
-                  className="w-full border-none focus:ring-0 text-sm text-gray-700 placeholder-gray-400"
+    <section className="bg-white p-4 border-b border-gray-200 shadow-sm">
+      <div className="flex items-stretch justify-between w-full gap-4">
+        {/* Card 1: Client / Account Selector */}
+        <div className="bg-gray-800 text-white p-3 rounded-md flex justify-between flex-1 relative">
+          <div className="flex flex-col justify-between">
+            <p className="text-xs text-gray-300 uppercase tracking-wider">Client / Account</p>
+            <p className="font-semibold text-sm">
+              {selectedAccount.id} - {selectedAccount.name}
+            </p>
+          </div>
+          <div className="flex flex-col justify-end">
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="text-gray-300 hover:text-white ml-4"
+            >
+              <svg
+                className="h-5 w-5"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
                 />
-              </div>
-              <div className="max-h-56 overflow-y-auto">
-                {filteredAccounts.length > 0 ? (
-                  filteredAccounts.map((account) => (
+              </svg>
+            </button>
+
+            {/* Dropdown Menu */}
+            {isDropdownOpen && (
+              <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-20 text-gray-800">
+                <div className="p-3 border-b flex justify-between items-center">
+                  <h4 className="font-semibold text-sm">Select Account</h4>
+                  <button
+                    onClick={() => setIsDropdownOpen(false)}
+                    className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                  >
+                    &times;
+                  </button>
+                </div>
+                <div className="p-2 border-b">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search accounts..."
+                    className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="py-1 max-h-48 overflow-y-auto">
+                  {filteredAccounts.map((account) => (
                     <button
-                      key={account.account_no}
+                      key={account.id}
                       onClick={() => handleAccountSelect(account)}
-                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                        selectedAccount?.account_no === account.account_no
-                          ? 'bg-blue-50 font-semibold text-blue-700'
-                          : 'text-gray-700'
+                      className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
+                        selectedAccount.id === account.id ? 'bg-blue-50' : ''
                       }`}
                     >
-                      {account.client_account_name} - {account.account_no}
+                      {account.id} - {account.name}
                     </button>
-                  ))
-                ) : (
-                  <p className="text-gray-400 text-sm px-4 py-3 italic">No accounts found</p>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+
+        {/* Card 2: Consultworks Relationship */}
+        <div className="bg-white p-3 rounded-md shadow-sm border border-gray-200 flex justify-between flex-1">
+          <div className="flex flex-col justify-between">
+            <p className="text-xs text-gray-500 uppercase tracking-wider">
+              Consultworks Relationship
+            </p>
+            <p className="font-semibold text-sm">Johnson Family</p>
+          </div>
+          <div className="flex flex-col justify-end">
+            <button className="text-gray-400 hover:text-gray-600">
+              <Copy className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Card 3: Owner Information */}
+        <div className="bg-white p-3 rounded-md shadow-sm border border-gray-200 flex justify-between flex-1">
+          <div className="flex flex-col justify-between">
+            <p className="text-xs text-gray-500 uppercase tracking-wider">
+              Owner (Tax Reporter for the Account)
+            </p>
+            <p className="font-semibold text-sm">Jane Johnson - 60 yrs</p>
+          </div>
+          <div className="flex flex-col justify-end">
+            <button className="text-gray-400 hover:text-gray-600">
+              <Info className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Card 4: Total Account Value */}
+        <div className="bg-white p-3 rounded-md shadow-sm border border-gray-200 flex flex-1">
+          <div className="flex flex-col justify-between w-full">
+            <p className="text-xs text-gray-500 uppercase tracking-wider">
+              Total Account Value
+            </p>
+            <p className="font-semibold text-sm text-left">USD 632,496.53</p>
+          </div>
         </div>
       </div>
     </section>
