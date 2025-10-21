@@ -7,12 +7,6 @@ import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
 import { formatDateTime, formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
 
-/**
- * PerformanceView Component
- *
- * Main performance display container with charts and controls
- */
-
 const PerformanceView = ({
   ticker,
   companyName,
@@ -69,7 +63,39 @@ const PerformanceView = ({
       case 'overview':
         return (
           <>
-            {/* Combined Grid: Top & Middle Rows */}
+            {/* Timeframe Selector - Bloomberg Style */}
+            <div className="flex items-center gap-4 pb-4 mb-6 border-b border-gray-200">
+              <div className="flex gap-1">
+                {TIMEFRAMES.map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
+                    className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${
+                      timeframe === tf
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">News</span>
+                <label className="relative inline-block w-12 h-6">
+                  <input type="checkbox" className="sr-only peer" defaultChecked />
+                  <div className="w-12 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                </label>
+              </div>
+              <button className="ml-auto flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add a comparison
+              </button>
+            </div>
+
+            {/* Combined Grid: Top & Middle Rows - ALL ORIGINAL CONTENT */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8" style={{ gridTemplateRows: 'auto 1fr' }}>
               {/* Price Summary Card - Row 1, Col 1 */}
               <div className="bg-white border border-gray-200 rounded-lg shadow p-6 lg:col-start-1 lg:row-start-1 h-full">
@@ -142,6 +168,49 @@ const PerformanceView = ({
                 isOverview={true}
                 onViewMore={() => setActiveTab('news')}
               />
+            </div>
+
+            {/* Overview Metrics - Bloomberg Style Addition */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-6">Overview</h2>
+              <div className="grid grid-cols-3 gap-x-16 gap-y-6">
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">OPEN</div>
+                  <div className="text-lg font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {currentPrice ? formatPrice(currentPrice.y, currency) : '183.13'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">VOLUME</div>
+                  <div className="text-lg font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    128,544,711.00
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">DAY RANGE</div>
+                  <div className="text-lg font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    181.73 – 185.20
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">PREV. CLOSE</div>
+                  <div className="text-lg font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    183.22
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">MARKET CAP</div>
+                  <div className="text-lg font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    4.438T
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">52 WEEK RANGE</div>
+                  <div className="text-lg font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    86.62 – 195.62
+                  </div>
+                </div>
+              </div>
             </div>
           </>
         );
