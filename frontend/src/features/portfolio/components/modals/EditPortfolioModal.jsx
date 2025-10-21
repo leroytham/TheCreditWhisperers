@@ -16,6 +16,47 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
     openDate: '',
   });
   const [holdings, setHoldings] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const updateAccountDetails = (field, value) => {
+    setAccountDetails(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const validateForm = () => {
+    if (!accountDetails.accountName.trim()) {
+      alert('Please enter an account name.');
+      return false;
+    }
+    if (!accountDetails.accountNumber.trim()) {
+      alert('Please enter an account number.');
+      return false;
+    }
+    if (!accountDetails.openDate) {
+      alert('Please select an open date.');
+      return false;
+    }
+    
+    // Validate each holding
+    for (let i = 0; i < holdings.length; i++) {
+      const holding = holdings[i];
+      if (!holding.symbol.trim()) {
+        alert(`Please enter a symbol for holding ${i + 1}.`);
+        return false;
+      }
+      if (!holding.quantity || holding.quantity <= 0) {
+        alert(`Please enter a valid quantity for holding ${i + 1}.`);
+        return false;
+      }
+      if (!holding.purchasePrice || holding.purchasePrice <= 0) {
+        alert(`Please enter a valid purchase price for holding ${i + 1}.`);
+        return false;
+      }
+    }
+    return true;
+  };
 
   // Fetch existing portfolio data when modal opens
   useEffect(() => {
@@ -38,6 +79,8 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
 
         if (!data.account) {
           console.error('No account found for this user.');
+          alert('No portfolio data found for the selected account.');
+          handleClose();
           return;
         }
 
@@ -51,13 +94,15 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
         // ✅ Pre-fill holdings
         setHoldings(
           (data.holdings || []).map((h) => ({
-            symbol: h.symbol,
-            quantity: h.quantity,
-            purchasePrice: h.purchase_price,
+            symbol: h.symbol || '',
+            quantity: h.quantity ? h.quantity.toString() : '',
+            purchasePrice: h.purchase_price ? h.purchase_price.toString() : '',
           }))
         );
       } catch (error) {
         console.error('Error loading portfolio:', error);
+        alert('Failed to load portfolio data. Please try again.');
+        handleClose();
       } finally {
         setLoading(false);
       }
@@ -91,12 +136,26 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
 
   const updateHolding = (index, field, value) => {
     const updated = [...holdings];
-    updated[index][field] = value;
+    
+    // Handle numeric fields
+    if (field === 'quantity' || field === 'purchasePrice') {
+      // Allow empty string for editing, but store as string for input control
+      updated[index][field] = value;
+    } else {
+      // For symbol field, convert to uppercase
+      updated[index][field] = field === 'symbol' ? value.toUpperCase() : value;
+    }
+    
     setHoldings(updated);
   };
 
   const handleSave = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
     try {
+      setIsSaving(true);
       const username = sessionStorage.getItem('user');
       const accountName = sessionStorage.getItem('selectedAccountName');
 
@@ -108,7 +167,11 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       const payload = {
         username,
         accountDetails,
-        holdings,
+        holdings: holdings.map(holding => ({
+          ...holding,
+          quantity: parseFloat(holding.quantity),
+          purchasePrice: parseFloat(holding.purchasePrice)
+        })),
       };
 
       const response = await axios.put(
@@ -120,7 +183,13 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       handleClose();
     } catch (error) {
       console.error('Error saving portfolio:', error);
-      alert('Invalid Stock Symbol.');
+      if (error.response?.data?.detail) {
+        alert(`Error: ${error.response.data.detail}`);
+      } else {
+        alert('Failed to update portfolio. Please check your input and try again.');
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -161,12 +230,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
                 <input
                   type="text"
                   value={accountDetails.accountName}
-                  onChange={(e) =>
-                    setAccountDetails({
-                      ...accountDetails,
-                      accountName: e.target.value,
-                    })
-                  }
+                  onChange={(e) => updateAccountDetails('accountName', e.target.value)}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -175,12 +239,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
                 <input
                   type="text"
                   value={accountDetails.accountNumber}
-                  onChange={(e) =>
-                    setAccountDetails({
-                      ...accountDetails,
-                      accountNumber: e.target.value,
-                    })
-                  }
+                  onChange={(e) => updateAccountDetails('accountNumber', e.target.value)}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -189,12 +248,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
                 <input
                   type="date"
                   value={accountDetails.openDate}
-                  onChange={(e) =>
-                    setAccountDetails({
-                      ...accountDetails,
-                      openDate: e.target.value,
-                    })
-                  }
+                  onChange={(e) => updateAccountDetails('openDate', e.target.value)}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -208,7 +262,13 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
                 Cancel
               </button>
               <button
-                onClick={() => setCurrentStep(2)}
+                onClick={() => {
+                  if (!accountDetails.accountName.trim() || !accountDetails.accountNumber.trim() || !accountDetails.openDate) {
+                    alert('Please fill in all account details before proceeding.');
+                    return;
+                  }
+                  setCurrentStep(2);
+                }}
                 className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-gray-800 hover:bg-gray-900"
               >
                 Next
@@ -256,6 +316,8 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
                             updateHolding(index, 'quantity', e.target.value)
                           }
                           placeholder="e.g., 100"
+                          min="0"
+                          step="1"
                           className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </td>
@@ -267,6 +329,8 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
                             updateHolding(index, 'purchasePrice', e.target.value)
                           }
                           placeholder="e.g., 150.25"
+                          min="0"
+                          step="0.01"
                           className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </td>
@@ -301,9 +365,14 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                disabled={isSaving}
+                className={`px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white ${
+                  isSaving 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                Save Changes
+                {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>

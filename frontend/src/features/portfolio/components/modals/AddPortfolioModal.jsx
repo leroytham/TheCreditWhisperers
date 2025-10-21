@@ -37,11 +37,61 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
 
   const updateHolding = (index, field, value) => {
     const updated = [...holdings];
-    updated[index][field] = value;
+    
+    // Handle numeric fields
+    if (field === 'quantity' || field === 'purchasePrice') {
+      // Allow empty string for editing, but store as string for input control
+      updated[index][field] = value;
+    } else {
+      // For symbol field, convert to uppercase
+      updated[index][field] = field === 'symbol' ? value.toUpperCase() : value;
+    }
+    
     setHoldings(updated);
   };
 
+  const validateForm = () => {
+    if (!accountDetails.accountName.trim()) {
+      alert('Please enter an account name.');
+      return false;
+    }
+    if (!accountDetails.accountNumber.trim()) {
+      alert('Please enter an account number.');
+      return false;
+    }
+    if (!accountDetails.openDate) {
+      alert('Please select an open date.');
+      return false;
+    }
+    if (holdings.length === 0) {
+      alert('Please add at least one holding.');
+      return false;
+    }
+    
+    // Validate each holding
+    for (let i = 0; i < holdings.length; i++) {
+      const holding = holdings[i];
+      if (!holding.symbol.trim()) {
+        alert(`Please enter a symbol for holding ${i + 1}.`);
+        return false;
+      }
+      if (!holding.quantity || holding.quantity <= 0) {
+        alert(`Please enter a valid quantity for holding ${i + 1}.`);
+        return false;
+      }
+      if (!holding.purchasePrice || holding.purchasePrice <= 0) {
+        alert(`Please enter a valid purchase price for holding ${i + 1}.`);
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleSave = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
     try {
       setIsSaving(true);
 
@@ -49,14 +99,17 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       const username = sessionStorage.getItem('user');
       if (!username) {
         alert('User not logged in. Please log in again.');
-        setIsSaving(false);
         return;
       }
 
       const payload = {
         username,
         accountDetails,
-        holdings,
+        holdings: holdings.map(holding => ({
+          ...holding,
+          quantity: parseFloat(holding.quantity),
+          purchasePrice: parseFloat(holding.purchasePrice)
+        })),
       };
 
       console.log('🔹 Sending payload:', payload);
@@ -77,7 +130,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       alert('Portfolio saved successfully!');
       handleClose();
     } catch (error) {
-      console.error(' Error saving portfolio:', error);
+      console.error('Error saving portfolio:', error);
       alert('Error saving portfolio: ' + error.message);
     } finally {
       setIsSaving(false);
@@ -154,6 +207,10 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
               </button>
               <button
                 onClick={() => {
+                  if (!accountDetails.accountName.trim() || !accountDetails.accountNumber.trim() || !accountDetails.openDate) {
+                    alert('Please fill in all account details before proceeding.');
+                    return;
+                  }
                   setCurrentStep(2);
                   if (holdings.length === 0) addHolding();
                 }}
@@ -199,6 +256,8 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
                           placeholder="e.g., 100"
                           value={holding.quantity}
                           onChange={(e) => updateHolding(index, 'quantity', e.target.value)}
+                          min="0"
+                          step="1"
                           className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </td>
@@ -208,6 +267,8 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
                           placeholder="e.g., 150.25"
                           value={holding.purchasePrice}
                           onChange={(e) => updateHolding(index, 'purchasePrice', e.target.value)}
+                          min="0"
+                          step="0.01"
                           className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </td>
@@ -242,9 +303,14 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                disabled={isSaving}
+                className={`px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white ${
+                  isSaving 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                Save Portfolio
+                {isSaving ? 'Saving...' : 'Save Portfolio'}
               </button>
             </div>
           </div>
