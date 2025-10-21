@@ -13,6 +13,7 @@ import { DEFAULT_TICKER } from '../features/shared/utils/constants';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { formatPrice, getPriceChangeColor, getPriceChangeArrow } from '../features/shared/utils/formatters';
 import { calculatePriceChange } from '../features/shared/utils/chartHelpers';
+import { OverallSentiment } from '../features/shared/components';
 
 const EntityPage = () => {
   const navigate = useNavigate();
@@ -67,13 +68,15 @@ const EntityPage = () => {
     setActiveSubTab('overview');
   };
 
-  // Sub-navigation items
+  // Sub-navigation items - ALL TABS
 const subNavItems = [
   { id: 'overview', label: 'Overview' },
   { id: 'performance', label: 'Performance' },
   { id: 'sentiment', label: 'Sentiment' },
   { id: 'news', label: 'News' },
   { id: 'events', label: 'Events' },
+  { id: 'companyinfo', label: 'Company Info' },
+  { id: 'financials', label: 'Financials' },
 ];
 
   // Fetch all data using custom hooks
@@ -113,58 +116,72 @@ const subNavItems = [
         />
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto bg-white">
-          {/* Company Header - Bloomberg Style */}
-          <div className="border-b border-gray-200 px-6 py-4">
-            {/* Company Name Row */}
-            <div className="flex items-center gap-3 mb-3">
-              <h1 className="text-3xl font-bold text-gray-900">
-                {companyName || ticker}
-              </h1>
-              <button 
-                onClick={handleFollowClick}
-                className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${
-                  isFollowing 
-                    ? 'bg-gray-100 text-gray-900 border border-gray-300 hover:bg-gray-200' 
-                    : 'bg-black text-white hover:bg-gray-800'
-                }`}
-              >
-                {isFollowing ? '✓ Following' : '+ Follow'}
-              </button>
-            </div>
+<main className="flex-1 overflow-y-auto bg-white">
+  {/* Company Header - Bloomberg Style with Sentiment */}
+  <div className="border-b border-gray-200 px-6 py-4">
+    <div className="flex items-start justify-between gap-8">
+      {/* Left Side - Company Info */}
+      <div className="flex-1">
+        {/* Company Name Row */}
+        <div className="flex items-center gap-3 mb-3">
+          <h1 className="text-3xl font-bold text-gray-900">
+            {companyName || ticker}
+          </h1>
+          <button 
+            onClick={handleFollowClick}
+            className={`px-4 py-1.5 text-sm font-medium rounded transition-colors ${
+              isFollowing 
+                ? 'bg-gray-100 text-gray-900 border border-gray-300 hover:bg-gray-200' 
+                : 'bg-black text-white hover:bg-gray-800'
+            }`}
+          >
+            {isFollowing ? '✓ Following' : '+ Follow'}
+          </button>
+        </div>
 
-            {/* Ticker and Exchange Info */}
-            <p className="text-sm text-gray-600 mb-4">
-              {ticker}:{currency} · Nasdaq GS (USD) · Market closed
-            </p>
+        {/* Ticker and Exchange Info */}
+        <p className="text-sm text-gray-600 mb-4">
+          {ticker}:{currency} · Nasdaq GS (USD) · Market closed
+        </p>
 
-            {/* Large Price Display */}
-            <div className="flex items-baseline gap-3 mb-2">
-              <div className="text-5xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {currentPrice ? formatPrice(currentPrice.y, currency) : '--'}
-              </div>
-              <div className={`flex items-center gap-2 text-xl font-semibold ${getPriceChangeColor(priceChange)}`}>
-                <span>{getPriceChangeArrow(priceChange)}</span>
-                <span>{Math.abs(priceChange).toFixed(2)}</span>
-                <span className="text-lg">
-                  {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
-                </span>
-              </div>
-            </div>
-
-            {/* Timestamp */}
-            <p className="text-sm text-gray-500 italic">
-              As of {currentPrice?.date ? new Date(currentPrice.date).toLocaleString('en-US', { 
-                hour: 'numeric', 
-                minute: '2-digit',
-                hour12: true,
-                timeZoneName: 'short',
-                month: 'numeric',
-                day: 'numeric',
-                year: '2-digit'
-              }) : 'Loading...'}
-            </p>
+        {/* Large Price Display */}
+        <div className="flex items-baseline gap-3 mb-2">
+          <div className="text-5xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {currentPrice ? formatPrice(currentPrice.y, currency) : '--'}
           </div>
+          <div className={`flex items-center gap-2 text-xl font-semibold ${getPriceChangeColor(priceChange)}`}>
+            <span>{getPriceChangeArrow(priceChange)}</span>
+            <span>{Math.abs(priceChange).toFixed(2)}</span>
+            <span className="text-lg">
+              {priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
+        {/* Timestamp */}
+        <p className="text-sm text-gray-500 italic">
+          As of {currentPrice?.date ? new Date(currentPrice.date).toLocaleString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true,
+            timeZoneName: 'short',
+            month: 'numeric',
+            day: 'numeric',
+            year: '2-digit'
+          }) : 'Loading...'}
+        </p>
+      </div>
+
+      {/* Right Side - Overall Sentiment */}
+      <div className="w-80 flex-shrink-0">
+        <OverallSentiment
+          sentiment={sentiment}
+          newsCount={news?.length || 0}
+          className="bg-white border border-gray-200 rounded-lg p-4"
+        />
+      </div>
+    </div>
+  </div>
 
           {/* Sub Navigation */}
           <nav className="bg-white border-b border-gray-200 px-6">
