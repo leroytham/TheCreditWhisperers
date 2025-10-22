@@ -453,7 +453,6 @@ async def save_portfolio(data: dict):
         # 1️. Check if account already exists
         existing_account = accounts_col.find_one({
             "username": username,
-            "client_account_name": account_name,
             "account_no": account_no
         })
 
@@ -509,6 +508,7 @@ async def save_portfolio(data: dict):
             existing_holding = holdings_col.find_one({
                 "username": username,
                 "client_account_name": account_name,
+                "account_no": account_no,
                 "symbol": symbol
             })
 
@@ -523,6 +523,7 @@ async def save_portfolio(data: dict):
                     {
                         "username": username,
                         "client_account_name": account_name,
+                        "account_no": account_no,
                         "symbol": symbol
                     },
                     {"$set": {
@@ -536,6 +537,7 @@ async def save_portfolio(data: dict):
                 holding_record = {
                     "username": username,
                     "client_account_name": account_name,
+                    "account_no": account_no,
                     "symbol": symbol,
                     "quantity": quantity,
                     "purchase_price": purchase_price,
@@ -545,7 +547,7 @@ async def save_portfolio(data: dict):
                 holdings_added += 1
 
         return {
-            "message": "✅ Portfolio saved successfully!",
+            "message": "Portfolio saved successfully!",
             "account_added": True,
             "holdings_added": holdings_added,
             "holdings_updated": holdings_updated
@@ -686,6 +688,166 @@ async def update_portfolio(data: dict):
     except Exception as e:
         print("Error updating portfolio:", e)
         raise HTTPException(status_code=500, detail=f"Invalid Stock Symbol: {str(e)}")
+
+
+
+@router.get("/portfolio/holdings/{username}/{account_name}")
+async def get_portfolio_holdings(username: str, account_name: str):
+    """
+    Retrieve holdings for a user and account, aggregate duplicates,
+    calculate avg cost, market price, P/L, and attach live news + sentiment data.
+    """
+    try:
+        holdings_cursor = holdings_col.find({
+            "username": username,
+            "client_account_name": account_name
+        })
+
+        holdings_list = list(holdings_cursor)
+        if not holdings_list:
+            return {"holdings": []}
+
+        aggregated = {}
+        for h in holdings_list:
+            symbol = h.get("symbol", "").upper()
+            qty = float(h.get("quantity", 0))
+            price = float(h.get("purchase_price", 0))
+            if symbol not in aggregated:
+                aggregated[symbol] = {"total_qty": 0, "total_cost": 0}
+            aggregated[symbol]["total_qty"] += qty
+            aggregated[symbol]["total_cost"] += qty * price
+
+        results = []
+
+        # Loop through each stock symbol
+        for symbol, data in aggregated.items():
+            total_qty = data["total_qty"]
+            avg_cost = round(data["total_cost"] / total_qty, 2) if total_qty > 0 else 0.0
+
+            # Fetch live market data
+            try:
+                ticker = yf.Ticker(symbol)
+                hist = ticker.history(period="1d")
+                market_price = round(float(hist["Close"].iloc[-1]), 2) if not hist.empty else None
+            except Exception:
+                market_price = None
+
+            # Calculate profit/loss
+            if market_price:
+                pl_absolute = round(float((market_price - avg_cost) * total_qty), 2)
+                pl_percent = round(float(((market_price - avg_cost) / avg_cost) * 100), 2)
+                is_positive = bool(pl_absolute >= 0)
+            else:
+                pl_absolute, pl_percent, is_positive = None, None, None
+
+            # Fetch news and sentiment data for this symbol
+            try:
+                news_data = await get_news_data(symbol)
+                avg_score = news_data.get("avg_score", 0)
+                articles = news_data.get("news", [])
+
+                # Derive qualitative sentiment label
+                if avg_score > 0.2:
+                    sentiment_label = "Positive"
+                elif avg_score < -0.2:
+                    sentiment_label = "Negative"
+                else:
+                    sentiment_label = "Neutral"
+
+                # Use the raw article count for newsVolume
+                news_volume = len(articles)
+
+            except Exception as e:
+                print(f"⚠️ News fetch failed for {symbol}: {e}")
+                sentiment_label, news_volume = "N/A", 0
+
+            #  Combine all data into one unified record
+            results.append({
+                "symbol": symbol,
+                "quantity": round(float(total_qty), 2),
+                "averageCostPrice": f"{float(avg_cost):,.1f}",
+                "marketPrice": f"{float(market_price):,.1f}" if market_price else None,
+                "profitLoss": f"{float(pl_absolute):,.1f}" if pl_absolute is not None else None,
+                "gainLossPercent": float(pl_percent) if pl_percent is not None else None,
+                "isPositive": bool(is_positive) if is_positive is not None else None,
+                "newsVolume": news_volume,  #  Now an integer (count of articles)
+                "sentiment": avg_score,
+                "position": f"{float(market_price) * round(float(total_qty), 2):,.1f}"
+            })
+
+        return {"holdings": results}
+
+    except Exception as e:
+        print(" Error fetching holdings:", e)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
+
+
+
+
+# @router.get("/portfolio/holdings/{username}/{account_name}")
+# async def get_portfolio_holdings(username: str, account_name: str):
+#     """
+#     Retrieve holdings for a user and account, aggregate duplicates,
+#     calculate avg cost, market price, and P/L.
+#     """
+#     try:
+#         holdings_cursor = holdings_col.find({
+#             "username": username,
+#             "client_account_name": account_name
+#         })
+
+#         holdings_list = list(holdings_cursor)
+#         if not holdings_list:
+#             return {"holdings": []}
+
+#         aggregated = {}
+#         for h in holdings_list:
+#             symbol = h.get("symbol", "").upper()
+#             qty = float(h.get("quantity", 0))
+#             price = float(h.get("purchase_price", 0))
+#             if symbol not in aggregated:
+#                 aggregated[symbol] = {"total_qty": 0, "total_cost": 0}
+#             aggregated[symbol]["total_qty"] += qty
+#             aggregated[symbol]["total_cost"] += qty * price
+
+#         results = []
+#         for symbol, data in aggregated.items():
+#             total_qty = data["total_qty"]
+#             avg_cost = round(data["total_cost"] / total_qty, 2) if total_qty > 0 else 0.0
+
+#             try:
+#                 ticker = yf.Ticker(symbol)
+#                 hist = ticker.history(period="1d")
+#                 market_price = round(float(hist["Close"].iloc[-1]), 2) if not hist.empty else None
+#             except Exception:
+#                 market_price = None
+
+#             if market_price:
+#                 pl_absolute = round(float((market_price - avg_cost) * total_qty), 2)
+#                 pl_percent = round(float(((market_price - avg_cost) / avg_cost) * 100), 2)
+#                 is_positive = bool(pl_absolute >= 0)
+#             else:
+#                 pl_absolute, pl_percent, is_positive = None, None, None
+
+#             results.append({
+#                 "symbol": symbol,
+#                 "quantity": round(float(total_qty), 2),
+#                 "averageCostPrice": f"{float(avg_cost):,.1f}",
+#                 "marketPrice": f"{float(market_price):,.1f}" if market_price else None,
+#                 "profitLoss": f"{float(pl_absolute):,.1f}" if pl_absolute is not None else None,
+#                 "gainLossPercent": float(pl_percent) if pl_percent is not None else None,
+#                 "isPositive": bool(is_positive) if is_positive is not None else None,
+#                 "newsVolume": "N/A",
+#                 "sentiment": "N/A",
+#                 "position": f"{float(market_price) * round(float(total_qty), 2):,.1f}"
+#             })
+
+#         return {"holdings": results}
+
+#     except Exception as e:
+#         print("Error fetching holdings:", e)
+#         raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
+    
 
 
 

@@ -1,153 +1,167 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
 
-/**
- * NewsFeedCard Component
- *
- * Displays news feed with tabs and timeline
- */
 const NewsFeedCard = () => {
-  const [activeTab, setActiveTab] = useState('all-news');
+  const [newsItems, setNewsItems] = useState([]);
+  const [tickers, setTickers] = useState([]);
+  const [selectedTicker, setSelectedTicker] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const tabs = [
-    { id: 'all-news', label: 'All News' },
-    { id: 'my-holdings', label: 'My Holdings' },
-    { id: 'market-moving', label: 'Market Moving' },
-    { id: 'earnings', label: 'Earnings' },
-    { id: 'alerts', label: 'Alerts' },
-  ];
+  // Fetch holdings and related news
+  const fetchNewsForHoldings = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const username = sessionStorage.getItem("user");
+      const accountName = sessionStorage.getItem("selectedAccountName");
 
-  const newsData = {
-    today: [
-      {
-        time: 'Oct 12 | 2:15pm',
-        title: 'AMZN: Amazon Expands Cloud Services with New AI Partnership',
-        source: 'Reuters',
-        sentiment: 'Positive',
-      },
-      {
-        time: 'Oct 12 | 9:30am',
-        title: 'AAPL: Suppliers Ramp Up Production for Upcoming iPhone Launch',
-        source: 'Bloomberg',
-        sentiment: 'Positive',
-      },
-    ],
-    yesterday: [
-      {
-        time: 'Oct 11 | 4:45pm',
-        title: 'GOOGL: Google Faces Regulatory Scrutiny Over Ad Practices',
-        source: 'Wall Street Journal',
-        sentiment: 'Negative',
-        link: null,
-      },
-      {
-        time: 'Oct 11 | 1:20pm',
-        title: 'UBS: Releases Positive Outlook on Global Tech Sector for Q4',
-        source: 'UBS Research',
-        sentiment: 'Positive',
-        link: 'View Report',
-      },
-      {
-        time: 'Oct 11 | 11:00am',
-        title: 'MDSO: Reports Successful Trial Results for New Clinical Platform',
-        source: 'PR Newswire',
-        sentiment: 'Positive',
-        link: 'View Summary',
-      },
-    ],
+      if (!username || !accountName) {
+        setError("Please select an account first.");
+        setLoading(false);
+        return;
+      }
+
+      const holdingsRes = await fetch(
+        `http://localhost:8000/api/portfolio/holdings/${username}/${encodeURIComponent(
+          accountName
+        )}`
+      );
+      const holdingsData = await holdingsRes.json();
+      const symbols = holdingsData?.holdings?.map((h) => h.symbol) || [];
+
+      if (symbols.length === 0) {
+        setError("No holdings found.");
+        setLoading(false);
+        return;
+      }
+
+      setTickers(symbols);
+
+      const newsPromises = symbols.map(async (ticker) => {
+        try {
+          const res = await fetch(
+            `http://localhost:8000/api/news?ticker=${ticker}`
+          );
+          const data = await res.json();
+          return data.news.map((n) => ({ ...n, ticker }));
+        } catch (err) {
+          console.error(`Failed to fetch news for ${ticker}:`, err);
+          return [];
+        }
+      });
+
+      const allNews = (await Promise.all(newsPromises)).flat();
+      const sortedNews = allNews.sort(
+        (a, b) => new Date(b.publish_date) - new Date(a.publish_date)
+      );
+      setNewsItems(sortedNews);
+    } catch (err) {
+      console.error("Error fetching news:", err);
+      setError("Failed to load news feed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm h-full">
-      <h3 className="text-2xl font-semibold text-gray-900">News Feed</h3>
+  useEffect(() => {
+    fetchNewsForHoldings();
 
-      {/* News Feed Tabs */}
-      <div className="flex space-x-6 border-b text-sm mt-4 overflow-x-auto no-scrollbar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`pb-2 whitespace-nowrap ${
-              activeTab === tab.id
-                ? 'text-black font-semibold border-b-2 border-black'
-                : 'text-gray-500 hover:text-black'
-            }`}
+    const handleAccountChange = () => fetchNewsForHoldings();
+    window.addEventListener("accountChanged", handleAccountChange);
+    return () => window.removeEventListener("accountChanged", handleAccountChange);
+  }, []);
+
+  const filteredNews =
+    selectedTicker === "all"
+      ? newsItems
+      : newsItems.filter((n) => n.ticker === selectedTicker);
+
+  return (
+    <div
+      className="bg-white rounded-lg shadow-sm flex flex-col"
+      style={{
+        height: "100%",
+        minHeight: "350px",
+        maxHeight: "595px",
+      }}
+    >
+      {/* Header */}
+      <div className="flex justify-between items-center border-b border-gray-200 px-5 py-3">
+        <h3 className="text-lg font-semibold text-gray-900">My Holdings News</h3>
+        {tickers.length > 0 && (
+          <select
+            value={selectedTicker}
+            onChange={(e) => setSelectedTicker(e.target.value)}
+            className="text-xs border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400"
           >
-            {tab.label}
-          </button>
-        ))}
+            <option value="all">All Tickers</option>
+            {tickers.map((ticker) => (
+              <option key={ticker} value={ticker}>
+                {ticker}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* News Timeline */}
-      <div className="mt-6">
-        {/* Timeline Group: Today */}
-        <div className="flex">
-          <div className="w-20 text-sm font-semibold text-gray-800 py-1">Today</div>
-          <div className="relative w-px bg-gray-200">
+      {/* Scrollable content */}
+      <div
+        className="flex-1 overflow-y-auto px-5 py-3"
+        style={{
+          scrollbarWidth: "thin",
+          scrollbarColor: "#cbd5e1 transparent",
+        }}
+      >
+        {loading ? (
+          <p className="text-gray-500 text-center mt-6">Loading news...</p>
+        ) : error ? (
+          <p className="text-red-500 text-center mt-6">{error}</p>
+        ) : filteredNews.length === 0 ? (
+          <p className="text-gray-400 text-center mt-6">
+            No recent news available.
+          </p>
+        ) : (
+          filteredNews.map((news, idx) => (
             <div
-              className="absolute w-full h-full bg-repeat-y"
-              style={{
-                backgroundImage:
-                  "url('data:image/svg+xml,%3Csvg width=\"2\" height=\"10\" viewBox=\"0 0 2 10\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cpath d=\"M1 0V10\" stroke=\"%23D1D5DB\" stroke-width=\"1\" stroke-dasharray=\"3 3\"/%3E%3C/svg%3E')",
-              }}
-            ></div>
-          </div>
-          <div className="flex-1 pl-8 space-y-6">
-            {newsData.today.map((news, idx) => (
-              <div key={idx} className="flex items-start">
-                <p className="text-xs text-gray-500 w-28 flex-shrink-0">{news.time}</p>
-                <div>
-                  <p className="font-semibold text-sm">{news.title}</p>
-                  <p className="text-xs text-gray-500">
-                    Source: {news.source} | Sentiment:{' '}
-                    <span
-                      className={
-                        news.sentiment === 'Positive' ? 'text-green-600' : 'text-red-600'
-                      }
-                    >
-                      {news.sentiment}
-                    </span>
-                  </p>
-                </div>
+              key={idx}
+              className="border-b border-gray-100 pb-3 mb-3 hover:bg-gray-50 transition rounded-md p-2"
+            >
+              <div className="flex justify-between items-center">
+                <p className="text-[11px] text-gray-500">
+                  <span className="font-semibold text-gray-800">{news.ticker}</span>{" "}
+                  •{" "}
+                  {news.publish_date
+                    ? new Date(news.publish_date).toLocaleString()
+                    : "No date"}
+                </p>
+                <span
+                  className={`text-[11px] font-semibold ${
+                    news.sentiment_label === "Positive"
+                      ? "text-green-600"
+                      : news.sentiment_label === "Negative"
+                      ? "text-red-600"
+                      : "text-gray-600"
+                  }`}
+                >
+                  {news.sentiment_label || "Neutral"}
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Timeline Group: Yesterday */}
-        <div className="flex mt-6 border-t pt-6">
-          <div className="w-20 text-sm font-semibold text-gray-800 py-1">Yesterday</div>
-          <div className="w-px"></div>
-          <div className="flex-1 pl-8 space-y-6">
-            {newsData.yesterday.map((news, idx) => (
-              <div key={idx} className="flex items-start justify-between">
-                <div className="flex items-start">
-                  <p className="text-xs text-gray-500 w-28 flex-shrink-0">{news.time}</p>
-                  <div>
-                    <p className="font-semibold text-sm">{news.title}</p>
-                    <p className="text-xs text-gray-500">
-                      Source: {news.source} | Sentiment:{' '}
-                      <span
-                        className={
-                          news.sentiment === 'Positive' ? 'text-green-600' : 'text-red-600'
-                        }
-                      >
-                        {news.sentiment}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-                {news.link && (
-                  <a
-                    href="#"
-                    className="text-xs font-semibold text-blue-600 whitespace-nowrap hover:underline"
-                  >
-                    {news.link}
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+              <a
+                href={news.link || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-gray-900 mt-1 hover:text-blue-600 leading-snug"
+              >
+                {news.title}
+              </a>
+
+              <p className="text-[11px] text-gray-500 mt-1">
+                {news.provider || "Unknown Source"}
+              </p>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

@@ -43,6 +43,11 @@ const ClientInfoBar = () => {
     // Store selected account name for later use
     sessionStorage.setItem('selectedAccountName', account.client_account_name);
     sessionStorage.setItem('selectedAccountNo', account.account_no);
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("accountChanged"));
+    }
+    
   };
 
   return (
