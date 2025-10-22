@@ -118,4 +118,4 @@ export const SEARCH_DEBOUNCE_DELAY = 300;
 export const MIN_SEARCH_LENGTH = 2;
 
 // Default ticker - entity specific
-export const DEFAULT_TICKER = 'UBS';
+export const DEFAULT_TICKER = 'AAPL';

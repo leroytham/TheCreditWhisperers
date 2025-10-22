@@ -219,22 +219,26 @@ async def get_news_data(ticker: str):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/daily-sentiment")
-async def get_daily_sentiment(ticker: str):
+async def get_daily_sentiment(ticker: str, days: int = 7):
     """
     API endpoint to get daily sentiment data for a ticker.
-    Example: /api/daily-sentiment?ticker=AAPL
+    Supports configurable number of days (default: 7, max: 365)
+    Example: /api/daily-sentiment?ticker=AAPL&days=30
     """
     try:
         from datetime import datetime, timedelta, timezone
 
+        # Validate and cap days parameter
+        days = min(max(days, 1), 365)
+
         # Fetch news articles
         news_articles = await news_service_instance.get_ticker_news(ticker)
 
-        # Initialize all 7 days with empty data
+        # Initialize all requested days with empty data
         today = datetime.now(timezone.utc).date()
         daily_data = {}
-        for i in range(7):
-            date = today - timedelta(days=6-i)
+        for i in range(days):
+            date = today - timedelta(days=days-1-i)
             date_str = date.strftime("%Y-%m-%d")
             daily_data[date_str] = {"score": 0, "count": 0, "headlines": []}
 
@@ -289,6 +293,179 @@ async def get_daily_sentiment(ticker: str):
             "daily": daily_data,
             **score_defs
         }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.get("/rolling-sentiment")
+async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
+    """
+    API endpoint to get rolling-window sentiment data for different timeframes.
+    Supports: 1W (hourly, 168 points), 1M (6-hourly, 120 points)
+    Example: /api/rolling-sentiment?ticker=AAPL&timeframe=1W
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        # Fetch news articles
+        news_articles = await news_service_instance.get_ticker_news(ticker)
+
+        # Add score definitions to response
+        score_defs = get_score_definitions()
+
+        if not news_articles:
+            return {
+                "ticker": ticker,
+                "timeframe": timeframe,
+                "data": [],
+                "message": "No news articles found",
+                **score_defs
+            }
+
+        # Analyze sentiment for all articles
+        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+        articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+        # Determine granularity and time range based on timeframe
+        now = datetime.now(timezone.utc)
+
+        if timeframe == "1W":
+            # Hourly rolling 24h windows for past 7 days (168 data points)
+            data_points = []
+
+            for i in range(168):  # 7 days * 24 hours
+                point_time = now - timedelta(hours=i)
+                window_start = point_time - timedelta(hours=24)
+
+                # Find articles published within this 24h window using exact timestamps
+                window_articles = []
+                for a in articles_with_sentiment:
+                    pub_timestamp_str = a.get("publish_timestamp")
+                    if pub_timestamp_str:
+                        try:
+                            pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
+                            # Ensure timezone-aware comparison
+                            if pub_timestamp.tzinfo is None:
+                                pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
+                            if window_start <= pub_timestamp <= point_time:
+                                window_articles.append(a)
+                        except Exception:
+                            # Fallback to date-based filtering if timestamp parsing fails
+                            publish_date = a.get("publish_date")
+                            if publish_date:
+                                window_start_date = window_start.date()
+                                window_end_date = point_time.date()
+                                if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
+                                    window_articles.append(a)
+
+                volume = len(window_articles)
+                avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
+
+                top_headlines = sorted(
+                    window_articles,
+                    key=lambda x: abs(x.get("sentiment_score_raw", 0)),
+                    reverse=True
+                )[:10]  # Increased from 5 to 10 for detail panel
+
+                data_points.append({
+                    "timestamp": point_time.isoformat(),
+                    "label": point_time.strftime("%a %-I%p"),
+                    "volume": volume,
+                    "sentiment": avg_sentiment,
+                    "headlines": [{
+                        "title": h.get("title", ""),
+                        "provider": h.get("provider", "Unknown"),
+                        "sentiment_score": h.get("sentiment_score_raw", 0),
+                        "link": h.get("link", "")
+                    } for h in top_headlines]
+                })
+
+            # Reverse to show oldest to newest
+            data_points.reverse()
+
+        else:  # timeframe == "1M"
+            # 6-hourly rolling 24h windows for past 30 days (120 data points)
+            # Time points: 00:00, 06:00, 12:00, 18:00 daily
+            data_points = []
+
+            # Generate 120 time points (30 days * 4 points per day)
+            for day_offset in range(30):
+                for hour in [0, 6, 12, 18]:
+                    point_time = now - timedelta(days=29 - day_offset)
+                    point_time = point_time.replace(hour=hour, minute=0, second=0, microsecond=0)
+                    window_start = point_time - timedelta(hours=24)
+
+                    # Find articles published within this 24h window using exact timestamps
+                    window_articles = []
+                    for a in articles_with_sentiment:
+                        pub_timestamp_str = a.get("publish_timestamp")
+                        if pub_timestamp_str:
+                            try:
+                                pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
+                                # Ensure timezone-aware comparison
+                                if pub_timestamp.tzinfo is None:
+                                    pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
+                                if window_start <= pub_timestamp <= point_time:
+                                    window_articles.append(a)
+                            except Exception:
+                                # Fallback to date-based filtering if timestamp parsing fails
+                                publish_date = a.get("publish_date")
+                                if publish_date:
+                                    window_start_date = window_start.date()
+                                    window_end_date = point_time.date()
+                                    if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
+                                        window_articles.append(a)
+
+                    volume = len(window_articles)
+                    avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
+
+                    top_headlines = sorted(
+                        window_articles,
+                        key=lambda x: abs(x.get("sentiment_score_raw", 0)),
+                        reverse=True
+                    )[:10]  # Increased from 5 to 10 for detail panel
+
+                    # Format label based on hour
+                    hour_labels = {0: "12AM", 6: "6AM", 12: "12PM", 18: "6PM"}
+                    label = point_time.strftime(f"%b %-d {hour_labels[hour]}")
+
+                    data_points.append({
+                        "timestamp": point_time.isoformat(),
+                        "label": label,
+                        "volume": volume,
+                        "sentiment": avg_sentiment,
+                        "headlines": [{
+                            "title": h.get("title", ""),
+                            "provider": h.get("provider", "Unknown"),
+                            "sentiment_score": h.get("sentiment_score_raw", 0),
+                            "link": h.get("link", "")
+                        } for h in top_headlines]
+                    })
+
+        # Check if we have sufficient data
+        has_data = any(point["volume"] > 0 for point in data_points)
+
+        # Extract source earliest dates metadata if available
+        source_earliest_dates = None
+        if articles_with_sentiment:
+            for article in articles_with_sentiment:
+                if '_source_earliest_dates' in article:
+                    source_earliest_dates = article['_source_earliest_dates']
+                    break
+
+        response_data = {
+            "ticker": ticker,
+            "timeframe": timeframe,
+            "data": data_points,
+            "has_data": has_data,
+            **score_defs
+        }
+        
+        # Add source coverage info if available
+        if source_earliest_dates:
+            response_data["source_earliest_dates"] = source_earliest_dates
+
+        return response_data
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")

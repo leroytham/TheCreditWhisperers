@@ -65,6 +65,7 @@ const SectorPage = () => {
   const subNavItems = [
     { id: 'overview', label: 'Overview' },
     { id: 'performance', label: 'Performance' },
+    { id: 'sentiment', label: 'Sentiment' },
     { id: 'constituents', label: 'Constituents' },
     { id: 'news', label: 'News' },
     { id: 'events', label: 'Events' },

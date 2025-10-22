@@ -6,6 +6,10 @@
 
 export { default as PriceChart } from './PriceChart';
 export { default as SentimentChart } from './SentimentChart';
+export { default as NewsVolumeChart } from './NewsVolumeChart';
+export { default as CombinedSentimentVolumeChart } from './CombinedSentimentVolumeChart';
+export { default as TimeRangeSelector } from './TimeRangeSelector';
+export { default as ViewModeToggle } from './ViewModeToggle';
 export { default as OverallSentiment } from './OverallSentiment';
 export { default as RelatedNews } from './RelatedNews';
 export { default as SignificantEvents } from './SignificantEvents';

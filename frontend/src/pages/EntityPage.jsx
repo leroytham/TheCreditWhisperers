@@ -36,6 +36,7 @@ const EntityPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
   const [activeSubTab, setActiveSubTab] = useState('overview');
+  const [sentimentTimeframe, setSentimentTimeframe] = useState('1W');
 
   // Session management
   useEffect(() => {
@@ -84,7 +85,7 @@ const EntityPage = () => {
   // Fetch all data using custom hooks
   const { priceData1Y, companyName, currency, lastFetched, exchange, market, marketState } = usePriceData(ticker);
   const { news, sentiment } = useNewsData(ticker);
-  const { dailySentiment } = useDailySentiment(ticker);
+  const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
   const { significantEvents } = useSignificantEvents(ticker);
 
   return (
@@ -147,7 +148,9 @@ const EntityPage = () => {
           news={news}
           significantEvents={significantEvents}
           activeTab={activeSubTab}
-          setActiveTab={setActiveSubTab} // Pass the setter function
+          setActiveTab={setActiveSubTab}
+          sentimentTimeframe={sentimentTimeframe}
+          setSentimentTimeframe={setSentimentTimeframe}
         />
       </main>
     </div>

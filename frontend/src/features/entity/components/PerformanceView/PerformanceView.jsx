@@ -1,10 +1,11 @@
 // src/features/entity/components/PerformanceView/PerformanceView.jsx
 
 import React, { useState, useEffect } from 'react';
-import { PriceChart, SentimentChart, OverallSentiment, SignificantEvents, RelatedNews } from '../../../shared/components';
+import { PriceChart, SentimentChart, NewsVolumeChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, OverallSentiment, SignificantEvents, RelatedNews } from '../../../shared/components';
+import { useRollingSentiment } from '../../hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
-import { formatDateTime, formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
+import { formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
 
 /**
@@ -24,9 +25,21 @@ const PerformanceView = ({
   significantEvents,
   activeTab = 'overview',
   setActiveTab,
+  sentimentTimeframe,
+  setSentimentTimeframe,
 }) => {
   const [timeframe, setTimeframe] = useState('1Y');
+  const [viewMode, setViewMode] = useState('rolling');
   const [priceData, setPriceData] = useState([]);
+
+  // Fetch rolling sentiment data for the combined chart
+  const { data: rollingData, hasData: hasRollingData, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
+
+  // Map sentiment timeframe to days for existing charts
+  const getDaysToShow = (tf) => {
+    const map = { '1W': 7, '1M': 30 };
+    return map[tf] || 7;
+  };
 
   // Filter price data based on timeframe
   useEffect(() => {
@@ -179,14 +192,66 @@ const PerformanceView = ({
       case 'sentiment':
         return (
           <div className="space-y-8">
-            <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
-              <SentimentChart dailySentiment={dailySentiment} />
+            {/* Time Range + View Mode Selectors */}
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
+              <div className="flex items-center space-x-4">
+                <TimeRangeSelector
+                  activeTimeframe={sentimentTimeframe}
+                  onTimeframeChange={setSentimentTimeframe}
+                />
+                <ViewModeToggle
+                  activeMode={viewMode}
+                  onModeChange={setViewMode}
+                />
+              </div>
             </div>
+
+            {/* Combined Sentiment + Volume Chart */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
+              <CombinedSentimentVolumeChart
+                data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment).map(([date, data]) => ({
+                  timestamp: date,
+                  label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                  volume: data.count || 0,
+                  sentiment: data.score || 0,
+                  headlines: data.headlines || []
+                }))}
+                timeframe={sentimentTimeframe}
+                viewMode={viewMode}
+                hasData={viewMode === 'rolling' ? hasRollingData : Object.keys(dailySentiment).length > 0}
+                sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
+              />
+            </div>
+
+            {/* Individual Charts Side-by-Side (only show in daily mode) */}
+            {viewMode === 'daily' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
+                  <SentimentChart
+                    dailySentiment={dailySentiment}
+                    daysToShow={getDaysToShow(sentimentTimeframe)}
+                  />
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
+                  <NewsVolumeChart
+                    dailySentiment={dailySentiment}
+                    daysToShow={getDaysToShow(sentimentTimeframe)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Row: Overall Sentiment + Placeholder */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <OverallSentiment sentiment={sentiment} newsCount={news?.length || 0} />
               <div className="bg-white border border-gray-200 rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Sentiment Analysis</h3>
-                <p className="text-gray-600">Detailed sentiment breakdown and trends will appear here.</p>
+                <h3 className="text-lg font-semibold mb-4">Key Insights</h3>
+                <p className="text-gray-600">
+                  {viewMode === 'rolling'
+                    ? 'Rolling 24-hour windows provide granular insight into how sentiment evolves over time.'
+                    : 'Daily averages show overall sentiment trends across the selected time period.'}
+                </p>
               </div>
             </div>
           </div>

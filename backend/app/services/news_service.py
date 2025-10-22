@@ -197,7 +197,7 @@ class NewsService:
         ticker_obj = yf.Ticker(ticker)
         return ticker_obj.get_news(count=count)
 
-    async def _fetch_yfinance_news(self, session: aiohttp.ClientSession, ticker: str, count: int, seven_days_ago: datetime.date, today: datetime.date) -> list[dict]:
+    async def _fetch_yfinance_news(self, session: aiohttp.ClientSession, ticker: str, count: int, start_date: datetime.date, today: datetime.date) -> list[dict]:
         """Fetches and processes news from Yahoo Finance asynchronously."""
         try:
             raw_news = await asyncio.to_thread(self._get_yfinance_news_sync, ticker, count)
@@ -219,22 +219,25 @@ class NewsService:
 
                 try:
                     if isinstance(pub_date_str, str) and 'T' in pub_date_str:
-                        pub_date = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00')).date()
+                        pub_datetime = datetime.fromisoformat(pub_date_str.replace('Z', '+00:00'))
+                        pub_date = pub_datetime.date()
                     elif isinstance(pub_date_str, (int, float)):
-                        pub_date = datetime.fromtimestamp(pub_date_str).date()
+                        pub_datetime = datetime.fromtimestamp(pub_date_str)
+                        pub_date = pub_datetime.date()
                     else:
                         continue
                 except Exception:
                     continue
 
-                if seven_days_ago <= pub_date <= today:
+                # Filter by date range
+                if start_date <= pub_date <= today:
                     link = content.get("previewUrl") or content.get("link")
-                    articles_to_process.append((content, pub_date, link))
+                    articles_to_process.append((content, pub_date, pub_datetime, link))
                     scrape_tasks.append(self._scrape_article_content(session, link))
 
             scraped_contents = await asyncio.gather(*scrape_tasks)
 
-            for i, (content, pub_date, link) in enumerate(articles_to_process):
+            for i, (content, pub_date, pub_datetime, link) in enumerate(articles_to_process):
                 provider_info = content.get("provider") or {}
                 provider_name = provider_info.get("displayName", "Unknown") if isinstance(provider_info, dict) else content.get("publisher", "Unknown")
                 body_content = scraped_contents[i] or content.get("summary", "")
@@ -244,6 +247,7 @@ class NewsService:
                     "link": link,
                     "provider": provider_name,
                     "publish_date": pub_date.strftime("%Y-%m-%d"),
+                    "publish_timestamp": pub_datetime.isoformat(),
                     "body": body_content
                 })
             return news_list
@@ -270,12 +274,15 @@ class NewsService:
 
                 news_list = []
                 for i, (article, _) in enumerate(scrape_tasks):
+                    timestamp = article.get("datetime")
+                    pub_datetime = datetime.fromtimestamp(timestamp)
                     body_content = results[i] or article.get("summary", "")
                     news_list.append({
                         "title": article.get("headline"),
                         "link": article.get("url"),
                         "provider": article.get("source"),
-                        "publish_date": datetime.fromtimestamp(article.get("datetime")).strftime('%Y-%m-%d'),
+                        "publish_date": pub_datetime.strftime('%Y-%m-%d'),
+                        "publish_timestamp": pub_datetime.isoformat(),
                         "body": body_content
                     })
                 return news_list
@@ -303,7 +310,8 @@ class NewsService:
                 for i, (article, _) in enumerate(scrape_tasks):
                     pub_date_iso = article.get("publishedAt")
                     if pub_date_iso:
-                        pub_date = datetime.fromisoformat(pub_date_iso.replace('Z', '+00:00')).strftime('%Y-%m-%d')
+                        pub_datetime = datetime.fromisoformat(pub_date_iso.replace('Z', '+00:00'))
+                        pub_date = pub_datetime.strftime('%Y-%m-%d')
                     else:
                         continue
 
@@ -313,6 +321,7 @@ class NewsService:
                         "link": article.get("url"),
                         "provider": article.get("source", {}).get("name", "Unknown"),
                         "publish_date": pub_date,
+                        "publish_timestamp": pub_datetime.isoformat(),
                         "body": body_content
                     })
                 return news_list
@@ -340,7 +349,8 @@ class NewsService:
                 for i, (article, _) in enumerate(scrape_tasks):
                     pub_date_iso = article.get("published_at")
                     if pub_date_iso:
-                        pub_date = datetime.fromisoformat(pub_date_iso).strftime('%Y-%m-%d')
+                        pub_datetime = datetime.fromisoformat(pub_date_iso)
+                        pub_date = pub_datetime.strftime('%Y-%m-%d')
                     else:
                         continue
 
@@ -350,6 +360,7 @@ class NewsService:
                         "link": article.get("url"),
                         "provider": article.get("source"),
                         "publish_date": pub_date,
+                        "publish_timestamp": pub_datetime.isoformat(),
                         "body": body_content
                     })
                 return news_list
@@ -388,13 +399,14 @@ class NewsService:
             if should_fallback:
                 print(f"Using fallback news sources for {ticker}...")
                 today = datetime.now(timezone.utc).date()
-                seven_days_ago = today - timedelta(days=6)
-                start_date_str = seven_days_ago.strftime("%Y-%m-%d")
+                # Extend to 90 days to fetch maximum amount of news
+                ninety_days_ago = today - timedelta(days=89)
+                start_date_str = ninety_days_ago.strftime("%Y-%m-%d")
                 end_date_str = today.strftime("%Y-%m-%d")
 
                 # Fetch from all fallback sources concurrently
                 tasks = [
-                    self._fetch_yfinance_news(session, ticker, count, seven_days_ago, today),
+                    self._fetch_yfinance_news(session, ticker, count, ninety_days_ago, today),
                     self._fetch_finnhub_news(session, ticker, start_date_str, end_date_str),
                     self._fetch_newsapi_news(session, ticker, start_date_str, end_date_str),
                     self._fetch_marketaux_news(session, ticker, start_date_str)
@@ -402,14 +414,44 @@ class NewsService:
 
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                # Combine and deduplicate news from all sources
+                # Organize news by source and find earliest date per source
+                source_news = {
+                    'yfinance': [],
+                    'finnhub': [],
+                    'newsapi': [],
+                    'marketaux': []
+                }
+                source_names = ['yfinance', 'finnhub', 'newsapi', 'marketaux']
+                
+                for idx, res in enumerate(results):
+                    if isinstance(res, list) and res:
+                        source_news[source_names[idx]] = res
+                    elif not isinstance(res, list):
+                        print(f"An error occurred in {source_names[idx]} fetch task: {res}")
+
+                # Find the earliest date from each source
+                earliest_dates_per_source = {}
+                for source_name, articles in source_news.items():
+                    if articles:
+                        dates = []
+                        for article in articles:
+                            try:
+                                pub_date = datetime.strptime(article.get("publish_date", ""), "%Y-%m-%d").date()
+                                dates.append(pub_date)
+                            except (ValueError, TypeError):
+                                continue
+                        
+                        if dates:
+                            earliest_date = min(dates)
+                            earliest_dates_per_source[source_name] = earliest_date.strftime("%Y-%m-%d")
+                            print(f"{source_name}: {len(articles)} articles, earliest: {earliest_date}")
+
+                # Combine and deduplicate news from all sources (no filtering)
                 all_news = {}
                 combined_sources = []
-                for res in results:
-                    if isinstance(res, list):
-                        combined_sources.extend(res)
-                    else:
-                        print(f"An error occurred in a fallback fetch task: {res}")
+                
+                for articles in source_news.values():
+                    combined_sources.extend(articles)
 
                 for article in combined_sources:
                     if article and article.get("title"):
@@ -418,7 +460,16 @@ class NewsService:
                             all_news[key] = article
 
                 news_articles = list(all_news.values())
+                
+                # Store earliest dates metadata for the frontend
+                if news_articles and earliest_dates_per_source:
+                    # Add metadata to each article about source coverage
+                    for article in news_articles:
+                        article['_source_earliest_dates'] = earliest_dates_per_source
+                
                 print(f"Fetched and combined {len(news_articles)} unique news articles for {ticker} from fallback sources.")
+                if earliest_dates_per_source:
+                    print(f"Source coverage earliest dates: {earliest_dates_per_source}")
             else:
                 print(f"Fetched {len(news_articles)} news articles for {ticker} from Alpha Vantage.")
 
