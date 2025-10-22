@@ -86,11 +86,23 @@ const PriceChart = ({
   const paddingLeft = 60;
   const paddingTop = 40;
 
-  // Generate timeline points
+  // Responsive number of x-axis points based on chart width
+  const getNumXAxisPoints = (width) => {
+    if (width < 400) return 4;
+    if (width < 600) return 5;
+    if (width < 800) return 6;
+    return 8;
+  };
+
+  const numXAxisPoints = isResponsive 
+    ? getNumXAxisPoints(chartWidth)
+    : getNumXAxisPoints(CHART_CONFIG.width);
+
+  // Generate timeline points with responsive count
   const timelinePoints = generateTimelinePoints(
     chartData,
     chartWidth,
-    isResponsive ? SECTOR_CHART_CONFIG.NUM_X_AXIS_POINTS : 6,
+    numXAxisPoints,
     paddingLeft
   );
 
@@ -316,7 +328,7 @@ const PriceChart = ({
               y={paddingTop + chartHeight + 40}
               textAnchor="middle"
               fill="#374151"
-              fontSize="11"
+              fontSize={chartWidth < 500 ? "10" : "11"}
               fontWeight="bold"
             >
               {point.label}

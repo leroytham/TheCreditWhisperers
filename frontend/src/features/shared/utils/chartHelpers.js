@@ -122,7 +122,12 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 
     if (point.date) {
       const date = new Date(point.date);
-      label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      // Use shorter format for narrow charts
+      if (effectiveWidth < 500) {
+        label = date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      } else {
+        label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
     } else {
       label = `Point ${i + 1}`;
     }

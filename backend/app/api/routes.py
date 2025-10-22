@@ -146,6 +146,13 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         # Filter by timeframe if needed
         filtered_data = stock_data_service.filter_data_by_timeframe(stock_data, timeframe)
 
+        # Fetch company info for metadata
+        company_info = stock_data_service.get_company_info(ticker)
+        
+        # Fetch additional ticker info from yfinance
+        ticker_obj = yf.Ticker(ticker)
+        ticker_info = ticker_obj.info
+        
         # Convert to the format expected by frontend
         prices = []
         for idx, row in filtered_data.iterrows():
@@ -156,8 +163,13 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
 
         return {
             "ticker": ticker,
-            "company_name": ticker,  # Could be enhanced with actual company name
-            "currency": "USD",
+            "company_name": company_info.get("name", ticker) if company_info else ticker,
+            "longname": ticker_info.get("longName", ""),
+            "shortname": ticker_info.get("shortName", ""),
+            "currency": company_info.get("currency", "USD") if company_info else "USD",
+            "exchange": ticker_info.get("exchange", ""),
+            "market": ticker_info.get("market", ""),
+            "market_state": ticker_info.get("marketState", ""),
             "prices": prices,
             "last_fetched": datetime.now().isoformat()
         }

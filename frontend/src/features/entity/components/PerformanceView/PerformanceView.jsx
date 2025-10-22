@@ -87,8 +87,11 @@ const PerformanceView = ({
               {/* Price Summary Card - Row 1, Col 1 */}
               <div className="bg-white border border-gray-200 rounded-lg shadow p-6 lg:col-start-1 lg:row-start-1 h-full">
                 <h3 className="text-sm font-medium text-gray-600 mb-2">Current Price</h3>
-                <div className="text-3xl font-bold text-gray-900 mb-2">
-                  {currentPrice ? formatPrice(currentPrice.y, currency) : '--'}
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-3xl font-bold text-gray-900">
+                    {currentPrice ? formatPrice(currentPrice.y, currency) : '--'}
+                  </span>
+                  <span className="text-lg font-medium text-gray-500">{currency}</span>
                 </div>
                 <div className={`text-sm font-medium ${getPriceChangeColor(priceChange)}`}>
                   {getPriceChangeArrow(priceChange)} {Math.abs(priceChange).toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)

@@ -122,8 +122,8 @@ export const formatFullTimestamp = (date) => {
  * @returns {string} Tailwind CSS color class
  */
 export const getSentimentColor = (score) => {
-  if (score > 0) return 'text-green-600';
-  if (score < 0) return 'text-red-600';
+  if (score >= 0.15) return 'text-green-600';
+  if (score <= -0.15) return 'text-red-600';
   return 'text-gray-600';
 };
 

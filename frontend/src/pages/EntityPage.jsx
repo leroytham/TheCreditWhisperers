@@ -125,14 +125,33 @@ const EntityPage = () => {
         <section className="py-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {companyName || ticker}
+              {companyName || `${ticker} - Company Name Not Available`}
             </h1>
-            <div className="mt-1 flex items-center space-x-2 text-base text-gray-500">
-              <span>{ticker}:{exchange}</span>
-              <span aria-hidden="true">·</span>
-              <span>{market} ({currency})</span>
-              <span aria-hidden="true">·</span>
-              <span>{marketState}</span>
+            <div className="mt-1 flex items-center space-x-2 text-sm text-gray-500">
+              <span className="font-semibold text-gray-700">{ticker}</span>
+              {exchange && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{exchange}</span>
+                </>
+              )}
+              {marketState && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                    marketState === 'REGULAR' 
+                      ? 'bg-green-100 text-green-800' 
+                      : marketState === 'CLOSED'
+                      ? 'bg-gray-100 text-gray-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {marketState === 'REGULAR' ? 'Market Open' : 
+                     marketState === 'CLOSED' ? 'Market Closed' :
+                     marketState === 'PRE' ? 'Pre-Market' :
+                     marketState === 'POST' || marketState === 'POSTPOST' ? 'After Hours' : marketState}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </section>
