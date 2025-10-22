@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # Azure OAuth
     AZURE_AUTHORITY: str = "https://login.microsoftonline.com/common"
-    AZURE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/callback"
+    AZURE_REDIRECT_URI: str = "http://localhost:8000/api/auth/callback"
 
     class Config:
         env_file = ".env"

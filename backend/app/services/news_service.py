@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 import yfinance as yf
 
 # Import your existing model classes
-from app.models import News, SentimentScore
+from app.models import News, SentimentScore, RelevanceScore
 from app.core.cache import async_cache_result, cache_result
 from app.core.config import settings
 
@@ -106,9 +106,10 @@ class NewsService:
                     except ValueError:
                         continue
 
-                    # Extract ticker-specific sentiment score
+                    # Extract ticker-specific sentiment score and relevance score
                     ticker_sentiment_score = None
-                    ticker_sentiment_label = "neutral"
+                    ticker_sentiment_label = "Neutral"
+                    ticker_relevance_score = None
                     ticker_sentiments = article.get("ticker_sentiment", [])
 
                     # Case-insensitive ticker matching
@@ -121,7 +122,16 @@ class NewsService:
                             except (ValueError, TypeError):
                                 ticker_sentiment_score = 0.0
 
-                            ticker_sentiment_label = ts.get("ticker_sentiment_label", "neutral").lower()
+                            ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
+
+                            # Extract relevance score if available
+                            relevance_str = ts.get("relevance_score")
+                            if relevance_str is not None:
+                                try:
+                                    ticker_relevance_score = float(relevance_str)
+                                except (ValueError, TypeError):
+                                    ticker_relevance_score = None
+
                             break
 
                     # Skip articles without sentiment score for this ticker
@@ -139,6 +149,7 @@ class NewsService:
                         "body": body_content,
                         "ticker_sentiment_score": ticker_sentiment_score,
                         "ticker_sentiment_label": ticker_sentiment_label,
+                        "ticker_relevance_score": ticker_relevance_score,
                         "image": article.get("banner_image")
                     })
 

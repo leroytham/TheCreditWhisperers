@@ -37,7 +37,10 @@ export const SENTIMENT_CHART_CONFIG = {
     top: 40,
     bottom: 80
   },
-  yAxisValues: [0.4, 0.2, 0, -0.2, -0.4],
+  // Dynamic Y-axis range - will be calculated based on data
+  // But these are the threshold markers to display
+  yAxisThresholds: [0.35, 0.15, 0, -0.15, -0.35],
+  yAxisDefaultValues: [0.5, 0.25, 0, -0.25, -0.5], // Default if data range is within this
   barWidth: 70,
   daysToShow: 7
 };
@@ -67,20 +70,42 @@ export const COLORS = {
   chartPositive: '#16a34a',
   chartNegative: '#dc2626',
 
-  // Sentiment bar colors (hex)
+  // Sentiment bar colors (hex) - now with 5 levels
+  sentimentBullish: '#22c55e',         // Strong green
+  sentimentSomewhatBullish: '#10b981', // Moderate green
+  sentimentNeutral: '#9ca3af',         // Gray
+  sentimentSomewhatBearish: '#f87171', // Moderate red
+  sentimentBearish: '#ef4444',         // Strong red
+
+  // Legacy colors (backward compatibility)
   sentimentPositive: '#22c55e',
   sentimentNegative: '#ef4444',
-  sentimentNeutral: '#9ca3af',
 
-  // Tailwind color classes
+  // Tailwind color classes - updated for new labels
+  textBullish: 'text-green-600',
+  textSomewhatBullish: 'text-green-500',
+  textNeutral: 'text-gray-600',
+  textSomewhatBearish: 'text-red-500',
+  textBearish: 'text-red-600',
+
+  // Legacy tailwind classes (backward compatibility)
   textPositive: 'text-green-600',
   textNegative: 'text-red-600',
-  textNeutral: 'text-gray-600',
 
   // Background color classes
+  bgBullish: 'bg-green-50 border-green-600',
+  bgSomewhatBullish: 'bg-green-50 border-green-500',
+  bgNeutral: 'bg-gray-50 border-gray-600',
+  bgSomewhatBearish: 'bg-red-50 border-red-500',
+  bgBearish: 'bg-red-50 border-red-600',
+
+  // Legacy background classes
   bgPositive: 'bg-green-50 border-green-600',
   bgNegative: 'bg-red-50 border-red-600',
-  bgNeutral: 'bg-gray-50 border-gray-600'
+
+  // Threshold marker colors
+  thresholdLine: '#d1d5db', // Light gray for threshold markers
+  thresholdText: '#6b7280'  // Medium gray for threshold labels
 };
 
 // API polling interval (milliseconds) - entity specific

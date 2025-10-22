@@ -11,7 +11,8 @@ from collections import defaultdict
 os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 warnings.filterwarnings('ignore')
 
-from app.models import News, SentimentScore
+from app.models import News, SentimentScore, RelevanceScore
+from app.config.scoring import map_alpha_vantage_label, classify_sentiment
 
 
 class SentimentService:
@@ -165,18 +166,11 @@ class SentimentService:
             if has_alpha_vantage_score:
                 # Use Alpha Vantage pre-calculated score (primary method)
                 raw_score = article.get("ticker_sentiment_score", 0.0)
-                label = article.get("ticker_sentiment_label", "neutral")
+                av_label = article.get("ticker_sentiment_label", "Neutral")
 
-                # Map Alpha Vantage labels to our standard labels (case-insensitive)
+                # Map Alpha Vantage labels to our standardized Bullish/Bearish labels
                 # Alpha Vantage labels: Bearish, Somewhat-Bearish, Neutral, Somewhat-Bullish, Bullish
-                label_lower = label.lower() if isinstance(label, str) else "neutral"
-
-                if label_lower in ["bearish", "somewhat-bearish", "somewhat bearish"]:
-                    standard_label = "negative"
-                elif label_lower in ["bullish", "somewhat-bullish", "somewhat bullish"]:
-                    standard_label = "positive"
-                else:
-                    standard_label = "neutral"
+                standard_label = map_alpha_vantage_label(av_label)
 
                 # Calculate confidence based on absolute score value
                 confidence = min(abs(raw_score), 1.0)
@@ -184,8 +178,11 @@ class SentimentService:
 
             else:
                 # Use FinBERT for fallback sources (secondary method)
-                raw_score, standard_label, confidence = self._analyze_with_finbert(article)
+                raw_score, finbert_label, confidence = self._analyze_with_finbert(article)
                 sentiment_source = "FinBERT (ProsusAI)"
+
+                # Classify using our standardized thresholds
+                standard_label = classify_sentiment(raw_score)
 
             # Calculate recency weight for overall score
             recency_weight = 0
@@ -208,13 +205,20 @@ class SentimentService:
                 except ValueError:
                     pass
 
-            # Add sentiment data to the dictionary (backward compatibility)
-            article["sentiment_label"] = standard_label
+            # Add sentiment data to the dictionary using Bullish/Bearish format
+            article["sentiment_label"] = standard_label  # Use Bullish/Bearish format
             article["sentiment_confidence"] = confidence
-            article["sentiment_score_raw"] = raw_score  # Keep raw Alpha Vantage score
+            article["sentiment_score_raw"] = raw_score  # Keep raw score
             article["sentiment_weight"] = recency_weight
             results.append(article)
-            sentiment_counts[standard_label] += 1
+
+            # Update sentiment counts using standard label categories
+            if standard_label in ["Bearish", "Somewhat-Bearish"]:
+                sentiment_counts["negative"] += 1
+            elif standard_label in ["Bullish", "Somewhat-Bullish"]:
+                sentiment_counts["positive"] += 1
+            else:
+                sentiment_counts["neutral"] += 1
 
             # Create proper News object with SentimentScore model
             sentiment_score_obj = SentimentScore(
@@ -222,10 +226,26 @@ class SentimentService:
                 source=sentiment_source,  # Dynamic: "Alpha Vantage" or "FinBERT (ProsusAI)"
                 confidence=confidence
             )
+
+            # Create RelevanceScore object if available (only from Alpha Vantage)
+            relevance_score_obj = None
+            ticker_relevance_score = article.get("ticker_relevance_score")
+            if ticker_relevance_score is not None and ticker_relevance_score > 0:
+                try:
+                    relevance_score_obj = RelevanceScore(
+                        value=ticker_relevance_score,
+                        source="Alpha Vantage",
+                        confidence=1.0
+                    )
+                except ValueError:
+                    # Invalid relevance score, skip it
+                    pass
+
             news_obj = News(
                 headline=article.get("title", ""),
                 source=article.get("provider", "Unknown"),
-                sentiment_score=sentiment_score_obj
+                sentiment_score=sentiment_score_obj,
+                relevance_score=relevance_score_obj
             )
             # Store additional metadata on the News object
             news_obj.link = article.get("link")

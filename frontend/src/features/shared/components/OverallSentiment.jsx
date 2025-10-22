@@ -1,5 +1,6 @@
 import React from 'react';
 import { getSentimentColor } from '../utils/formatters';
+import { getSentimentDetails } from '../utils/sentimentHelpers';
 
 /**
  * Shared OverallSentiment Component
@@ -24,15 +25,26 @@ const OverallSentiment = ({
     ? sentiment
     : sentiment?.avg_score ?? sentimentAvg ?? null;
 
-  // Determine sentiment label
-  const getSentimentLabel = (score) => {
-    if (score === null || score === undefined) return 'N/A';
-    if (score > 0.5) return 'Very Positive';
-    if (score > 0.1) return 'Positive';
-    if (score > -0.1) return 'Neutral';
-    if (score > -0.5) return 'Negative';
-    return 'Very Negative';
-  };
+  // Get sentiment details using the standardized classification
+  const sentimentDetails = avgScore !== null && avgScore !== undefined
+    ? getSentimentDetails(avgScore)
+    : { label: 'N/A' };
+
+  // Version marker to force cache invalidation - if you see v1, clear browser cache!
+  const LABEL_VERSION = 'v2-bullish-bearish-finbert-fix';
+
+  // DEBUG: Enhanced logging to verify new labels are being used
+  console.log('🔍 Overall Sentiment Debug - Full Details:', {
+    version: LABEL_VERSION,
+    sentimentProp: sentiment,
+    sentimentAvgProp: sentimentAvg,
+    extractedAvgScore: avgScore,
+    getSentimentDetailsFunction: typeof getSentimentDetails,
+    calculatedSentimentDetails: sentimentDetails,
+    displayLabel: sentimentDetails.label,
+    expectedLabels: 'Bullish/Somewhat-Bullish/Neutral/Somewhat-Bearish/Bearish',
+    thresholds: 'Bullish: >=0.35, Somewhat-Bullish: >=0.15, Neutral: -0.15 to 0.15, Somewhat-Bearish: >-0.35, Bearish: <=-0.35'
+  });
 
   return (
     <div className={className}>
@@ -54,7 +66,7 @@ const OverallSentiment = ({
                   ? 'bg-red-100 text-red-800'
                   : 'bg-gray-100 text-gray-800'
               }`}>
-                {getSentimentLabel(avgScore)}
+                {sentimentDetails.label}
               </span>
             </div>
           </div>

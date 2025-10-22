@@ -136,9 +136,9 @@ const NewsFeedCard = () => {
                 </p>
                 <span
                   className={`text-[11px] font-semibold ${
-                    news.sentiment_label === "Positive"
+                    news.sentiment_label === "Bullish" || news.sentiment_label === "Somewhat-Bullish"
                       ? "text-green-600"
-                      : news.sentiment_label === "Negative"
+                      : news.sentiment_label === "Bearish" || news.sentiment_label === "Somewhat-Bearish"
                       ? "text-red-600"
                       : "text-gray-600"
                   }`}

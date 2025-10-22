@@ -121,8 +121,17 @@ export const useNewsStats = (ticker) => {
 
   const stats = data.news.reduce(
     (acc, article) => {
-      const label = article.sentiment_label?.toLowerCase() || 'neutral';
-      acc[label] = (acc[label] || 0) + 1;
+      const label = article.sentiment_label || 'Neutral';
+
+      // Map Bullish/Bearish labels to positive/negative/neutral categories
+      if (label === 'Bullish' || label === 'Somewhat-Bullish') {
+        acc.positive += 1;
+      } else if (label === 'Bearish' || label === 'Somewhat-Bearish') {
+        acc.negative += 1;
+      } else {
+        acc.neutral += 1;
+      }
+
       return acc;
     },
     { positive: 0, negative: 0, neutral: 0 }

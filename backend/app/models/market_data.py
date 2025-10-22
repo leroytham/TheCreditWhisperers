@@ -7,8 +7,8 @@ and sentiment.
 """
 
 from __future__ import annotations
-from typing import List
-from .sentiment import SentimentScore
+from typing import List, Optional
+from .sentiment import SentimentScore, RelevanceScore
 
 class News:
     """Represents a single news article or data point related to a ticker.
@@ -17,11 +17,16 @@ class News:
         headline (str): The title of the news article.
         source (str): The publisher or source of the news (e.g., "Bloomberg").
         sentiment_score (SentimentScore): The sentiment analysis result for this news item.
+        relevance_score (Optional[RelevanceScore]): The relevance score indicating how
+                                                     relevant this article is to the ticker.
+                                                     None if not available.
     """
-    def __init__(self, headline: str, source: str, sentiment_score: SentimentScore):
+    def __init__(self, headline: str, source: str, sentiment_score: SentimentScore,
+                 relevance_score: Optional[RelevanceScore] = None):
         self.headline = headline
         self.source = source
         self.sentiment_score = sentiment_score
+        self.relevance_score = relevance_score
 
 class Ticker:
     """Represents a single tradable asset, like a stock (e.g., AAPL).

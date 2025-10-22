@@ -15,9 +15,18 @@ from app.services.stock_data_service import stock_data_service
 from app.services.sentiment_service import sentiment_service
 from app.services.market_analysis_service import market_analysis_service
 
+# Import scoring configuration
+from app.config.scoring import get_score_definitions
 
-CLIENT_ID = os.getenv("Application_ID", "<your-client-id>")
+
+CLIENT_ID = os.getenv("APPLICATION_ID", "<your-client-id>")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+# Validate Azure credentials at startup
+if not CLIENT_ID or CLIENT_ID == "<your-client-id>":
+    print("WARNING: Azure CLIENT_ID (APPLICATION_ID) is not configured. Azure authentication will not work.")
+if not CLIENT_SECRET:
+    print("WARNING: Azure CLIENT_SECRET is not configured. Azure authentication will not work.")
 
 
 mongo_uri = os.getenv("MONGO_URI_PYTHON")
@@ -68,8 +77,15 @@ async def get_stock_news_and_sentiment(ticker: str):
         # 2. Call the advanced sentiment analysis method
         sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
 
-        # 3. Return the rich data structure from the new method
-        return {"ticker": ticker, **sentiment_results}
+        # 3. Add score definitions to response
+        score_defs = get_score_definitions()
+
+        # 4. Return the rich data structure from the new method with score definitions
+        return {
+            "ticker": ticker,
+            **sentiment_results,
+            **score_defs
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -162,7 +178,8 @@ async def get_news_data(ticker: str):
         news_articles = await news_service_instance.get_ticker_news(ticker)
 
         if not news_articles:
-            return {"ticker": ticker, "news": [], "avg_score": 0}
+            score_defs = get_score_definitions()
+            return {"ticker": ticker, "news": [], "avg_score": 0, **score_defs}
 
         # Analyze sentiment - this adds sentiment fields to the articles
         sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
@@ -171,20 +188,31 @@ async def get_news_data(ticker: str):
         # Format news for frontend - use field names that match frontend expectations
         formatted_news = []
         for article in articles_with_sentiment:
-            formatted_news.append({
+            news_item = {
                 "title": article.get("title", ""),  # Frontend expects "title"
                 "provider": article.get("provider", "Unknown"),
                 "sentiment_score": article.get("sentiment_score_raw", 0),  # Frontend expects "sentiment_score"
-                "sentiment_label": article.get("sentiment_label", "neutral"),
+                "sentiment_label": article.get("sentiment_label", "Neutral"),  # Bullish/Bearish format
                 "link": article.get("link", ""),
                 "publish_date": article.get("publish_date", ""),
                 "image": article.get("image", "")
-            })
+            }
+
+            # Add relevance score if available
+            relevance_score = article.get("ticker_relevance_score")
+            if relevance_score is not None and relevance_score > 0:
+                news_item["relevance_score"] = relevance_score
+
+            formatted_news.append(news_item)
+
+        # Add score definitions to response
+        score_defs = get_score_definitions()
 
         return {
             "ticker": ticker,
             "news": formatted_news,
-            "avg_score": sentiment_results.get("overall_weighted_score", 0)
+            "avg_score": sentiment_results.get("overall_weighted_score", 0),
+            **score_defs
         }
 
     except Exception as e:
@@ -210,8 +238,11 @@ async def get_daily_sentiment(ticker: str):
             date_str = date.strftime("%Y-%m-%d")
             daily_data[date_str] = {"score": 0, "count": 0, "headlines": []}
 
+        # Add score definitions to response
+        score_defs = get_score_definitions()
+
         if not news_articles:
-            return {"ticker": ticker, "daily": daily_data}
+            return {"ticker": ticker, "daily": daily_data, **score_defs}
 
         # Analyze sentiment to get scores
         sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
@@ -230,12 +261,21 @@ async def get_daily_sentiment(ticker: str):
             sentiment_score = article.get("sentiment_score_raw", 0)
             daily_data[date]["score"] += sentiment_score
             daily_data[date]["count"] += 1
-            daily_data[date]["headlines"].append({
+
+            headline_item = {
                 "title": article.get("title", ""),
                 "provider": article.get("provider", "Unknown"),
                 "sentiment_score": sentiment_score,
+                "sentiment_label": article.get("sentiment_label", "Neutral"),  # Bullish/Bearish format
                 "link": article.get("link", "")
-            })
+            }
+
+            # Add relevance score if available
+            relevance_score = article.get("ticker_relevance_score")
+            if relevance_score is not None and relevance_score > 0:
+                headline_item["relevance_score"] = relevance_score
+
+            daily_data[date]["headlines"].append(headline_item)
 
         # Calculate average scores and sort headlines by sentiment magnitude
         for date, data in daily_data.items():
@@ -246,7 +286,8 @@ async def get_daily_sentiment(ticker: str):
 
         return {
             "ticker": ticker,
-            "daily": daily_data
+            "daily": daily_data,
+            **score_defs
         }
 
     except Exception as e:
@@ -256,15 +297,18 @@ async def get_daily_sentiment(ticker: str):
 async def get_news_models(ticker: str):
     """
     API endpoint that returns News objects using the proper model structure.
-    This demonstrates that we're using the News and SentimentScore models.
+    This demonstrates that we're using the News, SentimentScore, and RelevanceScore models.
     Example: /api/news-models?ticker=AAPL
     """
     try:
         # Fetch news articles
         news_articles = await news_service_instance.get_ticker_news(ticker)
 
+        # Add score definitions to response
+        score_defs = get_score_definitions()
+
         if not news_articles:
-            return {"ticker": ticker, "news": [], "message": "No news found"}
+            return {"ticker": ticker, "news": [], "message": "No news found", **score_defs}
 
         # Analyze sentiment - this creates News model objects
         sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
@@ -273,7 +317,7 @@ async def get_news_models(ticker: str):
         # Convert News objects to dict format for JSON response
         formatted_news = []
         for news_obj in news_objects:
-            formatted_news.append({
+            news_item = {
                 "headline": news_obj.headline,
                 "source": news_obj.source,
                 "sentiment_score": {
@@ -286,14 +330,26 @@ async def get_news_models(ticker: str):
                 "link": getattr(news_obj, 'link', None),
                 "publish_date": getattr(news_obj, 'publish_date', None),
                 "image": getattr(news_obj, 'image', None)
-            })
+            }
+
+            # Add relevance score if available
+            if news_obj.relevance_score is not None:
+                news_item["relevance_score"] = {
+                    "value": news_obj.relevance_score.value,
+                    "source": news_obj.relevance_score.source,
+                    "confidence": news_obj.relevance_score.confidence,
+                    "timestamp": news_obj.relevance_score.timestamp.isoformat()
+                }
+
+            formatted_news.append(news_item)
 
         return {
             "ticker": ticker,
             "news": formatted_news,
             "overall_score": sentiment_results.get("overall_weighted_score", 0),
             "sentiment_counts": sentiment_results.get("sentiment_counts", {}),
-            "message": "Using News and SentimentScore models from app.models"
+            "message": "Using News, SentimentScore, and RelevanceScore models from app.models",
+            **score_defs
         }
 
     except Exception as e:
@@ -369,15 +425,25 @@ def search_ticker(q: str):
 
 
 REDIRECT_URI = os.getenv("AZURE_REDIRECT_URI", "http://localhost:8000/api/auth/callback")
-AUTHORITY = "https://login.microsoftonline.com/common"
+AUTHORITY = os.getenv("AZURE_AUTHORITY", "https://login.microsoftonline.com/common")
 SCOPES = ["user.read"]
 
-# Initialize MSAL Confidential Client
-cca = msal.ConfidentialClientApplication(
-    client_id=CLIENT_ID,
-    authority=AUTHORITY,
-    client_credential=CLIENT_SECRET,
-)
+# Initialize MSAL Confidential Client only if credentials are valid
+cca = None
+if CLIENT_ID and CLIENT_ID != "<your-client-id>" and CLIENT_SECRET:
+    try:
+        cca = msal.ConfidentialClientApplication(
+            client_id=CLIENT_ID,
+            authority=AUTHORITY,
+            client_credential=CLIENT_SECRET,
+        )
+        print(f"✓ Azure AD authentication initialized")
+        print(f"  Redirect URI: {REDIRECT_URI}")
+        print(f"  Authority: {AUTHORITY}")
+    except Exception as e:
+        print(f"ERROR: Failed to initialize Azure AD authentication: {str(e)}")
+else:
+    print("WARNING: Azure AD authentication is disabled due to missing credentials.")
 
 
 @router.get("/login")
@@ -385,13 +451,21 @@ def azure_login():
     """
     Redirects the user to Microsoft login page.
     """
+    if not cca:
+        raise HTTPException(
+            status_code=503,
+            detail="Azure AD authentication is not configured. Please check APPLICATION_ID and CLIENT_SECRET environment variables."
+        )
+
     try:
         auth_url = cca.get_authorization_request_url(
             SCOPES,
             redirect_uri=REDIRECT_URI,
         )
+        print(f"Azure login initiated. Redirect URI: {REDIRECT_URI}")
         return RedirectResponse(auth_url)
     except Exception as e:
+        print(f"Azure login error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Azure login init failed: {str(e)}")
 
 
@@ -401,10 +475,27 @@ async def azure_auth_callback(request: Request):
     Handles redirect from Azure after login.
     Exchanges authorization code for access token, then redirects to frontend.
     """
+    if not cca:
+        print("ERROR: Azure callback called but cca is not initialized")
+        return RedirectResponse("http://localhost:3000/login?error=not_configured")
+
     try:
+        # Check for error from Azure
+        error = request.query_params.get("error")
+        error_description = request.query_params.get("error_description")
+
+        if error:
+            print(f"Azure returned error: {error}")
+            print(f"Error description: {error_description}")
+            return RedirectResponse(f"http://localhost:3000/login?error={error}")
+
         code = request.query_params.get("code")
         if not code:
+            print("ERROR: Missing authorization code in callback")
             raise HTTPException(status_code=400, detail="Missing authorization code")
+
+        print(f"Exchanging authorization code for token...")
+        print(f"Using redirect URI: {REDIRECT_URI}")
 
         result = cca.acquire_token_by_authorization_code(
             code,
@@ -413,21 +504,25 @@ async def azure_auth_callback(request: Request):
         )
 
         if "error" in result:
-            print("Azure login error:", result)
-            return RedirectResponse("http://localhost:3000/login?error=azure_failed")
+            error_msg = result.get("error", "unknown")
+            error_desc = result.get("error_description", "No description")
+            print(f"Azure token exchange error: {error_msg}")
+            print(f"Error description: {error_desc}")
+            return RedirectResponse(f"http://localhost:3000/login?error=azure_token_failed&msg={error_msg}")
 
         account = result.get("id_token_claims", {})
         username = account.get("preferred_username", "unknown")
 
-        print("Azure Login Success:", username)
-        print("Account?: ", account)
+        print(f"✓ Azure Login Success: {username}")
 
         return RedirectResponse(
             f"http://localhost:3000/portfolio?user={username}"
         )
 
     except Exception as e:
-        print("Azure login callback error:", e)
+        print(f"Azure login callback exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return RedirectResponse("http://localhost:3000/login?error=azure_failed")
 
 

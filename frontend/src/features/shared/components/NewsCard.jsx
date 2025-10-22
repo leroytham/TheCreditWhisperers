@@ -4,6 +4,7 @@ import React from 'react';
 import { ExternalLink } from 'lucide-react';
 import SentimentBadge from './SentimentBadge.jsx';
 import { formatRelativeTime } from '../utils/dateFormatters.js';
+import { getRelevanceDetails } from '../utils/sentimentHelpers.js';
 
 /**
  * A card component to display a single news article with modern UX/UI.
@@ -17,6 +18,7 @@ import { formatRelativeTime } from '../utils/dateFormatters.js';
  * @param {string|null} props.image
  * @param {string} [props.summary] - The article summary.
  * @param {string[]} [props.tickers] - An array of related tickers.
+ * @param {number} [props.relevance_score] - Relevance score (0 < x <= 1) if available.
  */
 const NewsCard = ({
   title,
@@ -28,7 +30,10 @@ const NewsCard = ({
   image,
   summary,
   tickers,
+  relevance_score,
 }) => {
+  // Get relevance display details if score is available
+  const relevanceDetails = getRelevanceDetails(relevance_score);
   // Use a ref for the fallback div to control its display
   const fallbackRef = React.useRef(null);
 
@@ -112,11 +117,19 @@ const NewsCard = ({
                     {formatRelativeTime(publish_date)}
                 </time>
             </div>
-            {(sentiment_score !== null && sentiment_score !== undefined) && (
-                <div className="mt-2">
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+                {(sentiment_score !== null && sentiment_score !== undefined) && (
                     <SentimentBadge score={sentiment_score} label={sentiment_label} />
-                </div>
-            )}
+                )}
+                {relevanceDetails && (
+                    <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${relevanceDetails.colorClasses}`}
+                        title={`${relevanceDetails.label}: ${relevanceDetails.value}`}
+                    >
+                        Relevance: {relevanceDetails.displayValue}
+                    </span>
+                )}
+            </div>
         </div>
       </div>
       

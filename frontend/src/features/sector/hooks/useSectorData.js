@@ -78,7 +78,10 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
             link: article.link || article.url || article.href || article.source_link || article.source || '#',
             publish_date: article.publish_date || article.date || article.publishedAt || article.pub_date || '',
             provider: article.provider || article.source || article.source_name || '',
-            sentiment_score: (article.sentiment_score ?? article.score ?? null)
+            sentiment_score: (article.sentiment_score ?? article.score ?? null),
+            sentiment_label: article.sentiment_label || 'Neutral',  // Bullish/Bearish format from backend
+            image: article.image || null,  // Article image for display
+            relevance_score: article.relevance_score || null  // Relevance score if available
           }));
           newData.news = normalized;
           newData.sentimentAvg = n.avg_score ?? n.avgScore ?? null;

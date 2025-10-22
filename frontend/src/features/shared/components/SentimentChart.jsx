@@ -27,6 +27,18 @@ const SentimentChart = ({
   // Use pre-processed bars if provided, otherwise generate from dailySentiment
   const dailySentimentBars = preProcesedBars || generateDailySentimentBars(dailySentiment, daysToShow);
 
+  // Static Y-axis range from 1.0 to -1.0 for consistent visualization
+  const yAxisValues = [1.0, 0.5, 0, -0.5, -1.0];
+  const yAxisRange = Math.abs(yAxisValues[0]); // Total range from 0 to max (1.0)
+
+  // Chart dimensions for consistent positioning
+  const topPadding = 40;
+  const chartHeight = 325;
+  const totalYRange = yAxisValues[0] - yAxisValues[4]; // Total range from max to min (2.0)
+
+  // Calculate zero Y position dynamically based on Y-axis range
+  const zeroY = topPadding + (yAxisValues[0] / totalYRange) * chartHeight;
+
   if (!dailySentimentBars || dailySentimentBars.length === 0) {
     return (
       <div className={className}>
@@ -63,8 +75,9 @@ const SentimentChart = ({
 
           {/* Y-axis labels and grid lines */}
           <g className="text-gray-400 text-xs">
-            {SENTIMENT_CHART_CONFIG.yAxisValues.map((value, i) => {
-              const yPos = 40 + i * 65;
+            {yAxisValues.map((value, i) => {
+              // Calculate Y position dynamically based on value's position in range
+              const yPos = topPadding + ((yAxisValues[0] - value) / totalYRange) * chartHeight;
               return (
                 <g key={i}>
                   <line x1="70" y1={yPos} x2="750" y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
@@ -76,10 +89,47 @@ const SentimentChart = ({
                     fontSize="12"
                     fontWeight="500"
                   >
-                    {value.toFixed(1)}
+                    {value.toFixed(2)}
                   </text>
                 </g>
               );
+            })}
+          </g>
+
+          {/* Threshold markers at ±0.15 and ±0.35 */}
+          <g>
+            {SENTIMENT_CHART_CONFIG.yAxisThresholds.filter(t => t !== 0).map((threshold, i) => {
+              // Calculate Y position using the same coordinate system as Y-axis grid lines
+              const yPos = topPadding + ((yAxisValues[0] - threshold) / totalYRange) * chartHeight;
+
+              // Only show threshold if it's within our current range
+              if (Math.abs(threshold) <= yAxisRange) {
+                return (
+                  <g key={`threshold-${i}`}>
+                    <line
+                      x1="70"
+                      y1={yPos}
+                      x2="750"
+                      y2={yPos}
+                      stroke="#d1d5db"
+                      strokeWidth="1"
+                      strokeDasharray="5,5"
+                      opacity="0.6"
+                    />
+                    <text
+                      x="755"
+                      y={yPos + 4}
+                      fill="#6b7280"
+                      fontSize="10"
+                      fontWeight="400"
+                      opacity="0.7"
+                    >
+                      {threshold > 0 ? '+' : ''}{threshold.toFixed(2)}
+                    </text>
+                  </g>
+                );
+              }
+              return null;
             })}
           </g>
 
@@ -88,8 +138,9 @@ const SentimentChart = ({
             const barWidth = SENTIMENT_CHART_CONFIG.barWidth;
             const barSpacing = 680 / dailySentimentBars.length;
             const x = 70 + i * barSpacing + (barSpacing - barWidth) / 2;
-            const zeroY = 170; // Middle of chart (0 value)
-            const scoreHeight = Math.abs(bar.score) * 325; // Scale: 0.4 = 130px
+            // Dynamic scaling based on Y-axis range - use same coordinate system
+            const pixelsPerUnit = chartHeight / totalYRange;
+            const scoreHeight = Math.abs(bar.score) * pixelsPerUnit;
             const barY = bar.score >= 0 ? zeroY - scoreHeight : zeroY;
             const barColor = getBarColor(bar.score);
 
