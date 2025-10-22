@@ -29,36 +29,6 @@ holdings_col = db["Stock_Holding"]
 
 router = APIRouter()
 
-# --- Example of a GET endpoint for categorized news ---
-@router.get("/news/{ticker}/categorized")
-def get_categorized_news_for_ticker(ticker: str, start_date: str, end_date: str):
-    """
-    API endpoint to fetch and categorize news for a given ticker and date range.
-    Example: /news/AAPL/categorized?start_date=2023-10-01&end_date=2023-10-15
-    """
-    try:
-        # The API layer calls the service to do the heavy lifting.
-        categorized_news = news_service_instance.get_categorized_news(ticker, start_date, end_date)
-        
-        # Convert the list of News objects into a JSON-friendly format for the response
-        response_data = [
-            {
-                "headline": news.headline,
-                "source": news.source,
-                "sentiment": {
-                    "value": news.sentiment_score.value,
-                    "label": news.sentiment_score.label, # Using our model's property!
-                    "source": news.sentiment_score.source,
-                    "timestamp": news.sentiment_score.timestamp,
-                }
-            }
-            for news in categorized_news
-        ]
-        return response_data
-    except Exception as e:
-        # Catch potential errors from yfinance or the model
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-    
 @router.get("/stocks/{ticker}/historical-data")
 def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
     """

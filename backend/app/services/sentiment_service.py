@@ -10,101 +10,127 @@ from collections import defaultdict
 # Suppress verbose library outputs
 os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
 warnings.filterwarnings('ignore')
-from transformers import pipeline
 
 from app.models import News, SentimentScore
 
 
 class SentimentService:
     """
-    Service for analyzing sentiment using the FinBERT model.
-    Uses a singleton pattern to ensure the model is loaded only once.
+    Hybrid sentiment analysis service that uses:
+    1. Alpha Vantage pre-calculated scores when available (primary)
+    2. FinBERT ML model for fallback news sources (secondary)
     """
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
-            print("Creating SentimentService instance and loading FinBERT model...")
+            print("Creating SentimentService instance...")
             cls._instance = super(SentimentService, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
 
     def _initialize(self):
-        """Loads the FinBERT model."""
-        # Suppress the model loading messages
-        original_stdout = sys.stdout
-        sys.stdout = io.StringIO()
+        """Loads the FinBERT model for fallback sentiment analysis."""
         try:
-            self.finbert = pipeline("text-classification", model="ProsusAI/finbert")
-        finally:
-            sys.stdout = original_stdout
-        print("FinBERT model loaded successfully.")
+            # Suppress the model loading messages
+            original_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                from transformers import pipeline
+                self.finbert = pipeline("text-classification", model="ProsusAI/finbert")
+                self.finbert_available = True
+            finally:
+                sys.stdout = original_stdout
+            print("FinBERT model loaded successfully for fallback sentiment analysis.")
+        except Exception as e:
+            print(f"WARNING: FinBERT model could not be loaded: {e}")
+            print("Fallback articles will use neutral sentiment (0.0).")
+            self.finbert = None
+            self.finbert_available = False
 
     def analyze_sentiment(self, text: str) -> dict:
         """
         Analyzes sentiment of a single text using FinBERT.
 
         Args:
-            text: Text to analyze
+            text: Text to analyze (article title + body)
 
         Returns:
-            Dictionary with 'label', 'confidence', 'score', and 'scores_dict' keys
+            Dictionary with 'label', 'confidence', and 'score' keys
         """
-        if not text:
-            return {"label": "neutral", "confidence": 0.0, "score": 0.0, "scores_dict": {}}
+        if not text or not self.finbert_available:
+            return {"label": "neutral", "confidence": 0.0, "score": 0.0}
 
-        sentiment_scores = self.finbert(text, truncation=True, return_all_scores=True)[0]
-        scores_dict = {r['label'].lower(): r['score'] for r in sentiment_scores}
+        try:
+            sentiment_scores = self.finbert(text, truncation=True, return_all_scores=True)[0]
+            scores_dict = {r['label'].lower(): r['score'] for r in sentiment_scores}
 
-        label = max(scores_dict, key=scores_dict.get)
-        confidence = scores_dict[label]
+            label = max(scores_dict, key=scores_dict.get)
+            confidence = scores_dict[label]
 
-        # --- NEW CALCULATION: Weighted Polarity Score (WPS) ---
-        # This formula modulates the score by the model's confidence (1 - neutral probability).
-        p_pos = scores_dict.get("positive", 0.0)
-        p_neg = scores_dict.get("negative", 0.0)
-        p_neu = scores_dict.get("neutral", 0.0)
-        
-        # wps = (P(positive) - P(negative)) * (1 - P(neutral))
-        raw_score = (p_pos - p_neg) * (1 - p_neu)
+            # Weighted Polarity Score (WPS) calculation
+            # wps = (P(positive) - P(negative)) * (1 - P(neutral))
+            # This modulates the score by the model's confidence
+            p_pos = scores_dict.get("positive", 0.0)
+            p_neg = scores_dict.get("negative", 0.0)
+            p_neu = scores_dict.get("neutral", 0.0)
 
-        return {
-            "label": label,
-            "confidence": confidence,
-            "score": raw_score,
-            "scores_dict": scores_dict
-        }
+            raw_score = (p_pos - p_neg) * (1 - p_neu)
 
-    def analyze_sentiment_batch(self, texts: list[str]) -> list[dict]:
+            return {
+                "label": label,
+                "confidence": confidence,
+                "score": raw_score
+            }
+        except Exception as e:
+            print(f"Error analyzing sentiment with FinBERT: {e}")
+            return {"label": "neutral", "confidence": 0.0, "score": 0.0}
+
+    def _analyze_with_finbert(self, article: dict) -> tuple[float, str, float]:
         """
-        Analyzes sentiment for multiple texts.
+        Helper method to analyze an article with FinBERT.
 
         Args:
-            texts: List of texts to analyze
+            article: Article dictionary with 'title' and optionally 'body'
 
         Returns:
-            List of sentiment dictionaries
+            Tuple of (score, label, confidence)
         """
-        return [self.analyze_sentiment(text) for text in texts if text]
+        title = article.get("title", "")
+        body = article.get("body", article.get("summary", ""))
+
+        # Combine title and body for comprehensive analysis
+        # FinBERT can handle longer texts, providing better context
+        text_to_analyze = f"{title}. {body}".strip()
+
+        if not text_to_analyze or text_to_analyze == ".":
+            return (0.0, "neutral", 0.0)
+
+        sentiment_result = self.analyze_sentiment(text_to_analyze)
+        return (
+            sentiment_result["score"],
+            sentiment_result["label"],
+            sentiment_result["confidence"]
+        )
 
     def analyze_sentiment_with_weights(self, news_articles: list[dict]) -> dict:
         """
-        Analyzes sentiment with recency weighting using the FinBERT model.
+        Hybrid sentiment analysis with recency weighting.
 
-        This method:
-        1. Analyzes sentiment for each article
-        2. Applies recency weighting (more recent = higher weight)
-        3. Calculates overall weighted score and daily averages
+        This method intelligently chooses the best sentiment analyzer:
+        1. For Alpha Vantage articles: Uses pre-calculated ticker_sentiment_score (fast, accurate)
+        2. For fallback articles: Uses FinBERT ML model to analyze text (comprehensive)
+        3. Applies recency weighting for calculating overall_weighted_score
         4. Returns both dict format (backward compatible) and News model objects
 
         Args:
-            news_articles: List of news article dictionaries with 'title' and 'publish_date'
+            news_articles: List of news article dictionaries (may have Alpha Vantage scores or not)
 
         Returns:
             Dictionary containing:
                 - articles_with_sentiment: List of articles with sentiment data
                 - news_objects: List of News model objects
-                - overall_weighted_score: Weighted average sentiment score
+                - overall_weighted_score: Weighted average sentiment score (with recency weighting)
                 - sentiment_counts: Count of positive/neutral/negative articles
                 - daily_average_sentiment: Daily sentiment averages
         """
@@ -125,62 +151,79 @@ class SentimentService:
 
         daily_scores = defaultdict(list)
         today = datetime.utcnow().date()
-        seven_days_ago = today - timedelta(days=6)
 
         # Normalized recency weights (more recent = higher weight)
+        # We'll calculate days old from today for each article
         raw_weights = {0: 1.0, 1: 0.8, 2: 0.6, 3: 0.5, 4: 0.4, 5: 0.35, 6: 0.3}
         total_raw = sum(raw_weights.values())
-        weights = {k: v / total_raw for k, v in raw_weights.items()}
+        normalized_weights = {k: v / total_raw for k, v in raw_weights.items()}
 
         for article in news_articles:
-            title = article.get("title", "")
-            summary = article.get("summary", "")
+            # Detect which sentiment analyzer to use
+            has_alpha_vantage_score = "ticker_sentiment_score" in article
 
-            # Combine title and summary for a more comprehensive analysis.
-            # The FinBERT model can handle longer texts, so this provides more context.
-            text_to_analyze = f"{title}. {summary}".strip()
+            if has_alpha_vantage_score:
+                # Use Alpha Vantage pre-calculated score (primary method)
+                raw_score = article.get("ticker_sentiment_score", 0.0)
+                label = article.get("ticker_sentiment_label", "neutral")
 
-            if not text_to_analyze or text_to_analyze == ".":
-                continue
+                # Map Alpha Vantage labels to our standard labels (case-insensitive)
+                # Alpha Vantage labels: Bearish, Somewhat-Bearish, Neutral, Somewhat-Bullish, Bullish
+                label_lower = label.lower() if isinstance(label, str) else "neutral"
 
-            # Analyze sentiment using FinBERT
-            sentiment_result = self.analyze_sentiment(text_to_analyze)
+                if label_lower in ["bearish", "somewhat-bearish", "somewhat bearish"]:
+                    standard_label = "negative"
+                elif label_lower in ["bullish", "somewhat-bullish", "somewhat bullish"]:
+                    standard_label = "positive"
+                else:
+                    standard_label = "neutral"
 
-            label = sentiment_result["label"]
-            confidence = sentiment_result["confidence"]
-            raw_score = sentiment_result["score"]
+                # Calculate confidence based on absolute score value
+                confidence = min(abs(raw_score), 1.0)
+                sentiment_source = "Alpha Vantage"
 
-            # Calculate recency weight
+            else:
+                # Use FinBERT for fallback sources (secondary method)
+                raw_score, standard_label, confidence = self._analyze_with_finbert(article)
+                sentiment_source = "FinBERT (ProsusAI)"
+
+            # Calculate recency weight for overall score
             recency_weight = 0
             pub_date_str = article.get("publish_date")
             if pub_date_str:
                 try:
                     pub_date = datetime.strptime(pub_date_str, "%Y-%m-%d").date()
-                    if seven_days_ago <= pub_date <= today:
-                        days_old = (today - pub_date).days
-                        recency_weight = weights.get(days_old, 0)
-                        weighted_total += raw_score * recency_weight
-                        weight_sum += recency_weight
-                        daily_scores[pub_date].append(raw_score * recency_weight)
+                    days_old = (today - pub_date).days
+
+                    # Use weight for articles within first 7 days, else use minimal weight
+                    if days_old <= 6:
+                        recency_weight = normalized_weights.get(days_old, 0.1)
+                    else:
+                        # For older articles, use a diminishing weight
+                        recency_weight = 0.1 / (1 + (days_old - 6) / 7)
+
+                    weighted_total += raw_score * recency_weight
+                    weight_sum += recency_weight
+                    daily_scores[pub_date].append(raw_score * recency_weight)
                 except ValueError:
                     pass
 
             # Add sentiment data to the dictionary (backward compatibility)
-            article["sentiment_label"] = label
+            article["sentiment_label"] = standard_label
             article["sentiment_confidence"] = confidence
-            article["sentiment_score_raw"] = raw_score
+            article["sentiment_score_raw"] = raw_score  # Keep raw Alpha Vantage score
             article["sentiment_weight"] = recency_weight
             results.append(article)
-            sentiment_counts[label] += 1
+            sentiment_counts[standard_label] += 1
 
             # Create proper News object with SentimentScore model
             sentiment_score_obj = SentimentScore(
                 value=raw_score,
-                source="FinBERT (ProsusAI)",
+                source=sentiment_source,  # Dynamic: "Alpha Vantage" or "FinBERT (ProsusAI)"
                 confidence=confidence
             )
             news_obj = News(
-                headline=title,
+                headline=article.get("title", ""),
                 source=article.get("provider", "Unknown"),
                 sentiment_score=sentiment_score_obj
             )
@@ -190,10 +233,16 @@ class SentimentService:
             news_obj.image = article.get("image")
             news_objects.append(news_obj)
 
-        # Calculate daily average sentiment
+        # Calculate daily average sentiment (using weighted scores)
         daily_avg_sentiment = {}
-        for i in range(7):
-            date = seven_days_ago + timedelta(days=i)
+        # Get unique dates from all articles
+        all_dates = sorted(set(
+            datetime.strptime(article.get("publish_date"), "%Y-%m-%d").date()
+            for article in news_articles
+            if article.get("publish_date")
+        ))
+
+        for date in all_dates:
             scores = daily_scores.get(date, [])
             daily_avg_sentiment[date.strftime("%Y-%m-%d")] = sum(scores) / len(scores) if scores else 0
 
