@@ -95,8 +95,11 @@ const RelatedNews = ({
     return (
       <div className={layoutClasses[currentLayout]}>
         {newsToDisplay.map((article, index) => (
-          // Use link as part of key for better stability if available
-          <NewsCard key={article.link || index} {...article} />
+          // Use unique combination of properties to avoid duplicate keys
+          <NewsCard 
+            key={`${index}-${article.title?.substring(0, 20) || ''}-${article.publish_date || ''}`} 
+            {...article} 
+          />
         ))}
       </div>
     );

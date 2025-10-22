@@ -18,6 +18,7 @@ class StockDataService:
     def __init__(self):
         # Sector-to-ETF mapping for S&P 500 sectors
         self.sector_etf_map = {
+            '^GSPC': 'SPY',       # S&P 500 (All Sectors)
             '^SP500-25': 'XLY',   # Consumer Discretionary
             '^SP500-30': 'XLP',   # Consumer Staples
             '^SP500-35': 'XLV',   # Health Care
@@ -90,10 +91,10 @@ class StockDataService:
 
         return df[(df.index >= start_date) & (df.index <= end_date)]
 
-    @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents")
+    @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents_v2")
     def get_sector_top_constituents(self, sector_ticker: str) -> list[dict]:
         """
-        Fetches the top 10 holdings for a given S&P 500 sector ticker.
+        Fetches all holdings for a given S&P 500 sector ticker.
         Results are cached in Redis for SECTOR_CACHE_TTL seconds.
 
         Args:
@@ -117,30 +118,41 @@ class StockDataService:
                 return []  # Return empty list if no holdings data
 
             holdings = holdings_data[etf_ticker]["holdings"]
-            top_symbols = [h.get("symbol") for h in holdings[:10] if h.get("symbol")]
+            all_symbols = [h.get("symbol") for h in holdings if h.get("symbol")]
 
-            if not top_symbols:
+            if not all_symbols:
                 return []
 
             # Batch request for faster price lookup
-            price_data = YQTicker(top_symbols).price
+            price_data = YQTicker(all_symbols).price
 
-            top_constituents = []
-            for h in holdings[:10]:
+            all_constituents = []
+            for h in holdings:
                 symbol = h.get("symbol")
                 if not symbol or symbol not in price_data:
                     continue
 
                 p = price_data.get(symbol, {})
-                top_constituents.append({
+                all_constituents.append({
                     "symbol": symbol,
                     "name": p.get("shortName") or h.get("holdingName"),
                     "price": p.get("regularMarketPrice"),
                     "percentChange": p.get("regularMarketChangePercent"),
                     "percentOfAssets": h.get("holdingPercent"),
+                    "marketCap": p.get("marketCap"),
+                    "volume": p.get("regularMarketVolume"),
+                    "avgVolume": p.get("averageVolume"),
+                    "dayHigh": p.get("regularMarketDayHigh"),
+                    "dayLow": p.get("regularMarketDayLow"),
+                    "fiftyTwoWeekHigh": p.get("fiftyTwoWeekHigh"),
+                    "fiftyTwoWeekLow": p.get("fiftyTwoWeekLow"),
+                    "peRatio": p.get("trailingPE"),
+                    "dividendYield": p.get("dividendYield"),
+                    "sector": p.get("sector"),
+                    "industry": p.get("industry"),
                 })
 
-            return top_constituents
+            return all_constituents
         except Exception as e:
             print(f"Error fetching constituents for {etf_ticker}: {e}")
             return []

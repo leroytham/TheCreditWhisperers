@@ -39,7 +39,7 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
     const fetchPrice = fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`)
       .then(r => r.json());
 
-    const fetchConstituents = fetch(`/api/top-constituents?ticker=${encodeURIComponent(newsTicker)}`)
+    const fetchConstituents = fetch(`/api/sectors/${encodeURIComponent(ticker)}/top-constituents`)
       .then(r => r.json());
 
     const fetchNews = fetch(`/api/news?ticker=${encodeURIComponent(newsTicker)}`)

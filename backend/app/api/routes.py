@@ -102,9 +102,9 @@ def get_top_constituents_for_sector(sector_ticker: str):
         constituents = stock_data_service.get_sector_top_constituents(sector_ticker)
 
         if not constituents:
-             return {"sector_ticker": sector_ticker, "constituents": []}
+             return {"success": True, "sector_ticker": sector_ticker, "top_constituents": []}
 
-        return {"sector_ticker": sector_ticker, "constituents": constituents}
+        return {"success": True, "sector_ticker": sector_ticker, "top_constituents": constituents}
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
