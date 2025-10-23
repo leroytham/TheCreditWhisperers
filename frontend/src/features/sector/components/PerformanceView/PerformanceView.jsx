@@ -4,10 +4,9 @@ import React, { useState } from 'react';
 import { resolveSectorTicker } from '../../utils/tickerResolver';
 import { useSectorData } from '../../hooks/useSectorData';
 import { usePriceData } from '../../hooks/usePriceData';
-import { useSentimentData } from '../../hooks/useSentimentData';
 import { useRollingSentiment } from '../../../entity/hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
-import { PriceChart, SentimentChart, NewsVolumeChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
+import { PriceChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
 import { formatFullTimestamp } from '../../../shared/utils/formatters';
 import PerformanceHeader from './PerformanceHeader';
 import TopConstituents from './TopConstituents';
@@ -62,9 +61,6 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     priceChangePercent,
     currentPrice
   } = usePriceData(priceData1Y, timeframe);
-
-  // Process sentiment data
-  const { sentimentBars } = useSentimentData(dailySentiment, 7);
 
   // Render content based on active tab
   const renderContent = () => {
@@ -238,9 +234,6 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               topEvents={topEvents}
               showEvents={showEvents}
             />
-            <div className="mt-6">
-              <SentimentChart sentimentBars={sentimentBars} />
-            </div>
           </div>
         );
 
@@ -278,24 +271,6 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                 sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
               />
             </div>
-
-            {/* Individual Charts Side-by-Side (only show in daily mode) */}
-            {viewMode === 'daily' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
-                  <SentimentChart
-                    dailySentiment={dailySentiment}
-                    daysToShow={getDaysToShow(sentimentTimeframe)}
-                  />
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
-                  <NewsVolumeChart
-                    dailySentiment={dailySentiment}
-                    daysToShow={getDaysToShow(sentimentTimeframe)}
-                  />
-                </div>
-              </div>
-            )}
 
             {/* Bottom Row: Overall Sentiment + Key Insights */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

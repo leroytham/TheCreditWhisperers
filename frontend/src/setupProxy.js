@@ -42,15 +42,50 @@ module.exports = function(app) {
   app.use(
     '/ws',
     createProxyMiddleware({
-      target: process.env.REACT_APP_WS_URL || 'ws://localhost:8000',
+      target: process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000',
       ws: true, // Enable WebSocket proxying
       changeOrigin: true,
       logLevel: 'debug',
+      // Timeout configuration for WebSocket connections
+      proxyTimeout: 30000, // 30 seconds
+      timeout: 30000,
+      // Headers for WebSocket upgrade
+      headers: {
+        Connection: 'Upgrade',
+        Upgrade: 'websocket',
+      },
       onProxyReqWs: (proxyReq, req, socket, options, head) => {
         console.log(`[WebSocket Proxy] ${req.url} -> ${options.target.href}${req.url}`);
+        console.log('[WebSocket Proxy] Connection upgrade initiated');
+
+        // Handle socket errors
+        socket.on('error', (err) => {
+          console.error('[WebSocket Socket Error]', err);
+        });
+      },
+      onOpen: (proxySocket) => {
+        console.log('[WebSocket Proxy] Connection opened successfully');
+
+        proxySocket.on('error', (err) => {
+          console.error('[WebSocket Proxy Socket Error]', err);
+        });
       },
       onError: (err, req, res) => {
-        console.error('[WebSocket Proxy Error]', err);
+        console.error('[WebSocket Proxy Error]', {
+          message: err.message,
+          code: err.code,
+          url: req.url,
+          target: process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000',
+        });
+
+        // Send error response if possible
+        if (res && !res.headersSent) {
+          res.status(500).json({
+            error: 'WebSocket Proxy Error',
+            message: err.message,
+            code: err.code,
+          });
+        }
       },
       onClose: (res, socket, head) => {
         console.log('[WebSocket] Connection closed');
@@ -60,6 +95,6 @@ module.exports = function(app) {
 
   console.log('\n✅ Proxy Configuration Loaded:');
   console.log(`   API: /api/* -> ${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}`);
-  console.log(`   WebSocket: /ws/* -> ${process.env.REACT_APP_WS_URL || 'ws://localhost:8000'}`);
+  console.log(`   WebSocket: /ws/* -> ${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}`);
   console.log('');
 };

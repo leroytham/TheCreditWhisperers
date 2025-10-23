@@ -111,7 +111,15 @@ export const useNotificationSocket = (clientId, options = {}) => {
       ws.onerror = (error) => {
         if (!mountedRef.current) return;
 
-        console.error('❌ WebSocket error:', error);
+        console.error('❌ WebSocket error:', {
+          error,
+          readyState: ws.readyState,
+          url: ws.url,
+          protocol: ws.protocol,
+          attemptNumber,
+          reconnectCount
+        });
+        console.error('WebSocket ReadyState values: 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED');
         setHasError(true);
         if (onError) onError(error);
       };
@@ -122,7 +130,13 @@ export const useNotificationSocket = (clientId, options = {}) => {
           return;
         }
 
-        console.log('WebSocket disconnected', event.code, event.reason);
+        console.log('WebSocket disconnected', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+          attemptNumber,
+          reconnectCount
+        });
         setIsConnected(false);
         if (onDisconnect) onDisconnect();
 

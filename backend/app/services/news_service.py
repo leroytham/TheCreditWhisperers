@@ -96,13 +96,16 @@ class NewsService:
 
                 news_list = []
                 for article in raw_data:
-                    # Parse publish date
+                    # Parse publish date and timestamp
                     time_published = article.get("time_published", "")
                     if not time_published:
                         continue
 
                     try:
-                        pub_date = datetime.strptime(time_published, "%Y%m%dT%H%M%S").strftime('%Y-%m-%d')
+                        # Parse the full datetime with timezone awareness
+                        pub_datetime = datetime.strptime(time_published, "%Y%m%dT%H%M%S")
+                        pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+                        pub_date = pub_datetime.strftime('%Y-%m-%d')
                     except ValueError:
                         continue
 
@@ -146,6 +149,7 @@ class NewsService:
                         "link": article.get("url"),
                         "provider": article.get("source"),
                         "publish_date": pub_date,
+                        "publish_timestamp": pub_datetime.isoformat(),
                         "body": body_content,
                         "ticker_sentiment_score": ticker_sentiment_score,
                         "ticker_sentiment_label": ticker_sentiment_label,

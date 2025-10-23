@@ -1,7 +1,7 @@
 // src/features/entity/components/PerformanceView/PerformanceView.jsx
 
 import React, { useState, useEffect } from 'react';
-import { PriceChart, SentimentChart, NewsVolumeChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, OverallSentiment, SignificantEvents, RelatedNews } from '../../../shared/components';
+import { PriceChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, OverallSentiment, SignificantEvents, RelatedNews } from '../../../shared/components';
 import { useRollingSentiment } from '../../hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
@@ -226,24 +226,6 @@ const PerformanceView = ({
                 sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
               />
             </div>
-
-            {/* Individual Charts Side-by-Side (only show in daily mode) */}
-            {viewMode === 'daily' && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
-                  <SentimentChart
-                    dailySentiment={dailySentiment}
-                    daysToShow={getDaysToShow(sentimentTimeframe)}
-                  />
-                </div>
-                <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
-                  <NewsVolumeChart
-                    dailySentiment={dailySentiment}
-                    daysToShow={getDaysToShow(sentimentTimeframe)}
-                  />
-                </div>
-              </div>
-            )}
 
             {/* Bottom Row: Overall Sentiment + Placeholder */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
