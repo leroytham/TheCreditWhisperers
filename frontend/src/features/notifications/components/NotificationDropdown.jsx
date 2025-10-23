@@ -12,8 +12,8 @@ const NotificationDropdown = ({ notifications = [] }) => {
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  const recentNotifications = notifications.filter(n => !n.archived).slice(0, 5);
-  const hasUnread = recentNotifications.some(n => n.isNew);
+  const recentNotifications = notifications.filter(n => !n.isArchived).slice(0, 5);
+  const hasUnread = recentNotifications.some(n => !n.isRead);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -63,17 +63,19 @@ const NotificationDropdown = ({ notifications = [] }) => {
                   key={notif.id}
                   onClick={handleViewAll}
                   className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
-                    notif.isNew ? 'bg-blue-50' : ''
+                    !notif.isRead ? 'bg-blue-50' : ''
                   }`}
                 >
                   <div className="flex items-start">
-                    {notif.isNew && (
+                    {!notif.isRead && (
                       <span className="flex-shrink-0 inline-block h-2 w-2 rounded-full bg-blue-500 mt-2 mr-3" />
                     )}
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">{notif.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">{notif.preview}</p>
-                      <p className="text-xs text-gray-400 mt-1">{notif.timestamp}</p>
+                      <p className="text-xs text-gray-500 mt-1">{notif.message}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(notif.timestamp).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 </div>

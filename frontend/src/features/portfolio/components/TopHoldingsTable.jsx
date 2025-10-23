@@ -29,7 +29,7 @@ const TopHoldingsTable = () => {
 
       try {
         const response = await fetch(
-          `http://localhost:8000/api/portfolio/holdings/${username}/${encodeURIComponent(
+          `http://localhost:8000/portfolio/holdings/${username}/${encodeURIComponent(
             accountName
           )}`
         );

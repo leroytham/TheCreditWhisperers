@@ -22,7 +22,7 @@ const NewsFeedCard = () => {
       }
 
       const holdingsRes = await fetch(
-        `http://localhost:8000/api/portfolio/holdings/${username}/${encodeURIComponent(
+        `http://localhost:8000/portfolio/holdings/${username}/${encodeURIComponent(
           accountName
         )}`
       );
@@ -40,7 +40,7 @@ const NewsFeedCard = () => {
       const newsPromises = symbols.map(async (ticker) => {
         try {
           const res = await fetch(
-            `http://localhost:8000/api/news?ticker=${ticker}`
+            `/api/news?ticker=${ticker}`
           );
           const data = await res.json();
           return data.news.map((n) => ({ ...n, ticker }));

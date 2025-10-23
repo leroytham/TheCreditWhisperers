@@ -114,7 +114,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
 
       console.log('🔹 Sending payload:', payload);
 
-      const response = await fetch('http://localhost:8000/api/portfolio/save', {
+      const response = await fetch('http://localhost:8000/portfolio/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

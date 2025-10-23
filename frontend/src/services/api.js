@@ -2,6 +2,15 @@
 
 import axios from 'axios';
 import { API_BASE_URL, HTTP_STATUS, ERROR_MESSAGES, RETRY_CONFIG } from '../config/constants';
+import useAppStore from '../store/useAppStore';
+import {
+  getErrorMessage,
+  getSuccessMessage,
+  getCategoryFromUrl,
+  shouldSuppressError,
+  shouldSuppressSuccess,
+  shouldShowSuccessNotification,
+} from '../features/notifications/utils/notificationHelpers';
 
 /**
  * Create axios instance with base configuration
@@ -30,7 +39,7 @@ api.interceptors.request.use(
 
     // Log request in development
     if (process.env.NODE_ENV === 'development') {
-      console.log('=€ API Request:', {
+      console.log('=ï¿½ API Request:', {
         method: config.method.toUpperCase(),
         url: config.url,
         params: config.params,
@@ -64,6 +73,18 @@ api.interceptors.response.use(
       });
     }
 
+    // Show success notification for mutations
+    if (shouldShowSuccessNotification(response.config) && !shouldSuppressSuccess(response.config)) {
+      const { notifySuccess } = useAppStore.getState();
+      const message = getSuccessMessage(response.config, response);
+      const category = getCategoryFromUrl(response.config.url);
+
+      notifySuccess(message, {
+        category,
+        duration: 3000,
+      });
+    }
+
     return response;
   },
   async (error) => {
@@ -71,7 +92,15 @@ api.interceptors.response.use(
 
     // Handle network errors
     if (!error.response) {
-      console.error('L Network Error:', error.message);
+      console.error('âŒ Network Error:', error.message);
+
+      // Show network error notification
+      const { notifyError } = useAppStore.getState();
+      notifyError('Network error. Please check your connection.', {
+        category: 'System',
+        priority: 'critical',
+      });
+
       throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
     }
 
@@ -101,6 +130,18 @@ api.interceptors.response.use(
 
       await new Promise(resolve => setTimeout(resolve, delay));
       return api(originalRequest);
+    }
+
+    // Show error notification (unless suppressed)
+    if (!shouldSuppressError(error)) {
+      const { notifyError } = useAppStore.getState();
+      const message = getErrorMessage(error);
+      const category = getCategoryFromUrl(originalRequest.url);
+
+      notifyError(message, {
+        category,
+        priority: status >= 500 ? 'critical' : 'high',
+      });
     }
 
     // Handle specific error codes

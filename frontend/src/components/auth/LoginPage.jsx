@@ -121,7 +121,7 @@ export default function LoginCard() {
             // }}
 
             onClick={() => {
-              window.location.href = "http://localhost:8000/api/login";
+              window.location.href = "http://localhost:8000/login";
             }}
           >
             <img

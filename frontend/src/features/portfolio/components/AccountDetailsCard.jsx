@@ -33,7 +33,7 @@ const AccountDetailsCard = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:8000/api/portfolio/holdings/${username}/${encodeURIComponent(name)}`
+        `http://localhost:8000/portfolio/holdings/${username}/${encodeURIComponent(name)}`
       );
 
       if (!response.ok) {

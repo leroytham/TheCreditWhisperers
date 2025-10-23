@@ -4,7 +4,7 @@ import { HelpCircle, Menu, Search } from 'lucide-react';
 import EntitySearch from '../../features/entity/components/EntitySearch/EntitySearch';
 import NotificationDropdown from '../../features/notifications/components/NotificationDropdown';
 import { useTickerSearch } from '../../features/entity/hooks/useTickerSearch';
-import { mockNotifications } from '../../features/notifications/data/mockNotifications';
+import useAppStore from '../../store/useAppStore';
 
 /**
  * AppHeader Component
@@ -21,6 +21,7 @@ import { mockNotifications } from '../../features/notifications/data/mockNotific
 const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntitySearch = false }) => {
   const navigate = useNavigate();
   const { searchTerm, setSearchTerm, suggestions, loading, clearSearch } = useTickerSearch();
+  const notifications = useAppStore(state => state.notifications);
 
   // Handle ticker selection for general search
   const handleGeneralTickerSelect = (symbol) => {
@@ -91,7 +92,7 @@ const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntityS
               )}
 
               {/* Notification Dropdown */}
-              <NotificationDropdown notifications={mockNotifications} />
+              <NotificationDropdown notifications={notifications} />
 
               {/* Help Icon */}
               <button className="p-1 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100">

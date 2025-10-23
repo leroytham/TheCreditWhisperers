@@ -46,16 +46,27 @@ const useAppStore = create(
         // ===== WATCHLIST =====
         watchlist: [],
 
-        addToWatchlist: (ticker) => set((state) => {
-          if (!state.watchlist.includes(ticker)) {
-            return { watchlist: [...state.watchlist, ticker] };
+        addToWatchlist: (ticker) => {
+          const { watchlist, notifySuccess } = get();
+          if (!watchlist.includes(ticker)) {
+            set({ watchlist: [...watchlist, ticker] });
+            notifySuccess(`${ticker} added to watchlist`, {
+              category: 'Portfolio',
+              duration: 2500,
+            });
           }
-          return state;
-        }),
+        },
 
-        removeFromWatchlist: (ticker) => set((state) => ({
-          watchlist: state.watchlist.filter((t) => t !== ticker),
-        })),
+        removeFromWatchlist: (ticker) => {
+          const { notifyInfo } = get();
+          set((state) => ({
+            watchlist: state.watchlist.filter((t) => t !== ticker),
+          }));
+          notifyInfo(`${ticker} removed from watchlist`, {
+            category: 'Portfolio',
+            duration: 2500,
+          });
+        },
 
         isInWatchlist: (ticker) => {
           const { watchlist } = get();
@@ -74,6 +85,45 @@ const useAppStore = create(
 
         clearRecentSearches: () => set({ recentSearches: [] }),
 
+        // ===== PRICE ALERTS =====
+        priceAlerts: [],
+
+        addPriceAlert: (alert) => set((state) => ({
+          priceAlerts: [
+            ...state.priceAlerts,
+            {
+              id: Date.now() + Math.random(),
+              createdAt: new Date().toISOString(),
+              isActive: true,
+              triggered: false,
+              ...alert,
+            },
+          ],
+        })),
+
+        removePriceAlert: (id) => set((state) => ({
+          priceAlerts: state.priceAlerts.filter((a) => a.id !== id),
+        })),
+
+        updatePriceAlert: (id, updates) => set((state) => ({
+          priceAlerts: state.priceAlerts.map((a) =>
+            a.id === id ? { ...a, ...updates } : a
+          ),
+        })),
+
+        togglePriceAlert: (id) => set((state) => ({
+          priceAlerts: state.priceAlerts.map((a) =>
+            a.id === id ? { ...a, isActive: !a.isActive } : a
+          ),
+        })),
+
+        getActiveAlertsForTicker: (ticker) => {
+          const { priceAlerts } = get();
+          return priceAlerts.filter(
+            (a) => a.ticker === ticker && a.isActive && !a.triggered
+          );
+        },
+
         // ===== NOTIFICATIONS =====
         notifications: [],
 
@@ -81,8 +131,17 @@ const useAppStore = create(
           notifications: [
             ...state.notifications,
             {
-              id: Date.now(),
+              id: Date.now() + Math.random(), // Ensure unique ID
               timestamp: new Date().toISOString(),
+              type: 'info', // 'success' | 'error' | 'warning' | 'info' | 'critical'
+              category: 'System', // 'Portfolio' | 'Market' | 'News' | 'System'
+              priority: 'medium', // 'low' | 'medium' | 'high' | 'critical'
+              isRead: false,
+              isArchived: false,
+              showAsToast: true, // Show in toast container
+              duration: 5000, // Auto-dismiss duration in ms (null = no auto-dismiss)
+              actionUrl: null, // Optional link for "View Details"
+              metadata: {}, // Flexible object for custom data
               ...notification,
             },
           ],
@@ -92,7 +151,87 @@ const useAppStore = create(
           notifications: state.notifications.filter((n) => n.id !== id),
         })),
 
+        updateNotification: (id, updates) => set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, ...updates } : n
+          ),
+        })),
+
+        markAsRead: (id) => set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, isRead: true } : n
+          ),
+        })),
+
+        markAllAsRead: () => set((state) => ({
+          notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+        })),
+
+        archiveNotification: (id) => set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, isArchived: true, showAsToast: false } : n
+          ),
+        })),
+
+        getUnreadCount: () => {
+          const { notifications } = get();
+          return notifications.filter((n) => !n.isRead && !n.isArchived).length;
+        },
+
         clearNotifications: () => set({ notifications: [] }),
+
+        // Helper methods for specific notification types
+        notifySuccess: (message, options = {}) => {
+          const { addNotification } = get();
+          addNotification({
+            type: 'success',
+            title: options.title || 'Success',
+            message,
+            category: options.category || 'System',
+            priority: options.priority || 'low',
+            duration: options.duration || 3000,
+            ...options,
+          });
+        },
+
+        notifyError: (message, options = {}) => {
+          const { addNotification } = get();
+          addNotification({
+            type: 'error',
+            title: options.title || 'Error',
+            message,
+            category: options.category || 'System',
+            priority: options.priority || 'high',
+            duration: null, // Errors don't auto-dismiss
+            ...options,
+          });
+        },
+
+        notifyWarning: (message, options = {}) => {
+          const { addNotification } = get();
+          addNotification({
+            type: 'warning',
+            title: options.title || 'Warning',
+            message,
+            category: options.category || 'System',
+            priority: options.priority || 'medium',
+            duration: options.duration || 5000,
+            ...options,
+          });
+        },
+
+        notifyInfo: (message, options = {}) => {
+          const { addNotification } = get();
+          addNotification({
+            type: 'info',
+            title: options.title || 'Information',
+            message,
+            category: options.category || 'System',
+            priority: options.priority || 'low',
+            duration: options.duration || 4000,
+            ...options,
+          });
+        },
 
         // ===== PREFERENCES =====
         preferences: {
@@ -147,6 +286,8 @@ const useAppStore = create(
           recentSearches: state.recentSearches,
           preferences: state.preferences,
           selectedTimeframe: state.selectedTimeframe,
+          priceAlerts: state.priceAlerts,
+          notifications: state.notifications,
         }),
       }
     ),

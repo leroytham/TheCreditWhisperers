@@ -72,7 +72,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
         }
 
         const response = await axios.get(
-          `http://localhost:8000/api/portfolio/${username}/${encodeURIComponent(accountName)}`
+          `http://localhost:8000/portfolio/${username}/${encodeURIComponent(accountName)}`
         );
 
         const data = response.data;
@@ -175,7 +175,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       };
 
       const response = await axios.put(
-        'http://localhost:8000/api/portfolio/update',
+        'http://localhost:8000/portfolio/update',
         payload
       );
 

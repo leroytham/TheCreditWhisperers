@@ -29,7 +29,7 @@ if not CLIENT_SECRET:
     print("WARNING: Azure CLIENT_SECRET is not configured. Azure authentication will not work.")
 
 
-mongo_uri = os.getenv("MONGO_URI_PYTHON")
+mongo_uri = os.getenv("MONGO_URI")
 client = MongoClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
 db = client["FYP"]  
 accounts_col = db["Account_Details"]

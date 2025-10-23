@@ -16,7 +16,7 @@ const ClientInfoBar = () => {
 
     const fetchAccounts = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/accounts/${username}`);
+        const response = await axios.get(`http://localhost:8000/accounts/${username}`);
         setAccounts(response.data.accounts || []);
       } catch (error) {
         console.error('Failed to fetch accounts:', error);
