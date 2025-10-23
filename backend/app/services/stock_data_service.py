@@ -64,7 +64,7 @@ class StockDataService:
 
         Args:
             df: DataFrame with datetime index
-            timeframe: One of "5D", "1M", "3M", "6M", "1Y", "YTD"
+            timeframe: One of "1D", "1M", "6M", "1Y", "YTD", "5Y"
 
         Returns:
             Filtered DataFrame or original if timeframe not recognized
@@ -72,24 +72,59 @@ class StockDataService:
         if df is None or df.empty:
             return df
 
-        end_date = datetime.today()
+        # For 1D intraday data, return all data without filtering
+        if timeframe == "1D":
+            return df
+
+        # For daily timeframes (1M, 6M, YTD, 1Y, 5Y), exclude today's incomplete data
+        # Only show completed trading days (yesterday and before)
+
+        # Get today's date (normalize to remove time component and handle timezone)
+        today = pd.Timestamp.now().normalize()
+
+        print(f"[DEBUG filter_data_by_timeframe] Timeframe: {timeframe}")
+        print(f"[DEBUG filter_data_by_timeframe] Today's date: {today}")
+        print(f"[DEBUG filter_data_by_timeframe] Input df length: {len(df)}")
+        print(f"[DEBUG filter_data_by_timeframe] DataFrame index timezone: {df.index.tz}")
+
+        if len(df) >= 3:
+            print(f"[DEBUG filter_data_by_timeframe] Last 3 dates before filtering: {df.index[-3:].tolist()}")
+
+        # Normalize the dataframe index to date only (remove time component)
+        df_dates = df.index.normalize()
+
+        # First, exclude any data from today or future (only keep data before today)
+        df_without_today = df[df_dates < today]
+
+        print(f"[DEBUG filter_data_by_timeframe] After removing today: {len(df_without_today)} rows")
+        if len(df_without_today) > 0:
+            print(f"[DEBUG filter_data_by_timeframe] Last date after removing today: {df_without_today.index[-1]}")
+
         time_deltas = {
-            "5D": 4,
             "1M": 29,
-            "3M": 89,
             "6M": 179,
-            "1Y": 364
+            "1Y": 364,
+            "5Y": 1824  # Approximately 5 years
         }
 
         if timeframe in time_deltas:
-            start_date = end_date - timedelta(days=time_deltas[timeframe])
+            start_date = today - pd.Timedelta(days=time_deltas[timeframe])
+            # Use normalized dates for comparison
+            df_without_today_dates = df_without_today.index.normalize()
+            result = df_without_today[df_without_today_dates >= start_date]
         elif timeframe == "YTD":
-            start_date = datetime(end_date.year, 1, 1)
+            start_date = pd.Timestamp(year=today.year, month=1, day=1).normalize()
+            df_without_today_dates = df_without_today.index.normalize()
+            result = df_without_today[df_without_today_dates >= start_date]
         else:
-            # Return the original dataframe if timeframe is not recognized
-            return df
+            # Return the dataframe without today if timeframe is not recognized
+            result = df_without_today
 
-        return df[(df.index >= start_date) & (df.index <= end_date)]
+        print(f"[DEBUG filter_data_by_timeframe] Final result length: {len(result)}")
+        if len(result) > 0:
+            print(f"[DEBUG filter_data_by_timeframe] Final last date: {result.index[-1]}")
+
+        return result
 
     @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents_v2")
     def get_sector_top_constituents(self, sector_ticker: str) -> list[dict]:

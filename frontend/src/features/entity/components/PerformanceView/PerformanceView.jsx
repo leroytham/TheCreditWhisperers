@@ -7,6 +7,7 @@ import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
 import { formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
+import { usePriceData } from '../../hooks/usePriceData';
 
 /**
  * PerformanceView Component
@@ -19,10 +20,13 @@ const PerformanceView = ({
   companyName,
   currency,
   priceData1Y,
+  priceData1D,
   dailySentiment,
   sentiment,
   news,
   significantEvents,
+  prevClose: prevCloseFromParent,
+  prevClose1D,
   activeTab = 'overview',
   setActiveTab,
   sentimentTimeframe,
@@ -31,6 +35,38 @@ const PerformanceView = ({
   const [timeframe, setTimeframe] = useState('1Y');
   const [viewMode, setViewMode] = useState('rolling');
   const [priceData, setPriceData] = useState([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Fetch data based on selected timeframe (only for 5Y, since 1D comes from parent)
+  const {
+    priceData1Y: timeframeSpecificData,
+    prevClose: timeframeSpecificPrevClose,
+    loading: timeframeLoading,
+    error: timeframeError
+  } = usePriceData(ticker, timeframe === '5Y' ? '5Y' : '1Y');
+
+  // Use timeframe-specific data if available, otherwise fall back to parent data
+  const activePriceData = timeframe === '1D'
+    ? priceData1D
+    : timeframe === '5Y'
+      ? timeframeSpecificData
+      : priceData1Y;
+
+  const activePrevClose = timeframe === '1D'
+    ? prevClose1D
+    : timeframe === '5Y'
+      ? timeframeSpecificPrevClose
+      : prevCloseFromParent;
+
+  // Only show loading on initial page load, not on timeframe switches
+  const isTimeframeSpecificLoading = isInitialLoad && timeframe === '5Y' && timeframeLoading;
+
+  // Mark initial load as complete once we have data
+  useEffect(() => {
+    if (priceData1Y && priceData1Y.length > 0) {
+      setIsInitialLoad(false);
+    }
+  }, [priceData1Y]);
 
   // Fetch rolling sentiment data for the combined chart
   const { data: rollingData, hasData: hasRollingData, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
@@ -43,10 +79,31 @@ const PerformanceView = ({
 
   // Filter price data based on timeframe
   useEffect(() => {
-    const filtered = filterPriceDataByTimeframe(priceData1Y, timeframe);
+    console.log('[PerformanceView] Timeframe changed:', timeframe);
+    console.log('[PerformanceView] Active price data length:', activePriceData?.length);
+    console.log('[PerformanceView] prevClose1D:', prevClose1D);
+    console.log('[PerformanceView] prevCloseFromParent:', prevCloseFromParent);
+    console.log('[PerformanceView] Active prevClose:', activePrevClose);
+    console.log('[PerformanceView] Loading:', timeframeLoading);
+    console.log('[PerformanceView] Error:', timeframeError);
+
+    // Debug 5Y data
+    if (timeframe === '5Y' && activePriceData && activePriceData.length > 0) {
+      console.log('[PerformanceView] 5Y - First date in activePriceData:', activePriceData[0].date);
+      console.log('[PerformanceView] 5Y - Last date in activePriceData:', activePriceData[activePriceData.length - 1].date);
+      console.log('[PerformanceView] 5Y - timeframeSpecificData length:', timeframeSpecificData?.length);
+      console.log('[PerformanceView] 5Y - priceData1Y length:', priceData1Y?.length);
+    }
+
+    const filtered = filterPriceDataByTimeframe(activePriceData, timeframe);
+    console.log('[PerformanceView] Filtered data length:', filtered?.length);
+    if (timeframe === '5Y' && filtered && filtered.length > 0) {
+      console.log('[PerformanceView] 5Y - First date after filtering:', filtered[0].date);
+      console.log('[PerformanceView] 5Y - Last date after filtering:', filtered[filtered.length - 1].date);
+    }
     setPriceData(filtered);
-  }, [priceData1Y, timeframe]);
-  
+  }, [activePriceData, timeframe, activePrevClose, timeframeLoading, timeframeError, timeframeSpecificData, priceData1Y]);
+
   // Create chart data from price data
   const chartData = priceData.map((point, i) => ({
     x: i,
@@ -55,23 +112,30 @@ const PerformanceView = ({
     time: point.time
   }));
 
-  // Calculate price changes
+  // Calculate price changes for the selected timeframe
   const { priceChange, priceChangePercent } = calculatePriceChange(chartData);
 
-  // Get current price object (includes y, date, time)
-  const currentPrice = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+  // Get current price from real-time 1D data (always use latest intraday price)
+  const realtimeChartData = priceData1D ? priceData1D.map((point, i) => ({
+    x: i,
+    y: parseFloat(point.close) || parseFloat(point.price) || 0,
+    date: point.date,
+    time: point.time
+  })) : [];
+  const currentPrice = realtimeChartData.length > 0 ? realtimeChartData[realtimeChartData.length - 1] : null;
 
   // Check if data is loading
   const isLoading = !priceData1Y || priceData1Y.length === 0;
 
   // Render content based on active tab
   const renderContent = () => {
-    if (isLoading) {
+    // Show loading for initial data or timeframe-specific data
+    if (isLoading || isTimeframeSpecificLoading) {
       return (
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-            <div className="text-lg font-medium text-gray-700">Loading entity data...</div>
+            <div className="text-lg font-medium text-gray-700">Loading {timeframe} data...</div>
             <div className="text-sm text-gray-500 mt-2">Please wait while we fetch the latest information</div>
           </div>
         </div>
@@ -144,6 +208,8 @@ const PerformanceView = ({
                   ticker={ticker}
                   currency={currency}
                   significantEvents={significantEvents}
+                  timeframe={timeframe}
+                  prevClose={activePrevClose}
                 />
               </div>
             </div>
@@ -188,6 +254,8 @@ const PerformanceView = ({
               ticker={ticker}
               currency={currency}
               significantEvents={significantEvents}
+              timeframe={timeframe}
+              prevClose={activePrevClose}
             />
           </div>
         );

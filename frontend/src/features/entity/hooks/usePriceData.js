@@ -14,19 +14,26 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
   const [exchange, setExchange] = useState('');
   const [market, setMarket] = useState('');
   const [marketState, setMarketState] = useState('');
+  const [prevClose, setPrevClose] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initial fetch and refetch on ticker change
+  // Initial fetch and refetch on ticker or timeframe change
   useEffect(() => {
     const fetchPriceData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=1Y`);
+        console.log('[usePriceData] Fetching data for ticker:', ticker, 'timeframe:', timeframe);
+        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`);
         const data = await response.json();
+        console.log('[usePriceData] Received data:', data.prices?.length, 'prices');
+        if (data.prices && data.prices.length > 0) {
+          console.log('[usePriceData] First date:', data.prices[0].date);
+          console.log('[usePriceData] Last date:', data.prices[data.prices.length - 1].date);
+        }
 
         setPriceData1Y(data.prices || []);
         setCompanyName(data.company_name || data.longname || data.shortname || '');
@@ -34,6 +41,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
         setExchange(data.exchange || '');
         setMarket(data.market || '');
         setMarketState(data.market_state || '');
+        setPrevClose(data.prev_close || null);
         setLastFetched(new Date());
       } catch (err) {
         console.error('Error fetching price data:', err);
@@ -46,7 +54,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
     if (ticker) {
       fetchPriceData();
     }
-  }, [ticker]);
+  }, [ticker, timeframe]);
 
   // Poll for real-time price updates
   useEffect(() => {
@@ -54,7 +62,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
 
     const intervalId = setInterval(async () => {
       try {
-        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=1Y`);
+        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`);
         const data = await response.json();
 
         setPriceData1Y(data.prices || []);
@@ -63,6 +71,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
         setExchange(data.exchange || '');
         setMarket(data.market || '');
         setMarketState(data.market_state || '');
+        setPrevClose(data.prev_close || null);
         setLastFetched(new Date());
       } catch (err) {
         console.error('Error polling price data:', err);
@@ -70,7 +79,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
     }, PRICE_POLL_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [ticker]);
+  }, [ticker, timeframe]);
 
   return {
     priceData1Y,
@@ -79,6 +88,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
     exchange,
     market,
     marketState,
+    prevClose,
     lastFetched,
     loading,
     error

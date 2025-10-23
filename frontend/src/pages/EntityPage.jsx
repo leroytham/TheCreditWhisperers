@@ -83,7 +83,11 @@ const EntityPage = () => {
   ];
 
   // Fetch all data using custom hooks
-  const { priceData1Y, companyName, currency, lastFetched, exchange, market, marketState } = usePriceData(ticker);
+  const { priceData1Y, companyName, currency, lastFetched, exchange, market, marketState, prevClose } = usePriceData(ticker, '1Y');
+
+  // Fetch real-time 1D data for current price display
+  const { priceData1Y: priceData1D, prevClose: prevClose1D } = usePriceData(ticker, '1D');
+
   const { news, sentiment } = useNewsData(ticker);
   const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
   const { significantEvents } = useSignificantEvents(ticker);
@@ -161,11 +165,14 @@ const EntityPage = () => {
           companyName={companyName}
           currency={currency}
           priceData1Y={priceData1Y}
+          priceData1D={priceData1D}
           lastFetched={lastFetched}
           dailySentiment={dailySentiment}
           sentiment={sentiment}
           news={news}
           significantEvents={significantEvents}
+          prevClose={prevClose}
+          prevClose1D={prevClose1D}
           activeTab={activeSubTab}
           setActiveTab={setActiveSubTab}
           sentimentTimeframe={sentimentTimeframe}

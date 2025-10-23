@@ -137,31 +137,70 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
     Example: /api/price?ticker=AAPL&timeframe=1Y
     """
     try:
-        # Fetch stock data using the stock data service
-        stock_data = stock_data_service.get_stock_data(ticker)
+        # For 1D intraday data, fetch with 15-minute interval
+        if timeframe == "1D":
+            stock_data = stock_data_service.get_stock_data(ticker, period="1d", interval="15m")
+        elif timeframe == "5Y":
+            stock_data = stock_data_service.get_stock_data(ticker, period="5y", interval="1d")
+        else:
+            stock_data = stock_data_service.get_stock_data(ticker, period="1y", interval="1d")
 
         if stock_data is None or stock_data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
 
+        print(f"[DEBUG] Raw data for {ticker} ({timeframe}): {len(stock_data)} rows")
+        if len(stock_data) > 0:
+            print(f"[DEBUG] Last 3 dates in raw data: {stock_data.index[-3:].tolist()}")
+
         # Filter by timeframe if needed
         filtered_data = stock_data_service.filter_data_by_timeframe(stock_data, timeframe)
 
+        print(f"[DEBUG] Filtered data for {ticker} ({timeframe}): {len(filtered_data)} rows")
+        if len(filtered_data) > 0:
+            print(f"[DEBUG] Last date in filtered data: {filtered_data.index[-1]}")
+
         # Fetch company info for metadata
         company_info = stock_data_service.get_company_info(ticker)
-        
+
         # Fetch additional ticker info from yfinance
         ticker_obj = yf.Ticker(ticker)
         ticker_info = ticker_obj.info
-        
+
+        # Calculate previous close (last close from the previous trading day)
+        prev_close = None
+        if timeframe == "1D" and len(stock_data) > 0:
+            # Get the close price from the previous trading day
+            try:
+                # Fetch 5 days to ensure we have previous close even with weekends
+                hist_5d = ticker_obj.history(period="5d", interval="1d")
+                print(f"[DEBUG] Fetched {len(hist_5d)} days of data for prev close")
+                print(f"[DEBUG] Last 2 dates: {hist_5d.index[-2:].tolist() if len(hist_5d) >= 2 else 'N/A'}")
+
+                if len(hist_5d) >= 2:
+                    # Get the second-to-last day's close (previous trading day)
+                    prev_close = float(hist_5d['Close'].iloc[-2])
+                    print(f"[DEBUG] Previous close for {ticker}: {prev_close}")
+                elif len(hist_5d) == 1:
+                    # Fallback if only one day available
+                    prev_close = float(hist_5d['Close'].iloc[0])
+                    print(f"[DEBUG] Only 1 day available, using: {prev_close}")
+            except Exception as e:
+                print(f"[ERROR] Error fetching previous close for {ticker}: {e}")
+
         # Convert to the format expected by frontend
         prices = []
         for idx, row in filtered_data.iterrows():
-            prices.append({
+            price_item = {
                 "date": idx.strftime("%Y-%m-%d"),
-                "price": float(row['Close'])
-            })
+                "price": float(row['Close']),
+                "close": float(row['Close'])
+            }
+            # Add time for intraday data
+            if timeframe == "1D":
+                price_item["time"] = idx.strftime("%I:%M %p")
+            prices.append(price_item)
 
-        return {
+        response = {
             "ticker": ticker,
             "company_name": company_info.get("name", ticker) if company_info else ticker,
             "longname": ticker_info.get("longName", ""),
@@ -173,6 +212,12 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
             "prices": prices,
             "last_fetched": datetime.now().isoformat()
         }
+
+        # Add prev_close for 1D timeframe
+        if prev_close is not None:
+            response["prev_close"] = prev_close
+
+        return response
 
     except HTTPException:
         raise

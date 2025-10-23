@@ -46,9 +46,9 @@ class RedisCache:
                     )
                 # Test connection
                 self._client.ping()
-                print("✅ Redis connection established successfully")
+                print("[OK] Redis connection established successfully")
             except redis.ConnectionError as e:
-                print(f"⚠️  Redis connection failed: {e}. Caching will be disabled.")
+                print(f"[WARNING] Redis connection failed: {e}. Caching will be disabled.")
                 self._client = None
         return self._client
 
@@ -75,7 +75,7 @@ class RedisCache:
                         socket_timeout=5
                     )
             except Exception as e:
-                print(f"⚠️  Async Redis connection failed: {e}")
+                print(f"[WARNING] Async Redis connection failed: {e}")
                 self._async_client = None
         return self._async_client
 
@@ -232,11 +232,11 @@ def cache_result(ttl: int = 300, key_prefix: Optional[str] = None):
             # Try to get from cache
             cached = redis_cache.get(cache_key)
             if cached is not None:
-                print(f"✅ Cache HIT: {cache_key}")
+                print(f"[CACHE HIT] {cache_key}")
                 return cached
 
             # Execute function
-            print(f"❌ Cache MISS: {cache_key}")
+            print(f"[CACHE MISS] {cache_key}")
             result = func(*args, **kwargs)
 
             # Store in cache
@@ -270,11 +270,11 @@ def async_cache_result(ttl: int = 300, key_prefix: Optional[str] = None):
             # Try to get from cache
             cached = await redis_cache.aget(cache_key)
             if cached is not None:
-                print(f"✅ Cache HIT: {cache_key}")
+                print(f"[CACHE HIT] {cache_key}")
                 return cached
 
             # Execute function
-            print(f"❌ Cache MISS: {cache_key}")
+            print(f"[CACHE MISS] {cache_key}")
             result = await func(*args, **kwargs)
 
             # Store in cache
@@ -297,7 +297,7 @@ def invalidate_cache(pattern: str):
     """
     deleted = redis_cache.delete_pattern(pattern)
     if deleted > 0:
-        print(f"🗑️  Invalidated {deleted} cache entries matching pattern: {pattern}")
+        print(f"[CACHE] Invalidated {deleted} cache entries matching pattern: {pattern}")
     return deleted
 
 
@@ -362,7 +362,7 @@ def invalidate_by_tag(tag: str):
             deleted = redis_cache.client.delete(*cache_keys)
             # Delete the tag set itself
             redis_cache.client.delete(tag_key)
-            print(f"🗑️  Invalidated {deleted} cache entries with tag: {tag}")
+            print(f"[CACHE] Invalidated {deleted} cache entries with tag: {tag}")
             return deleted
         return 0
     except Exception as e:

@@ -20,8 +20,9 @@ module.exports = function(app) {
   app.use(
     '/api',
     createProxyMiddleware({
-      target: process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000',
+      target: process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000',
       changeOrigin: true,
+      pathRewrite: {'^/api': ''}, // Remove /api prefix when forwarding to backend
       logLevel: 'debug',
       onProxyReq: (proxyReq, req, res) => {
         // Log proxied requests in development
@@ -32,7 +33,7 @@ module.exports = function(app) {
         res.status(500).json({
           error: 'Proxy error',
           message: err.message,
-          target: process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000',
+          target: process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000',
         });
       },
     })
@@ -42,7 +43,7 @@ module.exports = function(app) {
   app.use(
     '/ws',
     createProxyMiddleware({
-      target: process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000',
+      target: process.env.REACT_APP_BACKEND_URL || 'http://127.0.0.1:8000',
       ws: true, // Enable WebSocket proxying
       changeOrigin: true,
       logLevel: 'debug',
