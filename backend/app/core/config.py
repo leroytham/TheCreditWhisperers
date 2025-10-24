@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     RSS_URLS: str = "https://feeds.reuters.com/reuters/businessNews"
     DAYS_BACK: int = 2
 
+    # Sentiment Analysis Configuration
+    SENTIMENT_DECAY_CONSTANT: float = 0.0289  # 24-hour half-life for news recency weighting
+
+    # Sentiment Momentum Configuration (MACD-Style Fast vs. Slow)
+    SENTIMENT_HALF_LIFE_FAST_HOURS: float = 7     # Fast score: 7-hour half-life (intraday)
+    SENTIMENT_HALF_LIFE_SLOW_HOURS: float = 24    # Slow score: 24-hour half-life (daily trend)
+    MOMENTUM_THRESHOLD_WEAK: float = 0.10          # Weak momentum threshold
+    MOMENTUM_THRESHOLD_STRONG: float = 0.20        # Strong momentum threshold
+
     # Frontend URL (for CORS)
     FRONTEND_URL: str = "http://localhost:3000"
 

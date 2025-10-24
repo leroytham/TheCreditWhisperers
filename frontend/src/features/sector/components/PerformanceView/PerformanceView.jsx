@@ -6,7 +6,22 @@ import { useSectorData } from '../../hooks/useSectorData';
 import { usePriceData } from '../../hooks/usePriceData';
 import { useRollingSentiment } from '../../../entity/hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
-import { PriceChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
+import {
+  PriceChart,
+  CombinedSentimentVolumeChart,
+  TimeRangeSelector,
+  ViewModeToggle,
+  SignificantEvents,
+  RelatedNews,
+  SentimentScoreCard,
+  MomentumCard,
+  NewsCoverageCard,
+  SentimentConfidenceCard,
+  SentimentBreadthCard,
+  SentimentShockCard,
+  SourceConcentrationCard,
+  SentimentByTopicCard
+} from '../../../shared/components';
 import { formatFullTimestamp } from '../../../shared/utils/formatters';
 import PerformanceHeader from './PerformanceHeader';
 import TopConstituents from './TopConstituents';
@@ -41,7 +56,17 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     currency,
     loading,
     error,
-    lastFetched
+    lastFetched,
+    // Momentum fields
+    sentiment_momentum,
+    fast_score,
+    slow_score,
+    momentum_label,
+    momentum_interpretation,
+    momentum_quality,
+    half_life_fast_hours,
+    half_life_slow_hours,
+    data_quality
   } = useSectorData(ticker, timeframe);
 
   // Fetch rolling sentiment data for the combined chart
@@ -118,11 +143,12 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                 </p>
               </div>
 
-              {/* Overall Sentiment Card - Row 1, Col 2 */}
+              {/* Sentiment Score Card - Row 1, Col 2 */}
               <div className="lg:col-start-2 lg:row-start-1 h-full">
-                <OverallSentiment
+                <SentimentScoreCard
                   sentimentAvg={sentimentAvg}
                   newsCount={news?.length || 0}
+                  dataQuality={data_quality}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full"
                 />
               </div>
@@ -243,24 +269,22 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
 
       case 'sentiment':
         return (
-          <div className="space-y-8">
-            {/* Time Range + View Mode Selectors */}
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
-              <div className="flex items-center space-x-4">
-                <TimeRangeSelector
-                  activeTimeframe={sentimentTimeframe}
-                  onTimeframeChange={setSentimentTimeframe}
-                />
-                <ViewModeToggle
-                  activeMode={viewMode}
-                  onModeChange={setViewMode}
-                />
+          <div className="space-y-6">
+            {/* Row 1: Graph Card with Filters */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow p-6">
+              <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
+                <div className="flex items-center space-x-4">
+                  <TimeRangeSelector
+                    activeTimeframe={sentimentTimeframe}
+                    onTimeframeChange={setSentimentTimeframe}
+                  />
+                  <ViewModeToggle
+                    activeMode={viewMode}
+                    onModeChange={setViewMode}
+                  />
+                </div>
               </div>
-            </div>
-
-            {/* Combined Sentiment + Volume Chart */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden">
               <CombinedSentimentVolumeChart
                 data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment).map(([date, data]) => ({
                   timestamp: date,
@@ -276,21 +300,23 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               />
             </div>
 
-            {/* Bottom Row: Overall Sentiment + Key Insights */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <OverallSentiment 
-                sentimentAvg={sentimentAvg} 
+            {/* Row 2: Core Metrics (2 columns for sector, using same grid as entity) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              <SentimentScoreCard
+                sentimentAvg={sentimentAvg}
                 newsCount={news?.length || 0}
-                className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full"
+                dataQuality={data_quality}
               />
-              <div className="bg-white border border-gray-200 rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Key Insights</h3>
-                <p className="text-gray-600">
-                  {viewMode === 'rolling'
-                    ? 'Rolling 24-hour windows provide granular insight into how sentiment evolves over time for this sector.'
-                    : 'Daily averages show overall sentiment trends across the selected time period for this sector.'}
-                </p>
-              </div>
+              <MomentumCard
+                sentimentMomentum={sentiment_momentum}
+                momentumLabel={momentum_label}
+                momentumInterpretation={momentum_interpretation}
+                momentumQuality={momentum_quality}
+                fastScore={fast_score}
+                slowScore={slow_score}
+                halfLifeFastHours={half_life_fast_hours}
+                halfLifeSlowHours={half_life_slow_hours}
+              />
             </div>
           </div>
         );

@@ -20,7 +20,19 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
     topEvents: [],
     companyName: '',
     currency: 'USD',
-    lastFetched: null
+    lastFetched: null,
+    // Momentum fields
+    sentiment_momentum: null,
+    fast_score: null,
+    slow_score: null,
+    momentum_label: null,
+    momentum_interpretation: null,
+    momentum_quality: null,
+    momentum_direction: null,
+    momentum_strength: null,
+    half_life_fast_hours: null,
+    half_life_slow_hours: null,
+    data_quality: null
   });
 
   // Fetch all data once when ticker changes
@@ -85,6 +97,19 @@ export const useSectorData = (ticker, timeframe = '1Y') => {
           }));
           newData.news = normalized;
           newData.sentimentAvg = n.avg_score ?? n.avgScore ?? null;
+          
+          // Extract momentum fields
+          newData.sentiment_momentum = n.sentiment_momentum;
+          newData.fast_score = n.fast_score;
+          newData.slow_score = n.slow_score;
+          newData.momentum_label = n.momentum_label;
+          newData.momentum_interpretation = n.momentum_interpretation;
+          newData.momentum_quality = n.momentum_quality;
+          newData.momentum_direction = n.momentum_direction;
+          newData.momentum_strength = n.momentum_strength;
+          newData.half_life_fast_hours = n.half_life_fast_hours;
+          newData.half_life_slow_hours = n.half_life_slow_hours;
+          newData.data_quality = n.data_quality;
         } else {
           console.error('News fetch failed', newsRes.reason || newsRes.value);
           setError(prev => prev ? prev + ' | news failed' : 'news failed');

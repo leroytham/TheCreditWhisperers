@@ -25,6 +25,16 @@ export const useNews = (ticker, options = {}) => {
       ticker: data.ticker,
       news: data.news || [],
       avgScore: data.avg_score || 0,
+      // Source & Topic Analysis
+      sourceConcentrationHhi: data.source_concentration_hhi,
+      concentrationInterpretation: data.concentration_interpretation,
+      topSources: data.top_sources || [],
+      dominantTopic: data.dominant_topic,
+      dominantTopicWeight: data.dominant_topic_weight,
+      dominantTopicPercentage: data.dominant_topic_percentage,
+      topicCount: data.topic_count || 0,
+      sentimentByTopic: data.sentiment_by_topic || {},
+      topicWeights: data.topic_weights || {},
     }),
     ...options,
   });

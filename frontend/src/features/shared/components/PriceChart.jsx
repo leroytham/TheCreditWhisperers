@@ -91,21 +91,11 @@ const PriceChart = ({
       min: adjustedMin - padding,
       max: adjustedMax + padding
     };
-    console.log('[PriceChart] Adjusted price range for 1D to include prevClose:', priceRange);
   }
   const { currentPrice, priceChange, priceChangePercent } =
     preProcessedPriceChange !== undefined
       ? { currentPrice: chartData[chartData.length - 1], priceChange: preProcessedPriceChange, priceChangePercent: preProcessedPriceChange }
       : calculatePriceChange(chartData);
-
-  // Debug logging for 1D
-  if (timeframe === '1D') {
-    console.log('[PriceChart] 1D Debug:');
-    console.log('  - timeframe:', timeframe);
-    console.log('  - prevClose:', prevClose);
-    console.log('  - chartData length:', chartData.length);
-    console.log('  - priceRange:', priceRange);
-  }
 
   // Chart dimensions
   const chartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;

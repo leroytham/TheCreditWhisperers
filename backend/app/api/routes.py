@@ -69,8 +69,23 @@ def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
 @router.get("/stocks/{ticker}/sentiment")
 async def get_stock_news_and_sentiment(ticker: str):
     """
-    API endpoint to get recent news and its advanced, weighted FinBERT sentiment analysis.
+    API endpoint to get recent news and its advanced sentiment analysis with momentum.
+
+    This endpoint returns:
+    - Weighted sentiment scores using exponential decay and relevance
+    - Sentiment momentum (MACD-style Fast vs. Slow scores)
+    - Detailed article-level sentiment and weights
+    - Data quality indicators
+
     Example: /stocks/TSLA/sentiment
+
+    Response includes:
+    - overall_weighted_score: Primary sentiment score (slow/24h trend)
+    - fast_score: Current intraday sentiment (7h half-life)
+    - slow_score: Daily trend sentiment (24h half-life)
+    - sentiment_momentum: fast_score - slow_score
+    - momentum_label: "Positive Momentum", "Negative Momentum", etc.
+    - momentum_interpretation: Human-readable description
     """
     try:
         # 1. Fetch recent news using the service
@@ -78,13 +93,13 @@ async def get_stock_news_and_sentiment(ticker: str):
         if not news_articles:
             return {"ticker": ticker, "message": "No recent news found."}
 
-        # 2. Call the advanced sentiment analysis method
-        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+        # 2. Call the advanced sentiment analysis method with momentum
+        sentiment_results = sentiment_service.analyze_sentiment_with_momentum(news_articles)
 
         # 3. Add score definitions to response
         score_defs = get_score_definitions()
 
-        # 4. Return the rich data structure from the new method with score definitions
+        # 4. Return the rich data structure with momentum fields and score definitions
         return {
             "ticker": ticker,
             **sentiment_results,
@@ -231,8 +246,17 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
 @router.get("/news")
 async def get_news_data(ticker: str):
     """
-    API endpoint to get recent news and sentiment for a ticker.
+    API endpoint to get recent news and sentiment for a ticker with momentum analysis.
     Example: /api/news?ticker=AAPL
+    
+    Returns comprehensive sentiment data including:
+    - avg_score: Overall weighted sentiment score (slow/24h trend)
+    - fast_score: Current intraday sentiment (7h half-life)
+    - slow_score: Daily trend sentiment (24h half-life)
+    - sentiment_momentum: fast_score - slow_score
+    - momentum_label: Classification (e.g., "Positive Momentum")
+    - momentum_interpretation: Human-readable description
+    - momentum_quality: Data quality indicator
     """
     try:
         # Fetch news articles using the news service
@@ -242,8 +266,8 @@ async def get_news_data(ticker: str):
             score_defs = get_score_definitions()
             return {"ticker": ticker, "news": [], "avg_score": 0, **score_defs}
 
-        # Analyze sentiment - this adds sentiment fields to the articles
-        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+        # Analyze sentiment WITH MOMENTUM - this includes fast/slow scores and momentum calculation
+        sentiment_results = sentiment_service.analyze_sentiment_with_momentum(news_articles)
         articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
 
         # Format news for frontend - use field names that match frontend expectations
@@ -273,6 +297,48 @@ async def get_news_data(ticker: str):
             "ticker": ticker,
             "news": formatted_news,
             "avg_score": sentiment_results.get("overall_weighted_score", 0),
+            # Add momentum fields to response
+            "sentiment_momentum": sentiment_results.get("sentiment_momentum"),
+            "fast_score": sentiment_results.get("fast_score"),
+            "slow_score": sentiment_results.get("slow_score"),
+            "momentum_label": sentiment_results.get("momentum_label"),
+            "momentum_interpretation": sentiment_results.get("momentum_interpretation"),
+            "momentum_quality": sentiment_results.get("momentum_quality"),
+            "momentum_direction": sentiment_results.get("momentum_direction"),
+            "momentum_strength": sentiment_results.get("momentum_strength"),
+            "half_life_fast_hours": sentiment_results.get("half_life_fast_hours"),
+            "half_life_slow_hours": sentiment_results.get("half_life_slow_hours"),
+            "data_quality": sentiment_results.get("data_quality"),
+            # Add volatility fields to response
+            "sentiment_volatility": sentiment_results.get("sentiment_volatility"),
+            "volatility_quality": sentiment_results.get("volatility_quality"),
+            # Add effective news volume (quantity metric)
+            "effective_news_volume": sentiment_results.get("effective_news_volume"),
+            "volume_interpretation": sentiment_results.get("volume_interpretation"),
+            # Add breadth metrics (bull/bear ratio)
+            "sentiment_breadth_score": sentiment_results.get("sentiment_breadth_score"),
+            "num_bullish_articles": sentiment_results.get("num_bullish_articles"),
+            "num_bearish_articles": sentiment_results.get("num_bearish_articles"),
+            "total_directional_articles": sentiment_results.get("total_directional_articles"),
+            "breadth_interpretation": sentiment_results.get("breadth_interpretation"),
+            "breadth_quality": sentiment_results.get("breadth_quality"),
+            # Add Z-Score metrics (sentiment shock)
+            "sentiment_z_score": sentiment_results.get("sentiment_z_score"),
+            "z_score_interpretation": sentiment_results.get("z_score_interpretation"),
+            "z_score_historical_mean": sentiment_results.get("z_score_historical_mean"),
+            "z_score_historical_std": sentiment_results.get("z_score_historical_std"),
+            "z_score_days_of_history": sentiment_results.get("z_score_days_of_history"),
+            "z_score_quality": sentiment_results.get("z_score_quality"),
+            # Add Source & Topic Analysis metrics
+            "source_concentration_hhi": sentiment_results.get("source_concentration_hhi"),
+            "concentration_interpretation": sentiment_results.get("concentration_interpretation"),
+            "top_sources": sentiment_results.get("top_sources", []),
+            "dominant_topic": sentiment_results.get("dominant_topic"),
+            "dominant_topic_weight": sentiment_results.get("dominant_topic_weight"),
+            "dominant_topic_percentage": sentiment_results.get("dominant_topic_percentage"),
+            "topic_count": sentiment_results.get("topic_count", 0),
+            "sentiment_by_topic": sentiment_results.get("sentiment_by_topic", {}),
+            "topic_weights": sentiment_results.get("topic_weights", {}),
             **score_defs
         }
 
@@ -367,20 +433,52 @@ async def get_news_sources(ticker: str):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/daily-sentiment")
-async def get_daily_sentiment(ticker: str, days: int = 7):
+async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = None):
     """
     API endpoint to get daily sentiment data for a ticker.
-    Supports configurable number of days (default: 7, max: 365)
+    Supports configurable number of days OR timeframe (e.g., '1M', '6M', 'YTD', '1Y', '5Y')
+    Example: /api/daily-sentiment?ticker=AAPL&timeframe=6M
     Example: /api/daily-sentiment?ticker=AAPL&days=30
     """
     try:
         from datetime import datetime, timedelta, timezone
 
-        # Validate and cap days parameter
-        days = min(max(days, 1), 365)
+        # Determine days from timeframe if provided
+        if timeframe:
+            timeframe_days_map = {
+                '1D': 1,
+                '1W': 7,
+                '1M': 30,
+                '3M': 90,
+                '6M': 180,
+                'YTD': None,  # Will be calculated
+                '1Y': 365,
+                '5Y': 1825
+            }
 
-        # Fetch news articles
-        news_articles = await news_service_instance.get_ticker_news(ticker)
+            if timeframe == 'YTD':
+                # Calculate days since start of year
+                now = datetime.now(timezone.utc)
+                start_of_year = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+                days = (now - start_of_year).days
+            else:
+                days = timeframe_days_map.get(timeframe, 30)
+        elif days is None:
+            # Default to 7 days if neither specified
+            days = 7
+
+        # Validate and cap days parameter
+        days = min(max(days, 1), 1825)  # Max 5 years
+
+        # Fetch news articles using timeframe-aware method if timeframe specified
+        if timeframe:
+            news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+                ticker,
+                timeframe=timeframe,
+                trigger_progressive=True
+            )
+        else:
+            news_articles = await news_service_instance.get_ticker_news(ticker)
 
         # Initialize all requested days with empty data
         today = datetime.now(timezone.utc).date()
@@ -450,13 +548,18 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
     """
     API endpoint to get rolling-window sentiment data for different timeframes.
     Supports: 1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y
+    Uses progressive background fetching to pre-load future timeframes.
     Example: /api/rolling-sentiment?ticker=AAPL&timeframe=1W
     """
     try:
         from datetime import datetime, timedelta, timezone
 
-        # Fetch news articles
-        news_articles = await news_service_instance.get_ticker_news(ticker)
+        # Fetch news articles using timeframe-aware method with progressive fetching
+        news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+            ticker,
+            timeframe=timeframe,
+            trigger_progressive=True
+        )
 
         # Add score definitions to response
         score_defs = get_score_definitions()

@@ -126,3 +126,142 @@ def map_alpha_vantage_label(av_label: str) -> str:
         Standardized sentiment label
     """
     return ALPHA_VANTAGE_LABEL_MAP.get(av_label, SENTIMENT_LABEL_NEUTRAL)
+
+
+# =============================================================================
+# SENTIMENT MOMENTUM CONFIGURATION
+# =============================================================================
+
+# Momentum Labels
+MOMENTUM_LABEL_STRONG_POSITIVE = "Strong Positive Momentum"
+MOMENTUM_LABEL_POSITIVE = "Positive Momentum"
+MOMENTUM_LABEL_NEUTRAL = "Neutral Momentum"
+MOMENTUM_LABEL_NEGATIVE = "Negative Momentum"
+MOMENTUM_LABEL_STRONG_NEGATIVE = "Strong Negative Momentum"
+
+# Momentum Interpretations (human-readable)
+MOMENTUM_INTERPRETATION_STRONG_POSITIVE = "News is getting much better"
+MOMENTUM_INTERPRETATION_POSITIVE = "News is getting better"
+MOMENTUM_INTERPRETATION_NEUTRAL = "Sentiment is stable"
+MOMENTUM_INTERPRETATION_NEGATIVE = "News is getting worse"
+MOMENTUM_INTERPRETATION_STRONG_NEGATIVE = "News is getting much worse"
+
+# Momentum Direction
+MOMENTUM_DIRECTION_IMPROVING = "improving"
+MOMENTUM_DIRECTION_STABLE = "stable"
+MOMENTUM_DIRECTION_DETERIORATING = "deteriorating"
+
+# Momentum Strength
+MOMENTUM_STRENGTH_STRONG = "strong"
+MOMENTUM_STRENGTH_WEAK = "weak"
+MOMENTUM_STRENGTH_NEUTRAL = "neutral"
+
+
+def classify_momentum(momentum: float, threshold_weak: float = 0.10, threshold_strong: float = 0.20) -> dict:
+    """
+    Classify sentiment momentum into categories based on magnitude and direction.
+
+    Momentum measures the rate of change of sentiment over time using Fast vs. Slow scores:
+        Momentum = FastScore - SlowScore
+
+    Args:
+        momentum: The momentum value (difference between fast and slow sentiment scores)
+        threshold_weak: Threshold for weak momentum (default: 0.10)
+        threshold_strong: Threshold for strong momentum (default: 0.20)
+
+    Returns:
+        Dictionary containing:
+            - label: Classification label (e.g., "Positive Momentum")
+            - interpretation: Human-readable interpretation (e.g., "News is getting better")
+            - direction: "improving", "stable", or "deteriorating"
+            - strength: "strong", "weak", or "neutral"
+            - magnitude: Absolute value of momentum
+            - sign: "+", "-", or "~" (for neutral)
+
+    Classification Rules:
+        - momentum >= threshold_strong:  Strong Positive Momentum
+        - momentum >= threshold_weak:    Positive Momentum
+        - -threshold_weak < momentum < threshold_weak: Neutral Momentum
+        - momentum <= -threshold_weak:   Negative Momentum
+        - momentum <= -threshold_strong: Strong Negative Momentum
+
+    Examples:
+        >>> classify_momentum(0.25, 0.10, 0.20)
+        {'label': 'Strong Positive Momentum', 'interpretation': 'News is getting much better', ...}
+
+        >>> classify_momentum(-0.15, 0.10, 0.20)
+        {'label': 'Negative Momentum', 'interpretation': 'News is getting worse', ...}
+
+        >>> classify_momentum(0.05, 0.10, 0.20)
+        {'label': 'Neutral Momentum', 'interpretation': 'Sentiment is stable', ...}
+    """
+    magnitude = abs(momentum)
+
+    # Classify based on thresholds
+    if momentum >= threshold_strong:
+        # Strong positive momentum
+        return {
+            "label": MOMENTUM_LABEL_STRONG_POSITIVE,
+            "interpretation": MOMENTUM_INTERPRETATION_STRONG_POSITIVE,
+            "direction": MOMENTUM_DIRECTION_IMPROVING,
+            "strength": MOMENTUM_STRENGTH_STRONG,
+            "magnitude": magnitude,
+            "sign": "+"
+        }
+    elif momentum >= threshold_weak:
+        # Weak positive momentum
+        return {
+            "label": MOMENTUM_LABEL_POSITIVE,
+            "interpretation": MOMENTUM_INTERPRETATION_POSITIVE,
+            "direction": MOMENTUM_DIRECTION_IMPROVING,
+            "strength": MOMENTUM_STRENGTH_WEAK,
+            "magnitude": magnitude,
+            "sign": "+"
+        }
+    elif momentum <= -threshold_strong:
+        # Strong negative momentum
+        return {
+            "label": MOMENTUM_LABEL_STRONG_NEGATIVE,
+            "interpretation": MOMENTUM_INTERPRETATION_STRONG_NEGATIVE,
+            "direction": MOMENTUM_DIRECTION_DETERIORATING,
+            "strength": MOMENTUM_STRENGTH_STRONG,
+            "magnitude": magnitude,
+            "sign": "-"
+        }
+    elif momentum <= -threshold_weak:
+        # Weak negative momentum
+        return {
+            "label": MOMENTUM_LABEL_NEGATIVE,
+            "interpretation": MOMENTUM_INTERPRETATION_NEGATIVE,
+            "direction": MOMENTUM_DIRECTION_DETERIORATING,
+            "strength": MOMENTUM_STRENGTH_WEAK,
+            "magnitude": magnitude,
+            "sign": "-"
+        }
+    else:
+        # Neutral momentum
+        return {
+            "label": MOMENTUM_LABEL_NEUTRAL,
+            "interpretation": MOMENTUM_INTERPRETATION_NEUTRAL,
+            "direction": MOMENTUM_DIRECTION_STABLE,
+            "strength": MOMENTUM_STRENGTH_NEUTRAL,
+            "magnitude": magnitude,
+            "sign": "~"
+        }
+
+
+def get_momentum_definition() -> str:
+    """
+    Get the standardized momentum definition for API responses.
+
+    Returns:
+        String describing momentum classification thresholds
+    """
+    return (
+        "Momentum = FastScore - SlowScore. "
+        "Strong Positive (>= +0.20): News rapidly improving; "
+        "Positive (>= +0.10): News improving; "
+        "Neutral (-0.10 to +0.10): Sentiment stable; "
+        "Negative (<= -0.10): News deteriorating; "
+        "Strong Negative (<= -0.20): News rapidly deteriorating"
+    )
