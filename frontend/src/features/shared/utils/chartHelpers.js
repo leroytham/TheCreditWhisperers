@@ -26,16 +26,6 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
     String(etDate.getMonth() + 1).padStart(2, '0') + '-' +
     String(etDate.getDate()).padStart(2, '0');
 
-  console.log('[filterPriceDataByTimeframe] Timeframe:', timeframe);
-  console.log('[filterPriceDataByTimeframe] Today in US ET:', todayString);
-  console.log('[filterPriceDataByTimeframe] Input data length:', priceData1Y.length);
-  if (priceData1Y.length > 0) {
-    const lastDates = priceData1Y.slice(-3).map(p => p.date);
-    console.log('[filterPriceDataByTimeframe] Last 3 dates in input:', lastDates);
-    console.log('[filterPriceDataByTimeframe] Does last date equal today (ET)?', lastDates[lastDates.length - 1] === todayString);
-    console.log('[filterPriceDataByTimeframe] Comparison:', lastDates[lastDates.length - 1], '!==', todayString);
-  }
-
   let filtered = priceData1Y;
   const now = etDate; // Use ET date for all date calculations
 
@@ -91,12 +81,6 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
         return pt.date !== todayString;
       });
       break;
-  }
-
-  console.log('[filterPriceDataByTimeframe] Filtered data length:', filtered.length);
-  if (filtered.length > 0) {
-    console.log('[filterPriceDataByTimeframe] Last 3 dates after filtering:',
-      filtered.slice(-3).map(p => p.date));
   }
 
   return filtered;
@@ -385,12 +369,6 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
   if (timeframe === '5Y') {
     const yearMap = new Map();
 
-    console.log('[generateTimelinePoints] 5Y - Total data points:', chartData.length);
-    if (chartData.length > 0) {
-      console.log('[generateTimelinePoints] 5Y - First date:', chartData[0].date);
-      console.log('[generateTimelinePoints] 5Y - Last date:', chartData[chartData.length - 1].date);
-    }
-
     // Group data points by year
     chartData.forEach((point, index) => {
       if (point.date) {
@@ -404,8 +382,6 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 
     // Get unique years sorted
     const years = Array.from(yearMap.keys()).sort();
-    console.log('[generateTimelinePoints] 5Y - Years found:', years);
-    console.log('[generateTimelinePoints] 5Y - Number of years:', years.length);
 
     if (years.length >= 1) {
       // Create evenly spaced X positions for years

@@ -28,4 +28,13 @@ export { default as SentimentMetricsCard } from './SentimentMetricsCard';
 export { default as SentimentTrendSummary } from './SentimentTrendSummary';
 export { default as SentimentSourceBreakdown } from './SentimentSourceBreakdown';
 export { default as HistoricalSentimentTimeline } from './HistoricalSentimentTimeline';
+export { default as MomentumCard } from './MomentumCard';
+export { default as SentimentBreadthCard } from './SentimentBreadthCard';
+export { default as SentimentShockCard } from './SentimentShockCard';
+export { default as SourceConcentrationCard } from './SourceConcentrationCard';
+export { default as SentimentByTopicCard } from './SentimentByTopicCard';
 
+// Modular sentiment components (reorganization)
+export { default as SentimentScoreCard } from './SentimentScoreCard';
+export { default as NewsCoverageCard } from './NewsCoverageCard';
+export { default as SentimentConfidenceCard } from './SentimentConfidenceCard';

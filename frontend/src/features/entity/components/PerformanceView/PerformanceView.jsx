@@ -1,6 +1,6 @@
 // src/features/entity/components/PerformanceView/PerformanceView.jsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   PriceChart,
   CombinedSentimentVolumeChart,
@@ -8,26 +8,23 @@ import {
   ViewModeToggle,
   EventsToggle,
   OverallSentiment,
+  SentimentScoreCard,
   SignificantEvents,
   RelatedNews,
-  SentimentMetricsCard,
-  SentimentTrendSummary,
-  SentimentSourceBreakdown
+  MomentumCard,
+  SentimentBreadthCard,
+  SentimentShockCard,
+  SourceConcentrationCard,
+  SentimentByTopicCard,
+  NewsCoverageCard,
+  SentimentConfidenceCard
 } from '../../../shared/components';
 import { useRollingSentiment } from '../../hooks/useRollingSentiment';
-import { useSourceReliability } from '../../hooks/useSourceReliability';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
 import { formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
 import { usePriceData } from '../../hooks/usePriceData';
-import {
-  calculateMomentum,
-  calculateDistribution,
-  calculateVolatility,
-  calculateOverallSentiment,
-  generateSentimentInsights
-} from '../../../shared/utils/sentimentAnalysis';
 
 /**
  * PerformanceView Component
@@ -68,17 +65,22 @@ const PerformanceView = ({
   } = usePriceData(ticker, timeframe === '5Y' ? '5Y' : '1Y');
 
   // Use timeframe-specific data if available, otherwise fall back to parent data
-  const activePriceData = timeframe === '1D'
-    ? priceData1D
-    : timeframe === '5Y'
-      ? timeframeSpecificData
-      : priceData1Y;
+  // Memoize to prevent reference changes that trigger re-renders
+  const activePriceData = useMemo(() => {
+    return timeframe === '1D'
+      ? priceData1D
+      : timeframe === '5Y'
+        ? timeframeSpecificData
+        : priceData1Y;
+  }, [timeframe, priceData1D, timeframeSpecificData, priceData1Y]);
 
-  const activePrevClose = timeframe === '1D'
-    ? prevClose1D
-    : timeframe === '5Y'
-      ? timeframeSpecificPrevClose
-      : prevCloseFromParent;
+  const activePrevClose = useMemo(() => {
+    return timeframe === '1D'
+      ? prevClose1D
+      : timeframe === '5Y'
+        ? timeframeSpecificPrevClose
+        : prevCloseFromParent;
+  }, [timeframe, prevClose1D, timeframeSpecificPrevClose, prevCloseFromParent]);
 
   // Only show loading on initial page load, not on timeframe switches
   const isTimeframeSpecificLoading = isInitialLoad && timeframe === '5Y' && timeframeLoading;
@@ -93,104 +95,18 @@ const PerformanceView = ({
   // Fetch rolling sentiment data for the combined chart
   const { data: rollingData, hasData: hasRollingData, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
 
-  // Fetch real source reliability data from backend
-  const { sources: sourcesData, loading: sourcesLoading } = useSourceReliability(ticker);
-
-  // Calculate sentiment metrics using useMemo for performance
-  const metrics = useMemo(() => {
-    // Determine which data source to use based on viewMode
-    let sentimentData = [];
-    
-    if (viewMode === 'rolling') {
-      // Use rolling data
-      if (!rollingData || rollingData.length === 0) {
-        return {
-          overall: { label: 'Neutral', value: 0, color: 'gray', confidence: 0 },
-          momentum: { value: 0, trend: 'stable', period: '7d' },
-          distribution: { bullish: 20, somewhatBullish: 20, neutral: 20, somewhatBearish: 20, bearish: 20 },
-          volatility: { level: 'Medium', score: 5 },
-          insights: { 
-            summary: 'Insufficient data for sentiment analysis', 
-            keyPoints: ['Not enough sentiment data available'], 
-            trend: 'NEUTRAL' 
-          }
-        };
-      }
-      
-      // Transform rolling data
-      sentimentData = rollingData.map(d => ({
-        date: d.timestamp,
-        sentiment: d.sentiment || 0,
-        volume: d.volume || 0,
-        headlines: d.headlines || []
-      }));
-    } else {
-      // Use daily data
-      if (!dailySentiment || Object.keys(dailySentiment).length === 0) {
-        return {
-          overall: { label: 'Neutral', value: 0, color: 'gray', confidence: 0 },
-          momentum: { value: 0, trend: 'stable', period: '7d' },
-          distribution: { bullish: 20, somewhatBullish: 20, neutral: 20, somewhatBearish: 20, bearish: 20 },
-          volatility: { level: 'Medium', score: 5 },
-          insights: { 
-            summary: 'Insufficient data for sentiment analysis', 
-            keyPoints: ['Not enough sentiment data available'], 
-            trend: 'NEUTRAL' 
-          }
-        };
-      }
-
-      // Transform dailySentiment into array format for calculations
-      sentimentData = Object.entries(dailySentiment).map(([date, data]) => ({
-        date,
-        sentiment: data.score || 0,
-        volume: data.count || 0,
-        headlines: data.headlines || []
-      }));
-    }
-
-    // Calculate all metrics
-    const overall = calculateOverallSentiment(sentimentData);
-    const momentum = calculateMomentum(sentimentData, 7);
-    const distribution = calculateDistribution(sentimentData);
-    const volatility = calculateVolatility(sentimentData);
-    const insights = generateSentimentInsights(overall, momentum, distribution, volatility);
-
-    return { overall, momentum, distribution, volatility, insights };
-  }, [dailySentiment, rollingData, viewMode]);
-
-  // Map sentiment timeframe to days for existing charts
-  const getDaysToShow = (tf) => {
-    const map = { '1W': 7, '1M': 30 };
-    return map[tf] || 7;
-  };
-
   // Filter price data based on timeframe
+  // FIXED: Only depend on activePriceData and timeframe to prevent infinite loop
+  // Removed timeframeLoading, timeframeError from dependencies as they change on every poll
   useEffect(() => {
-    console.log('[PerformanceView] Timeframe changed:', timeframe);
-    console.log('[PerformanceView] Active price data length:', activePriceData?.length);
-    console.log('[PerformanceView] prevClose1D:', prevClose1D);
-    console.log('[PerformanceView] prevCloseFromParent:', prevCloseFromParent);
-    console.log('[PerformanceView] Active prevClose:', activePrevClose);
-    console.log('[PerformanceView] Loading:', timeframeLoading);
-    console.log('[PerformanceView] Error:', timeframeError);
-
-    // Debug 5Y data
-    if (timeframe === '5Y' && activePriceData && activePriceData.length > 0) {
-      console.log('[PerformanceView] 5Y - First date in activePriceData:', activePriceData[0].date);
-      console.log('[PerformanceView] 5Y - Last date in activePriceData:', activePriceData[activePriceData.length - 1].date);
-      console.log('[PerformanceView] 5Y - timeframeSpecificData length:', timeframeSpecificData?.length);
-      console.log('[PerformanceView] 5Y - priceData1Y length:', priceData1Y?.length);
+    if (!activePriceData || activePriceData.length === 0) {
+      setPriceData([]);
+      return;
     }
 
     const filtered = filterPriceDataByTimeframe(activePriceData, timeframe);
-    console.log('[PerformanceView] Filtered data length:', filtered?.length);
-    if (timeframe === '5Y' && filtered && filtered.length > 0) {
-      console.log('[PerformanceView] 5Y - First date after filtering:', filtered[0].date);
-      console.log('[PerformanceView] 5Y - Last date after filtering:', filtered[filtered.length - 1].date);
-    }
     setPriceData(filtered);
-  }, [activePriceData, timeframe, activePrevClose, timeframeLoading, timeframeError, timeframeSpecificData, priceData1Y]);
+  }, [activePriceData, timeframe]);
 
   // Create chart data from price data
   const chartData = priceData.map((point, i) => ({
@@ -253,11 +169,12 @@ const PerformanceView = ({
                 </p>
               </div>
 
-              {/* Overall Sentiment Card - Row 1, Col 2 */}
+              {/* Sentiment Score Card - Row 1, Col 2 */}
               <div className="lg:col-start-2 lg:row-start-1 h-full">
-                <OverallSentiment
+                <SentimentScoreCard
                   sentiment={sentiment}
                   newsCount={news?.length || 0}
+                  dataQuality={sentiment?.data_quality}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full"
                 />
               </div>
@@ -367,9 +284,9 @@ const PerformanceView = ({
       case 'sentiment':
         return (
           <div className="space-y-6">
-            {/* Controls Bar */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow p-4">
-              <div className="flex items-center justify-between flex-wrap gap-4">
+            {/* Row 1: Graph Card with Filters */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow p-6">
+              <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
                 <div className="flex items-center space-x-4">
                   <TimeRangeSelector
@@ -382,21 +299,6 @@ const PerformanceView = ({
                   />
                 </div>
               </div>
-            </div>
-
-            {/* Sentiment Metrics Dashboard */}
-            {metrics && (
-              <SentimentMetricsCard
-                overall={metrics.overall}
-                momentum={metrics.momentum}
-                distribution={metrics.distribution}
-                volatility={metrics.volatility}
-              />
-            )}
-
-            {/* Combined Sentiment + Volume Chart */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Sentiment Trend</h3>
               <CombinedSentimentVolumeChart
                 data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment || {}).map(([date, data]) => ({
                   timestamp: date,
@@ -412,30 +314,72 @@ const PerformanceView = ({
               />
             </div>
 
-            {/* Enhanced Layout with Trend Summary and Source Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Trend Summary - Takes 2/3 width on large screens */}
-              <div className="lg:col-span-2">
-                {metrics && (
-                  <SentimentTrendSummary
-                    trend={metrics.overall.label.toUpperCase()}
-                    confidence={metrics.overall.confidence}
-                    momentum={metrics.momentum.trend.toUpperCase()}
-                    summary={metrics.insights.summary}
-                    keyPoints={metrics.insights.keyPoints}
-                    dataSource={`${sentimentTimeframe} ${viewMode === 'rolling' ? 'rolling' : 'daily'} data`}
-                  />
-                )}
-              </div>
+            {/* Row 2: Core Metrics (4 columns) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              <SentimentScoreCard
+                sentiment={sentiment}
+                newsCount={news?.length || 0}
+                dataQuality={sentiment?.data_quality}
+              />
+              <MomentumCard
+                sentimentMomentum={sentiment?.sentiment_momentum}
+                momentumLabel={sentiment?.momentum_label}
+                momentumInterpretation={sentiment?.momentum_interpretation}
+                momentumQuality={sentiment?.momentum_quality}
+                fastScore={sentiment?.fast_score}
+                slowScore={sentiment?.slow_score}
+                halfLifeFastHours={sentiment?.half_life_fast_hours}
+                halfLifeSlowHours={sentiment?.half_life_slow_hours}
+              />
+              <NewsCoverageCard
+                effectiveNewsVolume={sentiment?.effective_news_volume}
+                volumeInterpretation={sentiment?.volume_interpretation}
+                dataQuality={sentiment?.data_quality}
+              />
+              <SentimentConfidenceCard
+                sentimentVolatility={sentiment?.sentiment_volatility}
+                volatilityQuality={sentiment?.volatility_quality}
+                dataQuality={sentiment?.data_quality}
+              />
+            </div>
 
-              {/* Source Breakdown - Takes 1/3 width on large screens */}
-              <div>
-                <SentimentSourceBreakdown
-                  sources={sourcesData}
-                  timeframe={sentimentTimeframe}
-                  loading={sourcesLoading}
-                />
-              </div>
+            {/* Row 3: Advanced Analytics (2 columns) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SentimentBreadthCard
+                sentimentBreadthScore={sentiment?.sentiment_breadth_score}
+                numBullishArticles={sentiment?.num_bullish_articles}
+                numBearishArticles={sentiment?.num_bearish_articles}
+                totalDirectionalArticles={sentiment?.total_directional_articles}
+                breadthInterpretation={sentiment?.breadth_interpretation}
+                breadthQuality={sentiment?.breadth_quality}
+                avgScore={sentiment?.avg_score}
+              />
+              <SentimentShockCard
+                sentimentZScore={sentiment?.sentiment_z_score}
+                zScoreInterpretation={sentiment?.z_score_interpretation}
+                zScoreHistoricalMean={sentiment?.z_score_historical_mean}
+                zScoreHistoricalStd={sentiment?.z_score_historical_std}
+                zScoreDaysOfHistory={sentiment?.z_score_days_of_history}
+                zScoreQuality={sentiment?.z_score_quality}
+                currentScore={sentiment?.slow_score}
+              />
+            </div>
+
+            {/* Row 4: Source & Topic Analysis (2 columns) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SourceConcentrationCard
+                sourceConcentrationHhi={sentiment?.sourceConcentrationHhi}
+                concentrationInterpretation={sentiment?.concentrationInterpretation}
+                topSources={sentiment?.topSources}
+              />
+              <SentimentByTopicCard
+                dominantTopic={sentiment?.dominantTopic}
+                dominantTopicWeight={sentiment?.dominantTopicWeight}
+                dominantTopicPercentage={sentiment?.dominantTopicPercentage}
+                topicCount={sentiment?.topicCount}
+                sentimentByTopic={sentiment?.sentimentByTopic}
+                topicWeights={sentiment?.topicWeights}
+              />
             </div>
           </div>
         );

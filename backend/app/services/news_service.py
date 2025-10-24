@@ -57,13 +57,27 @@ class NewsService:
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36'
         ]
 
-    async def _fetch_alpha_vantage_news(self, session: aiohttp.ClientSession, ticker: str) -> list[dict]:
+        # Track active background fetch tasks to prevent duplicates
+        # Format: {ticker}:{timeframe} -> asyncio.Task
+        self._active_fetch_tasks = {}
+
+    async def _fetch_alpha_vantage_news(
+        self,
+        session: aiohttp.ClientSession,
+        ticker: str,
+        time_from: str = None,
+        time_to: str = None,
+        limit: int = 1000
+    ) -> list[dict]:
         """
         Fetches news from Alpha Vantage NEWS_SENTIMENT API with ticker sentiment scores.
 
         Args:
             session: aiohttp ClientSession for async requests
             ticker: Stock ticker symbol
+            time_from: Optional start time in format "YYYYMMDDTHHMM" (e.g., "20240101T0000")
+            time_to: Optional end time in format "YYYYMMDDTHHMM" (e.g., "20240630T2359")
+            limit: Maximum number of articles to return (default: 1000, max: 1000)
 
         Returns:
             List of news article dictionaries with sentiment scores
@@ -73,7 +87,14 @@ class NewsService:
             return []
 
         try:
-            url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&limit=1000&tickers={ticker}&apikey={self.alpha_vantage_api_key}"
+            # Build URL with optional time parameters
+            url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&limit={limit}&tickers={ticker}&apikey={self.alpha_vantage_api_key}"
+
+            if time_from:
+                url += f"&time_from={time_from}"
+            if time_to:
+                url += f"&time_to={time_to}"
+
             async with session.get(url, timeout=30) as response:
                 response.raise_for_status()
                 data = await response.json()
@@ -154,7 +175,8 @@ class NewsService:
                         "ticker_sentiment_score": ticker_sentiment_score,
                         "ticker_sentiment_label": ticker_sentiment_label,
                         "ticker_relevance_score": ticker_relevance_score,
-                        "image": article.get("banner_image")
+                        "image": article.get("banner_image"),
+                        "topics": article.get("topics", [])  # Extract topics array for source/topic analysis
                     })
 
                 return news_list
@@ -162,6 +184,145 @@ class NewsService:
         except Exception as e:
             print(f"Error fetching news from Alpha Vantage for {ticker}: {e}")
             return []
+
+    async def _check_rate_limit(self) -> bool:
+        """
+        Check and enforce Alpha Vantage rate limits (300 calls/minute).
+        Uses Redis to track API calls per minute.
+
+        Returns:
+            True if rate limit is ok, False if limit exceeded
+        """
+        from app.core.cache import redis_cache
+
+        if not redis_cache.async_client:
+            # If Redis not available, proceed without rate limiting
+            return True
+
+        try:
+            rate_limit_key = "alpha_vantage:rate_limit:calls_per_minute"
+            current_calls = await redis_cache.async_client.get(rate_limit_key)
+
+            if current_calls is None:
+                # First call in this minute
+                await redis_cache.async_client.setex(rate_limit_key, 60, 1)
+                return True
+
+            calls_count = int(current_calls)
+            if calls_count >= 300:
+                print(f"[RATE LIMIT] Alpha Vantage rate limit hit: {calls_count}/300 calls per minute")
+                return False
+
+            # Increment counter
+            await redis_cache.async_client.incr(rate_limit_key)
+            return True
+
+        except Exception as e:
+            print(f"Error checking rate limit: {e}")
+            return True  # Proceed if rate check fails
+
+    async def _fetch_alpha_vantage_batch(
+        self,
+        session: aiohttp.ClientSession,
+        ticker: str,
+        months_back: int = 6
+    ) -> list[dict]:
+        """
+        Fetches historical news from Alpha Vantage in batches until we have {months_back} months of data.
+
+        Uses pagination with time_from and time_to parameters:
+        - First call: time_from=6 months ago, time_to=now, limit=1000
+        - Subsequent calls: time_from=6 months ago, time_to=earliest_date_from_previous_batch, limit=1000
+        - Stops when: earliest date >= 6 months ago OR no more results
+
+        Args:
+            session: aiohttp ClientSession for async requests
+            ticker: Stock ticker symbol
+            months_back: Number of months of historical data to fetch (default: 6)
+
+        Returns:
+            List of all news articles from the time period
+        """
+        if not self.alpha_vantage_api_key:
+            return []
+
+        all_articles = []
+        now = datetime.now(timezone.utc)
+        target_start_date = now - timedelta(days=months_back * 30)  # Approximate months to days
+
+        # Format for Alpha Vantage API: YYYYMMDDTHHMM
+        time_from_str = target_start_date.strftime("%Y%m%dT%H%M")
+        time_to_str = now.strftime("%Y%m%dT%H%M")
+
+        batch_count = 0
+        max_batches = 20  # Safety limit to prevent infinite loops
+
+        print(f"[BATCH FETCH] Starting batch fetch for {ticker} from {target_start_date.date()} to {now.date()}")
+
+        while batch_count < max_batches:
+            # Check rate limit before making API call
+            if not await self._check_rate_limit():
+                print(f"[BATCH FETCH] Rate limit reached, waiting 60 seconds...")
+                await asyncio.sleep(60)
+                continue
+
+            batch_count += 1
+            print(f"[BATCH {batch_count}] Fetching from {time_from_str} to {time_to_str}")
+
+            # Add small delay between requests to be polite
+            if batch_count > 1:
+                await asyncio.sleep(0.2)  # 200ms delay
+
+            # Fetch batch
+            batch_articles = await self._fetch_alpha_vantage_news(
+                session,
+                ticker,
+                time_from=time_from_str,
+                time_to=time_to_str,
+                limit=1000
+            )
+
+            if not batch_articles:
+                print(f"[BATCH {batch_count}] No more articles returned, stopping")
+                break
+
+            print(f"[BATCH {batch_count}] Fetched {len(batch_articles)} articles")
+
+            # Find earliest date in this batch
+            earliest_date = None
+            for article in batch_articles:
+                pub_timestamp_str = article.get("publish_timestamp")
+                if pub_timestamp_str:
+                    try:
+                        pub_datetime = datetime.fromisoformat(pub_timestamp_str)
+                        if earliest_date is None or pub_datetime < earliest_date:
+                            earliest_date = pub_datetime
+                    except ValueError:
+                        continue
+
+            # Add articles to collection
+            all_articles.extend(batch_articles)
+
+            # Check if we've reached our target date
+            if earliest_date and earliest_date <= target_start_date:
+                print(f"[BATCH FETCH] Reached target date: {earliest_date.date()} <= {target_start_date.date()}")
+                break
+
+            # Check if we got less than limit, meaning no more data available
+            if len(batch_articles) < 1000:
+                print(f"[BATCH FETCH] Received {len(batch_articles)} < 1000 articles, no more data available")
+                break
+
+            # Update time_to for next batch
+            if earliest_date:
+                # Set time_to to one second before earliest article in this batch
+                time_to_str = (earliest_date - timedelta(seconds=1)).strftime("%Y%m%dT%H%M")
+            else:
+                # Can't continue without an earliest date
+                break
+
+        print(f"[BATCH FETCH] Completed! Total articles: {len(all_articles)} across {batch_count} batches")
+        return all_articles
 
     async def _scrape_article_content(self, session: aiohttp.ClientSession, url: str) -> str:
         """
@@ -371,6 +532,235 @@ class NewsService:
         except Exception as e:
             print(f"Error fetching news from MarketAux for {ticker}: {e}")
             return []
+
+    def _get_timeframe_months(self, timeframe: str) -> int:
+        """Convert timeframe string to number of months for data fetching."""
+        timeframe_map = {
+            '1D': 0.033,  # ~1 day
+            '1W': 0.25,   # ~1 week
+            '1M': 1,
+            '3M': 3,
+            '6M': 6,
+            'YTD': None,  # Calculate dynamically
+            '1Y': 12,
+            '5Y': 60
+        }
+        if timeframe == 'YTD':
+            # Calculate months since start of year
+            now = datetime.now(timezone.utc)
+            start_of_year = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+            days_since_start = (now - start_of_year).days
+            return days_since_start / 30  # Approximate months
+        return timeframe_map.get(timeframe, 1)
+
+    def _get_cache_ttl_for_timeframe(self, timeframe: str) -> int:
+        """Get appropriate cache TTL based on timeframe."""
+        ttl_map = {
+            '1D': 300,      # 5 minutes
+            '1W': 600,      # 10 minutes
+            '1M': 600,      # 10 minutes
+            '3M': 1800,     # 30 minutes
+            '6M': 3600,     # 1 hour
+            'YTD': 14400,   # 4 hours
+            '1Y': 43200,    # 12 hours
+            '5Y': 86400     # 24 hours
+        }
+        return ttl_map.get(timeframe, settings.NEWS_CACHE_TTL)
+
+    async def _background_fetch_for_timeframe(
+        self,
+        ticker: str,
+        timeframe: str,
+        next_timeframe: str = None
+    ):
+        """
+        Background task to fetch news for a specific timeframe.
+        After completion, optionally triggers fetch for next timeframe.
+
+        Args:
+            ticker: Stock ticker symbol
+            timeframe: Current timeframe to fetch (e.g., '6M')
+            next_timeframe: Next timeframe to queue (e.g., 'YTD')
+        """
+        from app.core.cache import redis_cache
+
+        task_key = f"{ticker}:{timeframe}"
+
+        try:
+            print(f"[PROGRESSIVE FETCH] Starting background fetch for {ticker} - {timeframe}")
+
+            # Set progress status
+            if redis_cache.async_client:
+                await redis_cache.aset(
+                    f"fetch_progress:{ticker}:{timeframe}",
+                    {"status": "in_progress", "started_at": datetime.now(timezone.utc).isoformat()},
+                    ttl=3600
+                )
+
+            # Calculate months to fetch
+            months = self._get_timeframe_months(timeframe)
+
+            # Fetch data
+            async with aiohttp.ClientSession() as session:
+                articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=int(months))
+
+            if articles:
+                # Store in cache with timeframe-specific TTL
+                cache_key = f"ticker_news:{ticker}:{timeframe}"
+                ttl = self._get_cache_ttl_for_timeframe(timeframe)
+
+                if redis_cache.async_client:
+                    await redis_cache.aset(cache_key, articles, ttl=ttl)
+                    print(f"[PROGRESSIVE FETCH] Cached {len(articles)} articles for {ticker} - {timeframe}")
+
+                    # Mark as complete
+                    await redis_cache.aset(
+                        f"fetch_progress:{ticker}:{timeframe}",
+                        {
+                            "status": "complete",
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                            "article_count": len(articles)
+                        },
+                        ttl=3600
+                    )
+
+                # Trigger next timeframe if specified
+                if next_timeframe:
+                    print(f"[PROGRESSIVE FETCH] Queueing next timeframe: {next_timeframe}")
+                    await self.trigger_progressive_fetch(ticker, next_timeframe)
+
+        except Exception as e:
+            print(f"[PROGRESSIVE FETCH] Error fetching {ticker} - {timeframe}: {e}")
+            if redis_cache.async_client:
+                await redis_cache.aset(
+                    f"fetch_progress:{ticker}:{timeframe}",
+                    {"status": "error", "error": str(e), "failed_at": datetime.now(timezone.utc).isoformat()},
+                    ttl=3600
+                )
+        finally:
+            # Remove from active tasks
+            if task_key in self._active_fetch_tasks:
+                del self._active_fetch_tasks[task_key]
+
+    async def trigger_progressive_fetch(
+        self,
+        ticker: str,
+        timeframe: str,
+        force: bool = False
+    ):
+        """
+        Trigger progressive background fetching for a timeframe and queue subsequent timeframes.
+
+        Fetching order: 1M → 6M → YTD → 1Y → 5Y
+
+        Args:
+            ticker: Stock ticker symbol
+            timeframe: Requested timeframe
+            force: Force fetch even if already cached or in progress
+        """
+        from app.core.cache import redis_cache
+
+        # Define progressive fetch order
+        timeframe_progression = {
+            '1D': None,      # Too small, use real-time only
+            '1W': None,      # Too small, use real-time only
+            '1M': '6M',
+            '3M': '6M',
+            '6M': 'YTD',
+            'YTD': '1Y',
+            '1Y': '5Y',
+            '5Y': None       # End of chain
+        }
+
+        task_key = f"{ticker}:{timeframe}"
+
+        # Check if already cached (unless force=True)
+        if not force and redis_cache.async_client:
+            cache_key = f"ticker_news:{ticker}:{timeframe}"
+            cached = await redis_cache.aget(cache_key)
+            if cached:
+                print(f"[PROGRESSIVE FETCH] {ticker} - {timeframe} already cached, skipping")
+
+                # Still queue next timeframe if not in progress
+                next_tf = timeframe_progression.get(timeframe)
+                if next_tf:
+                    await self.trigger_progressive_fetch(ticker, next_tf, force=False)
+                return
+
+        # Check if already in progress
+        if task_key in self._active_fetch_tasks:
+            task = self._active_fetch_tasks[task_key]
+            if not task.done():
+                print(f"[PROGRESSIVE FETCH] {ticker} - {timeframe} already in progress, skipping")
+                return
+
+        # Get next timeframe in progression
+        next_timeframe = timeframe_progression.get(timeframe)
+
+        # Start background task
+        task = asyncio.create_task(
+            self._background_fetch_for_timeframe(ticker, timeframe, next_timeframe)
+        )
+        self._active_fetch_tasks[task_key] = task
+
+        print(f"[PROGRESSIVE FETCH] Queued background fetch for {ticker} - {timeframe}")
+
+    async def get_ticker_news_for_timeframe(
+        self,
+        ticker: str,
+        timeframe: str = '1M',
+        trigger_progressive: bool = True
+    ) -> list[dict]:
+        """
+        Get news for a ticker with timeframe-specific caching and progressive background fetching.
+
+        Args:
+            ticker: Stock ticker symbol
+            timeframe: Timeframe filter ('1M', '6M', 'YTD', '1Y', '5Y')
+            trigger_progressive: Whether to trigger background fetch for future timeframes
+
+        Returns:
+            List of news articles for the timeframe (may return partial data while fetching)
+        """
+        from app.core.cache import redis_cache
+
+        cache_key = f"ticker_news:{ticker}:{timeframe}"
+
+        # Try to get from cache first
+        if redis_cache.async_client:
+            cached = await redis_cache.aget(cache_key)
+            if cached:
+                print(f"[CACHE HIT] {cache_key} - {len(cached)} articles")
+
+                # Trigger progressive fetch in background
+                if trigger_progressive:
+                    asyncio.create_task(self.trigger_progressive_fetch(ticker, timeframe))
+
+                return cached
+
+        print(f"[CACHE MISS] {cache_key}")
+
+        # Not in cache - fetch based on timeframe
+        months = self._get_timeframe_months(timeframe)
+
+        async with aiohttp.ClientSession() as session:
+            if months <= 1:
+                # For short timeframes, use simple fetch
+                articles = await self._fetch_alpha_vantage_news(session, ticker)
+            else:
+                # For longer timeframes, use batch fetch
+                articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=int(months))
+
+        # Cache the result
+        if redis_cache.async_client and articles:
+            ttl = self._get_cache_ttl_for_timeframe(timeframe)
+            await redis_cache.aset(cache_key, articles, ttl=ttl)
+
+        # Trigger progressive fetch for next timeframe
+        if trigger_progressive:
+            asyncio.create_task(self.trigger_progressive_fetch(ticker, timeframe))
+
+        return articles
 
     @async_cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="ticker_news")
     async def get_ticker_news(self, ticker: str, count: int = 1000) -> list[dict]:

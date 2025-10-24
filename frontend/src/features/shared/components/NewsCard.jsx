@@ -8,6 +8,7 @@ import { getRelevanceDetails } from '../utils/sentimentHelpers.js';
 
 /**
  * A card component to display a single news article with modern UX/UI.
+ * Now includes exponential decay weighting visualization.
  * @param {object} props
  * @param {string} props.title
  * @param {string} props.link
@@ -19,6 +20,9 @@ import { getRelevanceDetails } from '../utils/sentimentHelpers.js';
  * @param {string} [props.summary] - The article summary.
  * @param {string[]} [props.tickers] - An array of related tickers.
  * @param {number} [props.relevance_score] - Relevance score (0 < x <= 1) if available.
+ * @param {number} [props.recency_weight] - Recency weight from exponential decay (0 to 1).
+ * @param {number} [props.combined_weight] - Combined weight (recency × relevance).
+ * @param {number} [props.age_hours] - Age of the article in hours.
  */
 const NewsCard = ({
   title,
@@ -31,9 +35,23 @@ const NewsCard = ({
   summary,
   tickers,
   relevance_score,
+  recency_weight,
+  combined_weight,
+  age_hours,
 }) => {
   // Get relevance display details if score is available
   const relevanceDetails = getRelevanceDetails(relevance_score);
+
+  // Format age hours for display
+  const formatAgeHours = (hours) => {
+    if (hours === undefined || hours === null) return null;
+    if (hours < 1) return `${Math.round(hours * 60)}m ago`;
+    if (hours < 24) return `${Math.round(hours)}h ago`;
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const ageDisplay = formatAgeHours(age_hours);
   // Use a ref for the fallback div to control its display
   const fallbackRef = React.useRef(null);
 
@@ -116,6 +134,12 @@ const NewsCard = ({
                 <time dateTime={publish_date} className="text-gray-500">
                     {formatRelativeTime(publish_date)}
                 </time>
+                {ageDisplay && (
+                    <>
+                        <span className="text-gray-400" aria-hidden="true">•</span>
+                        <span className="text-gray-500">{ageDisplay}</span>
+                    </>
+                )}
             </div>
             <div className="mt-2 flex items-center gap-2 flex-wrap">
                 {(sentiment_score !== null && sentiment_score !== undefined) && (
@@ -127,6 +151,22 @@ const NewsCard = ({
                         title={`${relevanceDetails.label}: ${relevanceDetails.value}`}
                     >
                         Relevance: {relevanceDetails.displayValue}
+                    </span>
+                )}
+                {(recency_weight !== undefined && recency_weight !== null) && (
+                    <span
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-blue-200 bg-blue-50 text-blue-700"
+                        title={`Recency Weight: ${(recency_weight * 100).toFixed(1)}%`}
+                    >
+                        Freshness: {(recency_weight * 100).toFixed(0)}%
+                    </span>
+                )}
+                {(combined_weight !== undefined && combined_weight !== null && combined_weight > 0) && (
+                    <span
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-purple-200 bg-purple-50 text-purple-700"
+                        title={`Combined Weight (Recency × Relevance): ${(combined_weight * 100).toFixed(1)}%`}
+                    >
+                        Weight: {(combined_weight * 100).toFixed(0)}%
                     </span>
                 )}
             </div>
