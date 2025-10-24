@@ -103,12 +103,12 @@ const SentimentShockCard = ({
 
   // Generate contextual explanation
   const generateExplanation = () => {
-    if (!sentimentZScore || !zScoreHistoricalMean) return null;
-    
+    if (!sentimentZScore || !zScoreHistoricalMean || currentScore === null || currentScore === undefined) return null;
+
     const diff = currentScore - zScoreHistoricalMean;
     const diffPercent = ((diff / Math.abs(zScoreHistoricalMean)) * 100).toFixed(0);
     const direction = diff > 0 ? 'higher' : 'lower';
-    
+
     return `Current sentiment is ${Math.abs(diffPercent)}% ${direction} than ${zScoreDaysOfHistory}-day average`;
   };
 

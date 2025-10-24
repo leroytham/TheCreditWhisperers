@@ -196,47 +196,50 @@ const SentimentByTopicCard = ({
                 Sentiment by Topic (sorted by weight)
               </div>
 
-              {sortedTopics.map((topicData, index) => {
-                const sentimentDetails = getSentimentDetails(topicData.sentiment);
-                const SentimentIcon = sentimentDetails.icon;
+              {/* Scrollable container for topics list */}
+              <div className="max-h-64 overflow-y-auto pr-2 space-y-4">
+                {sortedTopics.map((topicData, index) => {
+                  const sentimentDetails = getSentimentDetails(topicData.sentiment);
+                  const SentimentIcon = sentimentDetails.icon;
 
-                return (
-                  <div key={index} className="space-y-2">
-                    {/* Topic Header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium text-gray-700">
-                          {topicData.topic}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          ({topicData.percentage.toFixed(1)}%)
+                  return (
+                    <div key={index} className="space-y-2">
+                      {/* Topic Header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            {topicData.topic}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            ({topicData.percentage.toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <SentimentIcon className={`w-4 h-4 ${sentimentDetails.color}`} />
+                          <span className={`text-sm font-semibold ${sentimentDetails.color}`}>
+                            {formatSentiment(topicData.sentiment)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Weight bar */}
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${getTopicBarColor(topicData.percentage)} transition-all duration-300`}
+                          style={{ width: `${topicData.percentage}%` }}
+                        ></div>
+                      </div>
+
+                      {/* Sentiment label */}
+                      <div className="flex justify-end">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${sentimentDetails.bgColor} ${sentimentDetails.color}`}>
+                          {sentimentDetails.label}
                         </span>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <SentimentIcon className={`w-4 h-4 ${sentimentDetails.color}`} />
-                        <span className={`text-sm font-semibold ${sentimentDetails.color}`}>
-                          {formatSentiment(topicData.sentiment)}
-                        </span>
-                      </div>
                     </div>
-
-                    {/* Weight bar */}
-                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${getTopicBarColor(topicData.percentage)} transition-all duration-300`}
-                        style={{ width: `${topicData.percentage}%` }}
-                      ></div>
-                    </div>
-
-                    {/* Sentiment label */}
-                    <div className="flex justify-end">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${sentimentDetails.bgColor} ${sentimentDetails.color}`}>
-                        {sentimentDetails.label}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
 
               <div className="text-xs text-gray-500 text-center pt-2">
                 Showing {sortedTopics.length} topic{sortedTopics.length !== 1 ? 's' : ''}

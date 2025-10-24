@@ -174,26 +174,29 @@ const SourceConcentrationCard = ({
               <div className="text-xs font-medium text-gray-600">
                 Top News Sources (by weight)
               </div>
-              
-              {topSources.map((source, index) => (
-                <div key={index} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700 truncate" title={source.source}>
-                      {index + 1}. {source.source}
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900 ml-2">
-                      {source.percentage.toFixed(1)}%
-                    </span>
+
+              {/* Scrollable container for sources list */}
+              <div className="max-h-64 overflow-y-auto pr-2 space-y-3">
+                {topSources.map((source, index) => (
+                  <div key={index} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700 truncate" title={source.source}>
+                        {index + 1}. {source.source}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 ml-2">
+                        {source.percentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    {/* Visual bar */}
+                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${getSourceBarColor(source.percentage)} transition-all duration-300`}
+                        style={{ width: `${source.percentage}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  {/* Visual bar */}
-                  <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full ${getSourceBarColor(source.percentage)} transition-all duration-300`}
-                      style={{ width: `${source.percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
 
               {topSources.length > 0 && (
                 <div className="text-xs text-gray-500 text-center pt-2">

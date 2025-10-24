@@ -438,7 +438,7 @@ class SentimentService:
         Formula: HHI = Σ(share_i² × 10000) where share_i = source_weight / total_weight
         
         Args:
-            articles_with_metadata: List of article dicts with 'provider' and 'combined_weight'
+            articles_with_metadata: List of article dicts with 'source' and 'combined_weight'
             
         Returns:
             Dictionary with:
@@ -450,7 +450,7 @@ class SentimentService:
         
         # 1. Aggregate TotalWeight per source
         for article in articles_with_metadata:
-            source = article.get("provider", "Unknown")
+            source = article.get("source", "Unknown")
             combined_weight = article.get("combined_weight", 0)
             source_weights[source] += combined_weight
         
