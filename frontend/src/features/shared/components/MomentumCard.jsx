@@ -1,5 +1,6 @@
 import React from 'react';
 import { getMomentumDetails, getMomentumArrow, formatMomentumValue, getMomentumColor } from '../utils/sentimentHelpers';
+import TooltipPortal from './TooltipPortal';
 
 /**
  * MomentumCard Component
@@ -42,18 +43,22 @@ const MomentumCard = ({
       <div className="flex items-start justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Sentiment Momentum</h3>
         {/* Tooltip explaining momentum */}
-        <div className="group relative">
-          <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="absolute right-0 top-6 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-            <p className="font-semibold mb-2">MACD-Style Momentum</p>
-            <p className="mb-2">Momentum = Fast Score - Slow Score. Positive momentum means news is improving, negative means deteriorating.</p>
-            <p className="font-semibold mb-1">Fast vs Slow Scores</p>
-            <p>Fast ({halfLifeFastHours}h): Current intraday sentiment</p>
-            <p>Slow ({halfLifeSlowHours}h): Daily trend baseline</p>
-          </div>
-        </div>
+        <TooltipPortal>
+          <p className="font-semibold mb-2">Sentiment Momentum</p>
+          <p className="mb-2">This metric measures the direction and speed of sentiment change.</p>
+          <p className="mb-2">It answers: <em>"Is the news sentiment getting better or worse?"</em></p>
+          <p className="mb-2">It is calculated by subtracting the "Slow" trend from the "Fast" trend:</p>
+          <ul className="list-disc pl-4 mb-2 space-y-1">
+            <li><strong>Fast ({halfLifeFastHours}h):</strong> A weighted average with a {halfLifeFastHours}-hour half-life. This reflects the most current, short-term mood.</li>
+            <li><strong>Slow ({halfLifeSlowHours}h):</strong> A weighted average with a {halfLifeSlowHours}-hour half-life. This represents the established baseline trend.</li>
+          </ul>
+          <p className="font-semibold mb-1">How to Read the Score:</p>
+          <ul className="list-disc pl-4 mb-1 space-y-1">
+            <li><strong>Positive:</strong> The "Fast" score is higher than the "Slow" score. This signals that recent news is more positive than the trend, and sentiment is improving.</li>
+            <li><strong>Negative:</strong> The "Fast" score is lower than the "Slow" score. This signals that recent news is more negative, and sentiment is worsening.</li>
+            <li><strong>Near Zero:</strong> The sentiment is stable.</li>
+          </ul>
+        </TooltipPortal>
       </div>
 
       {isMomentumInsufficient ? (
@@ -76,7 +81,7 @@ const MomentumCard = ({
       ) : (
         <div className="space-y-4">
           {/* Momentum Value and Label */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center space-x-3">
               <div className={`text-4xl font-semibold ${getMomentumColor(sentimentMomentum)}`}>
                 {formatMomentumValue(sentimentMomentum)}
@@ -87,9 +92,11 @@ const MomentumCard = ({
                 </span>
               )}
             </div>
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${momentumDetails.colorClasses}`}>
-              {momentumDetails.label || momentumLabel}
-            </span>
+            <div>
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${momentumDetails.colorClasses}`}>
+                {momentumDetails.label || momentumLabel}
+              </span>
+            </div>
           </div>
 
           {/* Interpretation */}

@@ -1,4 +1,5 @@
 import React from 'react';
+import TooltipPortal from './TooltipPortal';
 
 /**
  * Sentiment Confidence Card for Sentiment Page
@@ -56,15 +57,18 @@ const SentimentConfidenceCard = ({
       <div className="flex items-start justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Sentiment Confidence</h3>
         {/* Tooltip explaining volatility/confidence */}
-        <div className="group relative">
-          <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="absolute right-0 top-6 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-            <p className="font-semibold mb-2">Sentiment Confidence</p>
-            <p>Measures the consistency of news sentiment. Lower volatility (uncertainty) means more consistent and reliable sentiment signals.</p>
-          </div>
-        </div>
+        <TooltipPortal>
+          <p className="font-semibold mb-2">Sentiment Confidence</p>
+          <p className="mb-2">This metric measures the volatility (or disagreement) among news articles.</p>
+          <p className="mb-2">It answers: <em>"Do all the articles agree?"</em></p>
+          <p className="mb-2">It is calculated using the weighted standard deviation of all article sentiment scores.</p>
+          <p className="mb-2">This can be read as an "uncertainty" or "noise" level.</p>
+          <p className="font-semibold mb-1">How to Read the Score:</p>
+          <ul className="list-disc pl-4 mb-1 space-y-1">
+            <li><strong>Low Score (High Confidence):</strong> A low value (e.g., &lt; 0.15) indicates a strong consensus. Most articles share a similar sentiment, making the "Overall Sentiment" score very clear.</li>
+            <li><strong>High Score (Low Confidence):</strong> A high value (e.g., &gt; 0.30) indicates conflicting news. There is a wide mix of very positive and very negative articles, which means the "Overall Sentiment" is an average of a highly polarized debate.</li>
+          </ul>
+        </TooltipPortal>
       </div>
 
       <div className="space-y-4">
@@ -89,15 +93,17 @@ const SentimentConfidenceCard = ({
           </div>
         ) : (
           <>
-            <div className="flex items-center space-x-3">
+            <div className="space-y-3">
               <div className="text-4xl font-semibold text-gray-900">
                 {sentimentVolatility !== null && sentimentVolatility !== undefined
                   ? sentimentVolatility.toFixed(3)
                   : '--'}
               </div>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${volatilityDetails.borderColor} ${volatilityDetails.bgColor} ${volatilityDetails.color}`}>
-                {volatilityDetails.label}
-              </span>
+              <div>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${volatilityDetails.borderColor} ${volatilityDetails.bgColor} ${volatilityDetails.color}`}>
+                  {volatilityDetails.label}
+                </span>
+              </div>
             </div>
             <p className="text-sm text-gray-600">
               {volatilityDetails.label === 'Low Uncertainty' && 'News sentiment is consistent and reliable.'}

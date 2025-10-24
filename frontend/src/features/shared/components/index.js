@@ -38,3 +38,6 @@ export { default as SentimentByTopicCard } from './SentimentByTopicCard';
 export { default as SentimentScoreCard } from './SentimentScoreCard';
 export { default as NewsCoverageCard } from './NewsCoverageCard';
 export { default as SentimentConfidenceCard } from './SentimentConfidenceCard';
+
+// Tooltip component
+export { default as TooltipPortal } from './TooltipPortal';

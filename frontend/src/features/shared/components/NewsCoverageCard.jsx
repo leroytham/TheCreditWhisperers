@@ -1,4 +1,5 @@
 import React from 'react';
+import TooltipPortal from './TooltipPortal';
 
 /**
  * News Coverage Card for Sentiment Page
@@ -25,15 +26,20 @@ const NewsCoverageCard = ({
       <div className="flex items-start justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">News Coverage</h3>
         {/* Tooltip explaining the coverage metric */}
-        <div className="group relative">
-          <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="absolute right-0 top-6 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-            <p className="font-semibold mb-2">Effective News Coverage</p>
-            <p>Sum of weighted news articles. Recent and highly relevant news contributes more to this metric. Higher values indicate stronger news coverage.</p>
-          </div>
-        </div>
+        <TooltipPortal>
+          <p className="font-semibold mb-2">News Coverage</p>
+          <p className="mb-2">This metric measures the weighted impact of all news, not just the article count.</p>
+          <p className="mb-2">This score, also called <em>"Effective News Volume,"</em> is the denominator used to calculate the "Overall Sentiment."</p>
+          <p className="mb-2">It is the sum of all CombinedWeight values from every article, where:</p>
+          <p className="font-mono text-[11px] bg-gray-800 p-2 rounded mb-2">CombinedWeight = Relevance Score × Recency Weight</p>
+          <p className="font-semibold mb-1">How to Read the Score:</p>
+          <p className="mb-1">This value tells you how reliable the "Overall Sentiment" score is.</p>
+          <ul className="list-disc pl-4 mb-1 space-y-1">
+            <li><strong>High Coverage (e.g., &gt; 10):</strong> The sentiment score is highly reliable and based on a large volume of recent, relevant news.</li>
+            <li><strong>Medium Coverage (e.g., 2-10):</strong> The score is reasonably reliable.</li>
+            <li><strong>Low Coverage (e.g., &lt; 2):</strong> The score is based on very few, old, or irrelevant articles and should be treated with caution.</li>
+          </ul>
+        </TooltipPortal>
       </div>
 
       <div className="space-y-4">
@@ -51,19 +57,21 @@ const NewsCoverageCard = ({
           </div>
         ) : (
           <>
-            <div className="flex items-center space-x-3">
+            <div className="space-y-3">
               <div className="text-4xl font-semibold text-gray-900">
                 {effectiveNewsVolume.toFixed(2)}
               </div>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${
-                volumeInterpretation === 'High Coverage'
-                  ? 'border-green-200 bg-green-50 text-green-700'
-                  : volumeInterpretation === 'Medium Coverage'
-                  ? 'border-blue-200 bg-blue-50 text-blue-700'
-                  : 'border-yellow-200 bg-yellow-50 text-yellow-700'
-              }`}>
-                {volumeInterpretation || 'Unknown'}
-              </span>
+              <div>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${
+                  volumeInterpretation === 'High Coverage'
+                    ? 'border-green-200 bg-green-50 text-green-700'
+                    : volumeInterpretation === 'Medium Coverage'
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-yellow-200 bg-yellow-50 text-yellow-700'
+                }`}>
+                  {volumeInterpretation || 'Unknown'}
+                </span>
+              </div>
             </div>
             <p className="text-sm text-gray-600">
               {volumeInterpretation === 'High Coverage' && 'Strong coverage with recent, relevant news. Sentiment metrics are highly reliable.'}

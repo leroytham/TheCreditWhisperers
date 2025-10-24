@@ -1,6 +1,7 @@
 import React from 'react';
 import { getSentimentColor } from '../utils/formatters';
 import { getSentimentDetails } from '../utils/sentimentHelpers';
+import TooltipPortal from './TooltipPortal';
 
 /**
  * Simplified Sentiment Score Card for Overview Page
@@ -42,6 +43,18 @@ const SentimentScoreCard = ({
     <div className={className}>
       <div className="flex items-start justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Overall Sentiment</h3>
+        {/* Tooltip explaining Overall Sentiment */}
+        <TooltipPortal>
+          <p className="font-semibold mb-2">Overall Sentiment</p>
+          <p className="mb-2">This is the average sentiment score, weighted by recency and relevance.</p>
+          <p className="mb-2">It is not a simple average. Each article's sentiment score is weighted by:</p>
+          <ul className="list-disc pl-4 mb-2 space-y-1">
+            <li><strong>Relevance:</strong> How much the article is about the ticker (an article with 0.9 relevance has more impact than one with 0.1).</li>
+            <li><strong>Recency:</strong> How new the article is. This uses an exponential decay model with a 24-hour half-life. This means an article from yesterday has 50% of the weight of a brand-new article.</li>
+          </ul>
+          <p className="mb-2">The final score ranges from <strong>-1.0 (Bearish)</strong> to <strong>+1.0 (Bullish)</strong>.</p>
+          <p className="text-gray-300 text-[11px]">The "News Articles Analyzed" is the total number of articles processed before filtering and weighting. For the weighted impact of this news, see the "News Coverage" metric.</p>
+        </TooltipPortal>
       </div>
 
       <div className="space-y-6">
@@ -61,11 +74,9 @@ const SentimentScoreCard = ({
               </div>
             </div>
           ) : (
-            <div className="flex items-center space-x-4">
-              <div className="flex items-baseline space-x-2">
-                <div className={`text-4xl font-bold ${getSentimentColor(avgScore)}`}>
-                  {avgScore !== null && avgScore !== undefined ? avgScore.toFixed(2) : '--'}
-                </div>
+            <div className="space-y-3">
+              <div className={`text-4xl font-bold ${getSentimentColor(avgScore)}`}>
+                {avgScore !== null && avgScore !== undefined ? avgScore.toFixed(2) : '--'}
               </div>
               <div>
                 <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
@@ -77,12 +88,12 @@ const SentimentScoreCard = ({
                 }`}>
                   {sentimentDetails.label}
                 </span>
-                {isLowConfidence && (
-                  <div className="mt-2 text-xs text-yellow-600">
-                    ⚠ Low confidence - limited recent data
-                  </div>
-                )}
               </div>
+              {isLowConfidence && (
+                <div className="text-xs text-yellow-600">
+                  ⚠ Low confidence - limited recent data
+                </div>
+              )}
             </div>
           )}
         </div>
