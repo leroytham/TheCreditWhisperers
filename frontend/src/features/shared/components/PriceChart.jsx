@@ -8,7 +8,8 @@ import {
   calculateFillPath,
   findEventPosition,
   computeEventMarkers,
-  formatTooltipDateTime
+  formatTooltipDateTime,
+  calculateTradingDayElapsed
 } from '../utils/chartHelpers';
 import {
   formatPrice,
@@ -109,11 +110,26 @@ const PriceChart = ({
   }
 
   // Chart dimensions
-  const chartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
+  const fullChartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
   const chartHeight = isResponsive ? SECTOR_CHART_CONFIG.HEIGHT : 250;
   const paddingLeft = 60;
   const paddingRight = 60;
   const paddingTop = 40;
+
+  // For 1D charts, calculate effective width based on trading day elapsed (Bloomberg style)
+  const tradingDayElapsed = timeframe === '1D' ? calculateTradingDayElapsed(chartData, exchange) : 1;
+  const chartWidth = timeframe === '1D' ? fullChartWidth * tradingDayElapsed : fullChartWidth;
+
+  if (timeframe === '1D') {
+    console.log('[PriceChart] 1D Width Calculation:');
+    console.log('  - fullChartWidth:', fullChartWidth);
+    console.log('  - tradingDayElapsed:', tradingDayElapsed);
+    console.log('  - calculated chartWidth:', chartWidth);
+    console.log('  - chartData length:', chartData.length);
+    if (chartData.length > 0) {
+      console.log('  - last data point time:', chartData[chartData.length - 1].time);
+    }
+  }
 
   // Responsive number of x-axis points based on chart width
   const getNumXAxisPoints = (width) => {
@@ -128,9 +144,10 @@ const PriceChart = ({
     : getNumXAxisPoints(CHART_CONFIG.width);
 
   // Generate timeline points with responsive count and timeframe-aware formatting
+  // For 1D, use fullChartWidth so labels span entire trading day range
   const timelinePoints = generateTimelinePoints(
     chartData,
-    chartWidth,
+    timeframe === '1D' ? fullChartWidth : chartWidth,
     numXAxisPoints,
     paddingLeft,
     timeframe,
@@ -211,19 +228,22 @@ const PriceChart = ({
           {[...Array(6)].map((_, i) => {
             const yPos = paddingTop + (i * (chartHeight / 5));
             const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
+            // For 1D, extend lines to full width to show entire trading day range
+            const lineEndX = timeframe === '1D' ? paddingLeft + fullChartWidth : paddingLeft + chartWidth;
+            const labelX = timeframe === '1D' ? paddingLeft + fullChartWidth + 10 : paddingLeft + chartWidth + 10;
             return (
               <g key={i}>
                 <line
                   x1={paddingLeft}
                   y1={yPos}
-                  x2={paddingLeft + chartWidth}
+                  x2={lineEndX}
                   y2={yPos}
                   stroke="#e5e7eb"
                   strokeWidth="1"
                 />
                 {/* Y-axis labels on the RIGHT side */}
                 <text
-                  x={paddingLeft + chartWidth + 10}
+                  x={labelX}
                   y={yPos + 5}
                   textAnchor="start"
                   fill="#9ca3af"
@@ -256,7 +276,7 @@ const PriceChart = ({
               <line
                 x1={paddingLeft}
                 y1={prevCloseY}
-                x2={paddingLeft + chartWidth}
+                x2={paddingLeft + fullChartWidth}
                 y2={prevCloseY}
                 stroke="#6b7280"
                 strokeWidth="1"

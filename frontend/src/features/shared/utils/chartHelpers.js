@@ -171,6 +171,98 @@ export const formatXAxisLabel = (date, timeframe, time = null) => {
 };
 
 /**
+ * Get market open and close times based on exchange
+ * @param {string} exchange - Exchange code
+ * @returns {Object} Object with marketOpen and marketClose in "HH:MM" format
+ */
+export const getMarketOpenClose = (exchange) => {
+  const exchangeUpper = (exchange || '').toUpperCase();
+
+  // US Markets
+  if (exchangeUpper.includes('NMS') || exchangeUpper.includes('NYQ') ||
+      exchangeUpper.includes('NASDAQ') || exchangeUpper.includes('NYSE') || exchangeUpper === '') {
+    return { marketOpen: '09:30', marketClose: '16:00' };
+  }
+  // London
+  if (exchangeUpper.includes('LSE') || exchangeUpper.includes('LON')) {
+    return { marketOpen: '08:00', marketClose: '16:30' };
+  }
+  // Tokyo
+  if (exchangeUpper.includes('JPX') || exchangeUpper.includes('TYO')) {
+    return { marketOpen: '09:00', marketClose: '15:00' };
+  }
+  // Hong Kong
+  if (exchangeUpper.includes('HKG') || exchangeUpper.includes('HKEX')) {
+    return { marketOpen: '09:30', marketClose: '16:00' };
+  }
+  // Shanghai
+  if (exchangeUpper.includes('SHG') || exchangeUpper.includes('SSE')) {
+    return { marketOpen: '09:30', marketClose: '15:00' };
+  }
+  // Toronto
+  if (exchangeUpper.includes('TOR') || exchangeUpper.includes('TSX')) {
+    return { marketOpen: '09:30', marketClose: '16:00' };
+  }
+  // Singapore
+  if (exchangeUpper.includes('SES') || exchangeUpper.includes('SGX') || exchangeUpper.includes('SIN')) {
+    return { marketOpen: '09:00', marketClose: '17:00' };
+  }
+
+  // Default to US hours
+  return { marketOpen: '09:30', marketClose: '16:00' };
+};
+
+/**
+ * Calculate trading day elapsed percentage based on last data point time
+ * @param {Array} chartData - Chart data with time property
+ * @param {string} exchange - Exchange code
+ * @returns {number} Percentage of trading day elapsed (0-1), or 1 if market closed
+ */
+export const calculateTradingDayElapsed = (chartData, exchange) => {
+  if (!chartData || chartData.length === 0) return 1;
+
+  const lastPoint = chartData[chartData.length - 1];
+  if (!lastPoint.time) return 1; // If no time data, show full width
+
+  const { marketOpen, marketClose } = getMarketOpenClose(exchange);
+
+  // Parse times into minutes since midnight
+  const parseTime = (timeStr) => {
+    // Handle formats like "09:45 AM" or "09:45"
+    let timeOnly = timeStr.trim();
+    let hours, minutes;
+
+    // Check if it has AM/PM
+    if (timeOnly.includes('AM') || timeOnly.includes('PM')) {
+      const isPM = timeOnly.includes('PM');
+      timeOnly = timeOnly.replace(/\s*(AM|PM)\s*/i, '').trim();
+      [hours, minutes] = timeOnly.split(':').map(Number);
+
+      // Convert to 24-hour format
+      if (isPM && hours !== 12) {
+        hours += 12;
+      } else if (!isPM && hours === 12) {
+        hours = 0;
+      }
+    } else {
+      [hours, minutes] = timeOnly.split(':').map(Number);
+    }
+
+    return hours * 60 + minutes;
+  };
+
+  const openMinutes = parseTime(marketOpen);
+  const closeMinutes = parseTime(marketClose);
+  const lastDataMinutes = parseTime(lastPoint.time);
+
+  // Calculate elapsed percentage
+  const totalTradingMinutes = closeMinutes - openMinutes;
+  const elapsedMinutes = Math.max(0, Math.min(lastDataMinutes - openMinutes, totalTradingMinutes));
+
+  return Math.min(elapsedMinutes / totalTradingMinutes, 1);
+};
+
+/**
  * Get market hours based on exchange
  * @param {string} exchange - Exchange code (e.g., "NMS", "NYQ", "LSE", "JPX")
  * @returns {Array} Array of time strings for market hours
