@@ -8,7 +8,8 @@ import {
   calculateFillPath,
   findEventPosition,
   computeEventMarkers,
-  formatTooltipDateTime
+  formatTooltipDateTime,
+  calculateTradingDayElapsed
 } from '../utils/chartHelpers';
 import {
   formatPrice,
@@ -52,7 +53,8 @@ const PriceChart = ({
   responsive = false,
   mode,
   timeframe = '1Y',
-  prevClose = null
+  prevClose = null,
+  exchange = ''
 }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const chartContainerRef = useRef(null);
@@ -98,11 +100,26 @@ const PriceChart = ({
       : calculatePriceChange(chartData);
 
   // Chart dimensions
-  const chartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
+  const fullChartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
   const chartHeight = isResponsive ? SECTOR_CHART_CONFIG.HEIGHT : 250;
   const paddingLeft = 60;
   const paddingRight = 60;
   const paddingTop = 40;
+
+  // For 1D charts, calculate effective width based on trading day elapsed (Bloomberg style)
+  const tradingDayElapsed = timeframe === '1D' ? calculateTradingDayElapsed(chartData, exchange) : 1;
+  const chartWidth = timeframe === '1D' ? fullChartWidth * tradingDayElapsed : fullChartWidth;
+
+  if (timeframe === '1D') {
+    console.log('[PriceChart] 1D Width Calculation:');
+    console.log('  - fullChartWidth:', fullChartWidth);
+    console.log('  - tradingDayElapsed:', tradingDayElapsed);
+    console.log('  - calculated chartWidth:', chartWidth);
+    console.log('  - chartData length:', chartData.length);
+    if (chartData.length > 0) {
+      console.log('  - last data point time:', chartData[chartData.length - 1].time);
+    }
+  }
 
   // Responsive number of x-axis points based on chart width
   const getNumXAxisPoints = (width) => {
@@ -117,12 +134,14 @@ const PriceChart = ({
     : getNumXAxisPoints(CHART_CONFIG.width);
 
   // Generate timeline points with responsive count and timeframe-aware formatting
+  // For 1D, use fullChartWidth so labels span entire trading day range
   const timelinePoints = generateTimelinePoints(
     chartData,
-    chartWidth,
+    timeframe === '1D' ? fullChartWidth : chartWidth,
     numXAxisPoints,
     paddingLeft,
-    timeframe
+    timeframe,
+    exchange
   );
 
   // Event markers (different handling for entity vs sector)
@@ -173,15 +192,6 @@ const PriceChart = ({
 
   return (
     <div ref={chartContainerRef} className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
-      {/* PREV CLOSE label - positioned above chart as HTML overlay for 1D */}
-      {timeframe === '1D' && prevClose && (
-        <div className="absolute top-2 left-16 bg-white bg-opacity-90 border border-gray-200 rounded px-2 py-1 shadow-sm z-10">
-          <div className="text-[10px] text-gray-500 font-medium">PREV. CLOSE</div>
-          <div className="text-sm font-bold text-gray-700">
-            {prevClose.toFixed(2)} {currency || 'USD'}
-          </div>
-        </div>
-      )}
       <svg className="w-full h-full" style={{ overflow: 'visible' }}>
         {/* Gradient Definition */}
         <defs>
@@ -208,19 +218,22 @@ const PriceChart = ({
           {[...Array(6)].map((_, i) => {
             const yPos = paddingTop + (i * (chartHeight / 5));
             const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 5);
+            // For 1D, extend lines to full width to show entire trading day range
+            const lineEndX = timeframe === '1D' ? paddingLeft + fullChartWidth : paddingLeft + chartWidth;
+            const labelX = timeframe === '1D' ? paddingLeft + fullChartWidth + 10 : paddingLeft + chartWidth + 10;
             return (
               <g key={i}>
                 <line
                   x1={paddingLeft}
                   y1={yPos}
-                  x2={paddingLeft + chartWidth}
+                  x2={lineEndX}
                   y2={yPos}
                   stroke="#e5e7eb"
                   strokeWidth="1"
                 />
                 {/* Y-axis labels on the RIGHT side */}
                 <text
-                  x={paddingLeft + chartWidth + 10}
+                  x={labelX}
                   y={yPos + 5}
                   textAnchor="start"
                   fill="#9ca3af"
@@ -245,19 +258,60 @@ const PriceChart = ({
           ))}
         </g>
 
-        {/* Previous Close Line (for 1D view) - label now rendered as HTML overlay */}
-        {timeframe === '1D' && prevClose && (
-          <line
-            x1={paddingLeft}
-            y1={paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)}
-            x2={paddingLeft + chartWidth}
-            y2={paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)}
-            stroke="#6b7280"
-            strokeWidth="1"
-            strokeDasharray="4,4"
-            opacity="0.6"
-          />
-        )}
+        {/* Previous Close Line (for 1D view) with label */}
+        {timeframe === '1D' && prevClose && (() => {
+          const prevCloseY = paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+          return (
+            <g>
+              <line
+                x1={paddingLeft}
+                y1={prevCloseY}
+                x2={paddingLeft + fullChartWidth}
+                y2={prevCloseY}
+                stroke="#6b7280"
+                strokeWidth="1"
+                strokeDasharray="4,4"
+                opacity="0.6"
+              />
+              {/* Label box overlaying the chart, ABOVE the line (Bloomberg style) */}
+              {/* Smart positioning: if chart is narrow (< 200px), position at end of data; otherwise at left */}
+              <g transform={`translate(${chartWidth < 200 ? Math.max(paddingLeft + chartWidth - 115, paddingLeft + 5) : paddingLeft + 5}, ${prevCloseY - 50})`}>
+                <rect
+                  x="0"
+                  y="0"
+                  width="110"
+                  height="46"
+                  fill="white"
+                  fillOpacity="0.65"
+                  stroke="#d1d5db"
+                  strokeWidth="1"
+                  rx="3"
+                />
+                <text
+                  x="8"
+                  y="16"
+                  textAnchor="start"
+                  fontSize="10"
+                  fontWeight="600"
+                  fill="#6b7280"
+                  letterSpacing="0.3"
+                >
+                  PREV. CLOSE
+                </text>
+                <text
+                  x="8"
+                  y="34"
+                  textAnchor="start"
+                  fontSize="14"
+                  fontWeight="bold"
+                  fill="#1f2937"
+                >
+                  {prevClose.toFixed(2)} {currency || 'USD'}
+                </text>
+              </g>
+            </g>
+          );
+        })()}
 
         {/* Area fill - Entity mode uses helper, Sector mode inline */}
         {detectedMode === 'entity' && fillPath && (
@@ -352,23 +406,18 @@ const PriceChart = ({
         {/* Timeline */}
         {timelinePoints.map((point, i) => (
           <g key={`timeline-${i}`}>
-            <circle
-              cx={point.x}
-              cy={paddingTop + chartHeight + 20}
-              r="8"
-              fill="#f9fafb"
-              stroke="#d1d5db"
+            {/* Tick mark instead of circle */}
+            <line
+              x1={point.x}
+              y1={paddingTop + chartHeight}
+              x2={point.x}
+              y2={paddingTop + chartHeight + 8}
+              stroke="#6b7280"
               strokeWidth="2"
-            />
-            <circle
-              cx={point.x}
-              cy={paddingTop + chartHeight + 20}
-              r="3"
-              fill="#3b82f6"
             />
             <text
               x={point.x}
-              y={paddingTop + chartHeight + 40}
+              y={paddingTop + chartHeight + 24}
               textAnchor="middle"
               fill="#374151"
               fontSize={chartWidth < 500 ? "10" : "11"}

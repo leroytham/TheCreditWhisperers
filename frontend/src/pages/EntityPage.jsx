@@ -164,6 +164,7 @@ const EntityPage = () => {
           ticker={ticker}
           companyName={companyName}
           currency={currency}
+          exchange={exchange}
           priceData1Y={priceData1Y}
           priceData1D={priceData1D}
           lastFetched={lastFetched}
