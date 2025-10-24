@@ -328,8 +328,27 @@ export const formatTooltipDateTime = (date, timeframe, time = null) => {
 
   switch (timeframe) {
     case '1D':
-      // Show only time for 1D (e.g., "12:06 PM")
-      return time || dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      // Show 24-hour time for 1D (e.g., "09:30", "16:00")
+      if (time) {
+        // If time is already provided, ensure it's in 24-hour format
+        if (time.includes('AM') || time.includes('PM')) {
+          // Convert from 12-hour to 24-hour format
+          const isPM = time.includes('PM');
+          const timeOnly = time.replace(/\s*(AM|PM)\s*/i, '').trim();
+          let [hours, minutes] = timeOnly.split(':').map(Number);
+
+          if (isPM && hours !== 12) {
+            hours += 12;
+          } else if (!isPM && hours === 12) {
+            hours = 0;
+          }
+
+          return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        }
+        return time; // Already in 24-hour format
+      }
+      // Generate from date object in 24-hour format
+      return dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     case '1M':
     case '6M':
     case 'YTD':
@@ -415,12 +434,8 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
       // Calculate evenly spaced position based on target time index
       const xPosition = paddingLeft + (index * (effectiveWidth / (targetTimes.length - 1)));
 
-      // Format the label (convert to 12-hour format with AM/PM)
-      const [hour, minute] = targetTime.split(':');
-      const hourNum = parseInt(hour);
-      const hour12 = hourNum > 12 ? hourNum - 12 : (hourNum === 0 ? 12 : hourNum);
-      const ampm = hourNum >= 12 ? 'PM' : 'AM';
-      const label = `${hour12}:${minute} ${ampm}`;
+      // Use 24-hour format directly (e.g., "09:30", "16:00")
+      const label = targetTime;
 
       timelinePoints.push({ label, x: xPosition });
     });

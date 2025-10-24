@@ -283,15 +283,16 @@ const PriceChart = ({
                 strokeDasharray="4,4"
                 opacity="0.6"
               />
-              {/* Label box overlaying the chart at left edge, ABOVE the line (Bloomberg style) */}
-              <g transform={`translate(${paddingLeft + 5}, ${prevCloseY - 50})`}>
+              {/* Label box overlaying the chart, ABOVE the line (Bloomberg style) */}
+              {/* Smart positioning: if chart is narrow (< 200px), position at end of data; otherwise at left */}
+              <g transform={`translate(${chartWidth < 200 ? Math.max(paddingLeft + chartWidth - 115, paddingLeft + 5) : paddingLeft + 5}, ${prevCloseY - 50})`}>
                 <rect
                   x="0"
                   y="0"
                   width="110"
                   height="46"
                   fill="white"
-                  fillOpacity="0.75"
+                  fillOpacity="0.65"
                   stroke="#d1d5db"
                   strokeWidth="1"
                   rx="3"
