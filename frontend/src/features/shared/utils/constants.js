@@ -18,7 +18,7 @@ export const NUM_X_AXIS_POINTS = 6;
 // Chart dimensions (entity default)
 export const CHART_CONFIG = {
   height: 384, // h-96 in pixels
-  width: 660,
+  width: 1400, // Full width to completely fill Price Performance container
   padding: {
     left: 60,
     right: 60,

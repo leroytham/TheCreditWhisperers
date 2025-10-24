@@ -1,13 +1,14 @@
 // src/features/entity/components/PerformanceView/PerformanceView.jsx
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  PriceChart, 
-  CombinedSentimentVolumeChart, 
-  TimeRangeSelector, 
-  ViewModeToggle, 
-  OverallSentiment, 
-  SignificantEvents, 
+import {
+  PriceChart,
+  CombinedSentimentVolumeChart,
+  TimeRangeSelector,
+  ViewModeToggle,
+  EventsToggle,
+  OverallSentiment,
+  SignificantEvents,
   RelatedNews,
   SentimentMetricsCard,
   SentimentTrendSummary,
@@ -56,6 +57,7 @@ const PerformanceView = ({
   const [viewMode, setViewMode] = useState('rolling');
   const [priceData, setPriceData] = useState([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [showEvents, setShowEvents] = useState(true);
 
   // Fetch data based on selected timeframe (only for 5Y, since 1D comes from parent)
   const {
@@ -272,16 +274,22 @@ const PerformanceView = ({
               {/* Price Chart - Row 2, Spans 2 columns */}
               <div className="lg:col-start-1 lg:col-span-2 lg:row-start-2 bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
-                  <div className="flex space-x-1">
+                  <div className="flex items-center space-x-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
+                    <EventsToggle
+                      showEvents={showEvents}
+                      onToggle={setShowEvents}
+                    />
+                  </div>
+                  <div className="flex space-x-2">
                     {TIMEFRAMES.map((tf) => (
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`px-3 py-1 rounded text-sm ${
+                        className={`px-4 py-1.5 text-xs font-semibold transition-all ${
                           timeframe === tf
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-600 hover:bg-gray-100'
+                            ? 'bg-gray-900 text-white rounded-md'
+                            : 'text-gray-600 hover:text-gray-900 bg-transparent'
                         }`}
                       >
                         {tf}
@@ -295,6 +303,7 @@ const PerformanceView = ({
                   currency={currency}
                   exchange={exchange}
                   significantEvents={significantEvents}
+                  showSignificantEvents={showEvents}
                   timeframe={timeframe}
                   prevClose={activePrevClose}
                 />
@@ -319,16 +328,22 @@ const PerformanceView = ({
         return (
           <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Detailed Performance Analysis</h3>
-              <div className="flex space-x-1">
+              <div className="flex items-center space-x-4">
+                <h3 className="text-lg font-semibold text-gray-900">Detailed Performance Analysis</h3>
+                <EventsToggle
+                  showEvents={showEvents}
+                  onToggle={setShowEvents}
+                />
+              </div>
+              <div className="flex space-x-2">
                 {TIMEFRAMES.map((tf) => (
                   <button
                     key={tf}
                     onClick={() => setTimeframe(tf)}
-                    className={`px-3 py-1 rounded text-sm ${
+                    className={`px-4 py-1.5 text-xs font-semibold transition-all ${
                       timeframe === tf
-                        ? 'bg-gray-900 text-white'
-                        : 'text-gray-600 hover:bg-gray-100'
+                        ? 'bg-gray-900 text-white rounded-md'
+                        : 'text-gray-600 hover:text-gray-900 bg-transparent'
                     }`}
                   >
                     {tf}
@@ -342,6 +357,7 @@ const PerformanceView = ({
               currency={currency}
               exchange={exchange}
               significantEvents={significantEvents}
+              showSignificantEvents={showEvents}
               timeframe={timeframe}
               prevClose={activePrevClose}
             />

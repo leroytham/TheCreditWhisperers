@@ -10,6 +10,7 @@ export { default as NewsVolumeChart } from './NewsVolumeChart';
 export { default as CombinedSentimentVolumeChart } from './CombinedSentimentVolumeChart';
 export { default as TimeRangeSelector } from './TimeRangeSelector';
 export { default as ViewModeToggle } from './ViewModeToggle';
+export { default as EventsToggle } from './EventsToggle';
 export { default as OverallSentiment } from './OverallSentiment';
 export { default as RelatedNews } from './RelatedNews';
 export { default as SignificantEvents } from './SignificantEvents';

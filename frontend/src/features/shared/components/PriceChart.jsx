@@ -34,6 +34,7 @@ import { CHART_CONFIG, SECTOR_CHART_CONFIG } from '../utils/constants';
  * @param {Array} props.significantEvents - Events for entity mode
  * @param {Array} props.topEvents - Events for sector mode
  * @param {boolean} props.showEvents - Whether to show event markers (sector mode)
+ * @param {boolean} props.showSignificantEvents - Whether to show significant events with news icons (entity mode)
  * @param {boolean} props.responsive - Enable responsive width calculation (default: false)
  * @param {string} props.mode - 'entity' or 'sector' (auto-detected if not specified)
  * @param {string} props.timeframe - Current timeframe (1D, 5D, 1M, 6M, YTD, 1Y, 5Y)
@@ -50,6 +51,7 @@ const PriceChart = ({
   significantEvents = [],
   topEvents = [],
   showEvents = true,
+  showSignificantEvents = true,
   responsive = false,
   mode,
   timeframe = '1Y',
@@ -57,6 +59,7 @@ const PriceChart = ({
   exchange = ''
 }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [clickedEvent, setClickedEvent] = useState(null);
   const chartContainerRef = useRef(null);
   const [dynamicChartWidth, setDynamicChartWidth] = useState(SECTOR_CHART_CONFIG.DEFAULT_WIDTH);
 
@@ -113,7 +116,7 @@ const PriceChart = ({
   const fullChartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
   const chartHeight = isResponsive ? SECTOR_CHART_CONFIG.HEIGHT : 250;
   const paddingLeft = 60;
-  const paddingRight = 60;
+  const paddingRight = 20; // Reduced right padding to minimize whitespace
   const paddingTop = 40;
 
   // For 1D charts, calculate effective width based on trading day elapsed (Bloomberg style)
@@ -155,9 +158,7 @@ const PriceChart = ({
   );
 
   // Event markers (different handling for entity vs sector)
-  const eventMarkers = detectedMode === 'sector' && showEvents
-    ? computeEventMarkers(topEvents, chartData, chartWidth, chartHeight, priceRange, paddingLeft, paddingTop)
-    : [];
+  // Event markers computation removed - now using Bloomberg-style event icons for both entity and sector modes
 
   // Calculate paths for entity mode
   const linePath = detectedMode === 'entity'
@@ -170,7 +171,7 @@ const PriceChart = ({
   // Empty state
   if (!chartData || chartData.length === 0) {
     return (
-      <div className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
+      <div className="relative h-96 bg-white">
         <div className="flex items-center justify-center h-full text-gray-400">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
@@ -201,7 +202,7 @@ const PriceChart = ({
   })() : null;
 
   return (
-    <div ref={chartContainerRef} className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
+    <div ref={chartContainerRef} className="relative h-96 bg-white">
       <svg className="w-full h-full" style={{ overflow: 'visible' }}>
         {/* Gradient Definition */}
         <defs>
@@ -367,6 +368,77 @@ const PriceChart = ({
           />
         )}
 
+        {/* End-of-chart price indicator - Bloomberg style */}
+        {chartData.length > 0 && (() => {
+          const lastPoint = chartData[chartData.length - 1];
+          const lastX = paddingLeft + ((chartData.length - 1) * (chartWidth / Math.max(1, chartData.length - 1)));
+          const lastY = (paddingTop + chartHeight) - ((lastPoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+
+          return (
+            <g>
+              {/* Circle at end of line */}
+              <circle
+                cx={lastX}
+                cy={lastY}
+                r="5"
+                fill={priceChange >= 0 ? '#16a34a' : '#dc2626'}
+                stroke="white"
+                strokeWidth="2"
+              />
+
+              {/* Vertical dotted line to top */}
+              <line
+                x1={lastX}
+                y1={lastY}
+                x2={lastX}
+                y2={paddingTop - 10}
+                stroke="#d1d5db"
+                strokeWidth="1"
+                strokeDasharray="3,3"
+                opacity="0.6"
+              />
+
+              {/* Price and date box at top */}
+              <g transform={`translate(${lastX}, ${paddingTop - 20})`}>
+                {/* Background box */}
+                <rect
+                  x="-45"
+                  y="-35"
+                  width="90"
+                  height="32"
+                  fill="white"
+                  stroke="#d1d5db"
+                  strokeWidth="1"
+                  rx="2"
+                />
+
+                {/* Price text */}
+                <text
+                  x="0"
+                  y="-18"
+                  textAnchor="middle"
+                  fontSize="13"
+                  fontWeight="bold"
+                  fill="#111827"
+                >
+                  {lastPoint.y.toFixed(2)} {currency || 'USD'}
+                </text>
+
+                {/* Date text */}
+                <text
+                  x="0"
+                  y="-6"
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill="#6b7280"
+                >
+                  {lastPoint.date ? new Date(lastPoint.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                </text>
+              </g>
+            </g>
+          );
+        })()}
+
         {/* Interactive hover areas and points */}
         {chartData.map((point, i) => {
           const x = paddingLeft + (i * (chartWidth / Math.max(1, chartData.length - 1)));
@@ -438,94 +510,189 @@ const PriceChart = ({
           </g>
         ))}
 
-        {/* Entity mode: Significant Event Markers */}
-        {detectedMode === 'entity' && significantEvents.map((event, i) => {
-          const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
-          if (!eventPos) return null;
+        {/* Entity mode: Significant Event Markers - Bloomberg Style */}
+        {detectedMode === 'entity' && showSignificantEvents && (() => {
+          // Calculate icon positions with spread logic for clustered events
+          const iconPositions = significantEvents.map((event, i) => {
+            const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
+            if (!eventPos) return null;
 
-          const { xPos, isUpward } = eventPos;
+            const { xPos, pricePoint } = eventPos;
+            const priceYPos = (paddingTop + chartHeight) - ((pricePoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
 
-          return (
-            <g key={`event-${i}`} className="cursor-pointer">
-              <path
-                d={
-                  isUpward
-                    ? `M ${xPos} ${paddingTop - 5} L ${xPos - 6} ${paddingTop - 15} L ${xPos + 6} ${paddingTop - 15} Z`
-                    : `M ${xPos} ${paddingTop - 5} L ${xPos - 6} ${paddingTop + 5} L ${xPos + 6} ${paddingTop + 5} Z`
-                }
-                fill={isUpward ? '#10b981' : '#ef4444'}
-                stroke="white"
-                strokeWidth="1.5"
-              />
-              <line
-                x1={xPos}
-                y1={isUpward ? paddingTop - 15 : paddingTop + 5}
-                x2={xPos}
-                y2={paddingTop + chartHeight}
-                stroke={isUpward ? '#10b981' : '#ef4444'}
-                strokeWidth="1"
-                strokeDasharray="4,4"
-                opacity="0.4"
-              />
-            </g>
-          );
-        })}
+            return { event, i, xPos, pricePoint, priceYPos };
+          }).filter(Boolean);
 
-        {/* Sector mode: Event markers */}
-        {detectedMode === 'sector' && showEvents && eventMarkers.map((marker, i) => (
-          <g key={`event-${i}`} className="cursor-pointer group">
-            <line
-              x1={marker.x}
-              y1={paddingTop}
-              x2={marker.x}
-              y2={paddingTop + chartHeight}
-              stroke={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
-              strokeWidth="1.5"
-              strokeDasharray="4,2"
-              opacity="0.6"
-            />
-            <circle
-              cx={marker.x}
-              cy={marker.y}
-              r="5"
-              fill={marker.trend === "UP" ? "#16a34a" : "#dc2626"}
-              stroke="white"
-              strokeWidth="2"
-            />
-            <g className="opacity-0 group-hover:opacity-100 transition-opacity">
-              <rect
-                x={marker.x - 70}
-                y={marker.y - 60}
-                width="140"
-                height="48"
-                rx="6"
-                fill="white"
-                stroke="#d1d5db"
-                strokeWidth="1"
-                filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
-              />
-              <text
-                x={marker.x}
-                y={marker.y - 42}
-                textAnchor="middle"
-                fill="#111827"
-                fontSize="11"
-                fontWeight="bold"
-              >
-                {marker.trend} Move ({marker.pct.toFixed(2)}%)
-              </text>
-              <text
-                x={marker.x}
-                y={marker.y - 28}
-                textAnchor="middle"
-                fill="#6b7280"
-                fontSize="10"
-              >
-                {marker.date}
-              </text>
-            </g>
-          </g>
-        ))}
+          // Adjust X positions to prevent overlap
+          const minSpacing = 28; // Minimum spacing between icons
+          const adjustedPositions = iconPositions.map((pos, idx) => {
+            let adjustedX = pos.xPos;
+
+            // Check for overlaps with previous icons
+            for (let j = 0; j < idx; j++) {
+              const prevPos = iconPositions[j];
+              const distance = Math.abs(adjustedX - prevPos.xPos);
+
+              if (distance < minSpacing) {
+                // Shift to the right if too close
+                adjustedX = prevPos.xPos + minSpacing;
+              }
+            }
+
+            return { ...pos, adjustedX };
+          });
+
+          return adjustedPositions.map(({ event, i, xPos, adjustedX, pricePoint, priceYPos }) => {
+            const iconYPos = paddingTop + chartHeight + 18;
+            const lineColor = '#9ca3af'; // Gray color for all lines and icons
+
+            return (
+              <g key={`event-${i}`}>
+                {/* Gray dotted line from price point to icon */}
+                <line
+                  x1={xPos}
+                  y1={priceYPos}
+                  x2={xPos}
+                  y2={paddingTop + chartHeight}
+                  stroke={lineColor}
+                  strokeWidth="1.5"
+                  strokeDasharray="4,4"
+                  opacity="0.7"
+                />
+
+                {/* Connector line if icon was shifted */}
+                {adjustedX !== xPos && (
+                  <line
+                    x1={xPos}
+                    y1={paddingTop + chartHeight}
+                    x2={adjustedX}
+                    y2={iconYPos}
+                    stroke={lineColor}
+                    strokeWidth="1"
+                    strokeDasharray="2,2"
+                    opacity="0.5"
+                  />
+                )}
+
+                {/* Icon */}
+                <g
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setClickedEvent(clickedEvent === i ? null : i)}
+                >
+                  {/* Icon background circle */}
+                  <circle
+                    cx={adjustedX}
+                    cy={iconYPos}
+                    r="12"
+                    fill="white"
+                    stroke={lineColor}
+                    strokeWidth="2"
+                  />
+                  {/* Document/News icon */}
+                  <g transform={`translate(${adjustedX - 5.5}, ${iconYPos - 6.5})`}>
+                    <rect x="2" y="1" width="7" height="10" fill="none" stroke="#374151" strokeWidth="1.1" rx="0.5" />
+                    <line x1="3.5" y1="3.5" x2="7.5" y2="3.5" stroke="#374151" strokeWidth="0.8" />
+                    <line x1="3.5" y1="5.5" x2="7.5" y2="5.5" stroke="#374151" strokeWidth="0.8" />
+                    <line x1="3.5" y1="7.5" x2="6.5" y2="7.5" stroke="#374151" strokeWidth="0.8" />
+                  </g>
+                </g>
+              </g>
+            );
+          });
+        })()}
+
+        {/* Sector mode: Bloomberg-style significant events */}
+        {detectedMode === 'sector' && showEvents && (() => {
+          // Use topEvents for sector mode (same structure as significantEvents)
+          const eventsToShow = topEvents || [];
+
+          // Calculate icon positions with spread logic for clustered events
+          const iconPositions = eventsToShow.map((event, i) => {
+            const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
+            if (!eventPos) return null;
+
+            const { xPos, pricePoint } = eventPos;
+            const priceYPos = (paddingTop + chartHeight) - ((pricePoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+
+            return { event, i, xPos, pricePoint, priceYPos };
+          }).filter(Boolean);
+
+          // Adjust X positions to prevent overlap (minimum 28px spacing)
+          const minSpacing = 28;
+          const adjustedPositions = iconPositions.map((pos, idx) => {
+            let adjustedX = pos.xPos;
+
+            for (let j = 0; j < idx; j++) {
+              const prevPos = iconPositions[j];
+              const distance = Math.abs(adjustedX - prevPos.xPos);
+
+              if (distance < minSpacing) {
+                // Shift to the right if too close
+                adjustedX = prevPos.xPos + minSpacing;
+              }
+            }
+
+            return { ...pos, adjustedX };
+          });
+
+          return adjustedPositions.map(({ event, i, xPos, adjustedX, pricePoint, priceYPos }) => {
+            const iconYPos = paddingTop + chartHeight + 18;
+            const lineColor = '#9ca3af'; // Gray color for all lines and icons
+
+            return (
+              <g key={`event-${i}`}>
+                {/* Gray dotted line from price point to icon */}
+                <line
+                  x1={xPos}
+                  y1={priceYPos}
+                  x2={xPos}
+                  y2={paddingTop + chartHeight}
+                  stroke={lineColor}
+                  strokeWidth="1.5"
+                  strokeDasharray="4,4"
+                  opacity="0.7"
+                />
+
+                {/* Connector line if icon was shifted */}
+                {adjustedX !== xPos && (
+                  <line
+                    x1={xPos}
+                    y1={paddingTop + chartHeight}
+                    x2={adjustedX}
+                    y2={iconYPos}
+                    stroke={lineColor}
+                    strokeWidth="1"
+                    strokeDasharray="2,2"
+                    opacity="0.5"
+                  />
+                )}
+
+                {/* Icon */}
+                <g
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setClickedEvent(clickedEvent === i ? null : i)}
+                >
+                  {/* Icon background circle */}
+                  <circle
+                    cx={adjustedX}
+                    cy={iconYPos}
+                    r="12"
+                    fill="white"
+                    stroke={lineColor}
+                    strokeWidth="2"
+                  />
+                  {/* Document/News icon */}
+                  <g transform={`translate(${adjustedX - 5.5}, ${iconYPos - 6.5})`}>
+                    <rect x="2" y="1" width="7" height="10" fill="none" stroke="#374151" strokeWidth="1.1" rx="0.5" />
+                    <line x1="3.5" y1="3.5" x2="7.5" y2="3.5" stroke="#374151" strokeWidth="0.8" />
+                    <line x1="3.5" y1="5.5" x2="7.5" y2="5.5" stroke="#374151" strokeWidth="0.8" />
+                    <line x1="3.5" y1="7.5" x2="6.5" y2="7.5" stroke="#374151" strokeWidth="0.8" />
+                  </g>
+                </g>
+              </g>
+            );
+          });
+        })()}
       </svg>
 
       {/* Entity mode: Hover tooltip */}
@@ -583,6 +750,239 @@ const PriceChart = ({
           </div>
         </div>
       )}
+
+      {/* Entity mode: Event News Popup - Bloomberg Style (Above Icon) */}
+      {detectedMode === 'entity' && clickedEvent !== null && significantEvents[clickedEvent] && (() => {
+        const event = significantEvents[clickedEvent];
+        const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
+        if (!eventPos || !event.news || event.news.length === 0) return null;
+
+        const { xPos } = eventPos;
+        const iconYPos = paddingTop + chartHeight + 18;
+
+        const popupWidth = 400;
+        const popupHeight = Math.min(340, 120 + (event.news.length * 70));
+        const popupLeft = Math.max(20, Math.min(xPos - popupWidth / 2, window.innerWidth - popupWidth - 40));
+        // Position popup ABOVE the icon
+        const popupTop = iconYPos - popupHeight - 15;
+
+        return (
+          <>
+            {/* Backdrop to close popup when clicking outside */}
+            <div
+              className="fixed inset-0 z-20"
+              onClick={() => setClickedEvent(null)}
+            />
+
+            {/* Popup - Above the icon */}
+            <div
+              className="absolute bg-white border border-gray-300 rounded-lg shadow-2xl z-30"
+              style={{
+                left: `${popupLeft}px`,
+                top: `${popupTop}px`,
+                width: `${popupWidth}px`,
+                maxHeight: '340px'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 mb-1">
+                      {new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    <div className={`text-base font-bold ${event.trend === 'Upward' ? 'text-green-600' : 'text-red-600'}`}>
+                      {event.trend === 'Upward' ? '↑' : '↓'} {Math.abs(event.total_move_pct).toFixed(2)}% {event.trend}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setClickedEvent(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    style={{ fontSize: '24px', lineHeight: '20px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              {/* News Headlines List - Bloomberg Style */}
+              <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
+                {event.news && event.news.length > 0 ? (
+                  event.news.map((newsItem, idx) => {
+                    // Extract date from the news item (if available)
+                    let newsDate = '';
+                    if (newsItem.time_published) {
+                      const date = new Date(newsItem.time_published);
+                      newsDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } else {
+                      // Fall back to event date
+                      newsDate = new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    }
+
+                    return (
+                      <div
+                        key={idx}
+                        className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          if (newsItem.link) {
+                            window.open(newsItem.link, '_blank');
+                          }
+                        }}
+                      >
+                        {/* Date header */}
+                        <div className="px-4 pt-3 pb-1">
+                          <div className="text-xs font-semibold text-gray-500">
+                            {newsDate}
+                          </div>
+                        </div>
+
+                        {/* News title */}
+                        <div className="px-4 pb-3">
+                          <div className="text-sm font-medium text-gray-900 leading-snug">
+                            {newsItem.title || 'News article'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                    No news articles available
+                  </div>
+                )}
+              </div>
+
+              {/* Footer with article count */}
+              {event.news && event.news.length > 0 && (
+                <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                  <div className="text-xs text-gray-600 font-medium">
+                    {event.news.length} related article{event.news.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
+      {/* Sector mode: Event News Popup - Bloomberg Style (Above Icon) */}
+      {detectedMode === 'sector' && clickedEvent !== null && topEvents[clickedEvent] && (() => {
+        const event = topEvents[clickedEvent];
+        const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
+        if (!eventPos || !event.news || event.news.length === 0) return null;
+
+        const { xPos } = eventPos;
+        const iconYPos = paddingTop + chartHeight + 18;
+
+        const popupWidth = 400;
+        const popupHeight = Math.min(340, 120 + (event.news.length * 70));
+        const popupLeft = Math.max(20, Math.min(xPos - popupWidth / 2, window.innerWidth - popupWidth - 40));
+        // Position popup ABOVE the icon
+        const popupTop = iconYPos - popupHeight - 15;
+
+        return (
+          <>
+            {/* Backdrop to close popup when clicking outside */}
+            <div
+              className="fixed inset-0 z-20"
+              onClick={() => setClickedEvent(null)}
+            />
+
+            {/* Popup - Above the icon */}
+            <div
+              className="absolute bg-white border border-gray-300 rounded-lg shadow-2xl z-30"
+              style={{
+                left: `${popupLeft}px`,
+                top: `${popupTop}px`,
+                width: `${popupWidth}px`,
+                maxHeight: '340px'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 mb-1">
+                      {new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                    <div className={`text-base font-bold ${event.trend === 'Upward' ? 'text-green-600' : 'text-red-600'}`}>
+                      {event.trend === 'Upward' ? '↑' : '↓'} {Math.abs(event.total_move_pct).toFixed(2)}% {event.trend}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setClickedEvent(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    style={{ fontSize: '24px', lineHeight: '20px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              {/* News Headlines List - Bloomberg Style */}
+              <div className="overflow-y-auto" style={{ maxHeight: '260px' }}>
+                {event.news && event.news.length > 0 ? (
+                  event.news.map((newsItem, idx) => {
+                    // Extract date from the news item (if available)
+                    let newsDate = '';
+                    if (newsItem.time_published) {
+                      const date = new Date(newsItem.time_published);
+                      newsDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } else if (newsItem.date) {
+                      const date = new Date(newsItem.date);
+                      newsDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } else {
+                      // Fall back to event date
+                      newsDate = new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    }
+
+                    return (
+                      <div
+                        key={idx}
+                        className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          if (newsItem.link) {
+                            window.open(newsItem.link, '_blank');
+                          }
+                        }}
+                      >
+                        {/* Date header */}
+                        <div className="px-4 pt-3 pb-1">
+                          <div className="text-xs font-semibold text-gray-500">
+                            {newsDate}
+                          </div>
+                        </div>
+
+                        {/* News title */}
+                        <div className="px-4 pb-3">
+                          <div className="text-sm font-medium text-gray-900 leading-snug">
+                            {newsItem.title || 'News article'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                    No news articles available
+                  </div>
+                )}
+              </div>
+
+              {/* Footer with article count */}
+              {event.news && event.news.length > 0 && (
+                <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                  <div className="text-xs text-gray-600 font-medium">
+                    {event.news.length} related article{event.news.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 };

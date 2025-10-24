@@ -6,7 +6,7 @@ import { useSectorData } from '../../hooks/useSectorData';
 import { usePriceData } from '../../hooks/usePriceData';
 import { useRollingSentiment } from '../../../entity/hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
-import { PriceChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
+import { PriceChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, EventsToggle, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
 import { formatFullTimestamp } from '../../../shared/utils/formatters';
 import PerformanceHeader from './PerformanceHeader';
 import TopConstituents from './TopConstituents';
@@ -139,16 +139,22 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               {/* Price Chart - Row 2, Spans 2 columns */}
               <div className="lg:col-start-1 lg:col-span-2 lg:row-start-2 bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
+                    <EventsToggle
+                      showEvents={showEvents}
+                      onToggle={setShowEvents}
+                    />
+                  </div>
+                  <div className="flex space-x-2">
                     {TIMEFRAMES.map(tf => (
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`px-3 py-1 text-sm rounded ${
+                        className={`px-4 py-1.5 text-xs font-semibold transition-all ${
                           timeframe === tf
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-600 hover:bg-gray-100'
+                            ? 'bg-gray-900 text-white rounded-md'
+                            : 'text-gray-600 hover:text-gray-900 bg-transparent'
                         }`}
                       >
                         {tf}
@@ -190,41 +196,27 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
         return (
           <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Detailed Performance</h3>
               <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  {TIMEFRAMES.map(tf => (
-                    <button
-                      key={tf}
-                      onClick={() => setTimeframe(tf)}
-                      className={`px-3 py-1 text-sm rounded ${
-                        timeframe === tf
-                          ? 'bg-gray-900 text-white'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {tf}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="toggle-events" className="text-sm text-gray-600 select-none">
-                    Show Events
-                  </label>
+                <h3 className="text-lg font-semibold text-gray-900">Detailed Performance</h3>
+                <EventsToggle
+                  showEvents={showEvents}
+                  onToggle={setShowEvents}
+                />
+              </div>
+              <div className="flex space-x-2">
+                {TIMEFRAMES.map(tf => (
                   <button
-                    id="toggle-events"
-                    onClick={() => setShowEvents(prev => !prev)}
-                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${
-                      showEvents ? 'bg-gray-900' : 'bg-gray-300'
+                    key={tf}
+                    onClick={() => setTimeframe(tf)}
+                    className={`px-4 py-1.5 text-xs font-semibold transition-all ${
+                      timeframe === tf
+                        ? 'bg-gray-900 text-white rounded-md'
+                        : 'text-gray-600 hover:text-gray-900 bg-transparent'
                     }`}
                   >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        showEvents ? 'translate-x-5' : 'translate-x-1'
-                      }`}
-                    />
+                    {tf}
                   </button>
-                </div>
+                ))}
               </div>
             </div>
             <PriceChart
