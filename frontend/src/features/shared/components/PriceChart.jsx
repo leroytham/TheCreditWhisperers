@@ -7,7 +7,6 @@ import {
   calculateChartPath,
   calculateFillPath,
   findEventPosition,
-  computeEventMarkers,
   formatTooltipDateTime,
   calculateTradingDayElapsed
 } from '../utils/chartHelpers';

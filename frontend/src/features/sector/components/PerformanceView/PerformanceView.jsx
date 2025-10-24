@@ -6,14 +6,15 @@ import { useSectorData } from '../../hooks/useSectorData';
 import { usePriceData } from '../../hooks/usePriceData';
 import { useRollingSentiment } from '../../../entity/hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
-import { PriceChart, CombinedSentimentVolumeChart, TimeRangeSelector, ViewModeToggle, EventsToggle, SignificantEvents, RelatedNews, OverallSentiment } from '../../../shared/components';
 import {
   PriceChart,
   CombinedSentimentVolumeChart,
   TimeRangeSelector,
   ViewModeToggle,
+  EventsToggle,
   SignificantEvents,
   RelatedNews,
+  OverallSentiment,
   SentimentScoreCard,
   MomentumCard,
   NewsCoverageCard,
