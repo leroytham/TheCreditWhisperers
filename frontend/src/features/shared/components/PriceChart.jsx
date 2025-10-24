@@ -105,7 +105,7 @@ const PriceChart = ({
   const fullChartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
   const chartHeight = isResponsive ? SECTOR_CHART_CONFIG.HEIGHT : 250;
   const paddingLeft = 60;
-  const paddingRight = 20; // Reduced right padding to minimize whitespace
+  const paddingRight = 60; // Equal padding on both sides for balanced layout
   const paddingTop = 40;
 
   // For 1D charts, calculate effective width based on trading day elapsed (Bloomberg style)
