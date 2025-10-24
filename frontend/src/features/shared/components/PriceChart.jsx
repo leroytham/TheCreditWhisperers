@@ -7,7 +7,8 @@ import {
   calculateChartPath,
   calculateFillPath,
   findEventPosition,
-  computeEventMarkers
+  computeEventMarkers,
+  formatTooltipDateTime
 } from '../utils/chartHelpers';
 import {
   formatPrice,
@@ -34,6 +35,8 @@ import { CHART_CONFIG, SECTOR_CHART_CONFIG } from '../utils/constants';
  * @param {boolean} props.showEvents - Whether to show event markers (sector mode)
  * @param {boolean} props.responsive - Enable responsive width calculation (default: false)
  * @param {string} props.mode - 'entity' or 'sector' (auto-detected if not specified)
+ * @param {string} props.timeframe - Current timeframe (1D, 5D, 1M, 6M, YTD, 1Y, 5Y)
+ * @param {number} props.prevClose - Previous close price (for 1D view)
  */
 const PriceChart = ({
   priceData,
@@ -47,7 +50,9 @@ const PriceChart = ({
   topEvents = [],
   showEvents = true,
   responsive = false,
-  mode
+  mode,
+  timeframe = '1Y',
+  prevClose = null
 }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const chartContainerRef = useRef(null);
@@ -74,16 +79,39 @@ const PriceChart = ({
 
   // Calculate chart data based on mode
   const chartData = preProcessedChartData || generateChartData(priceData);
-  const priceRange = preProcessedPriceRange || getPriceRange(chartData);
+  let priceRange = preProcessedPriceRange || getPriceRange(chartData);
+
+  // For 1D timeframe, expand price range to include prevClose if needed
+  if (timeframe === '1D' && prevClose && priceRange) {
+    const adjustedMin = Math.min(priceRange.min, prevClose);
+    const adjustedMax = Math.max(priceRange.max, prevClose);
+    // Add some padding to ensure prevClose is visible
+    const padding = (adjustedMax - adjustedMin) * 0.1;
+    priceRange = {
+      min: adjustedMin - padding,
+      max: adjustedMax + padding
+    };
+    console.log('[PriceChart] Adjusted price range for 1D to include prevClose:', priceRange);
+  }
   const { currentPrice, priceChange, priceChangePercent } =
     preProcessedPriceChange !== undefined
       ? { currentPrice: chartData[chartData.length - 1], priceChange: preProcessedPriceChange, priceChangePercent: preProcessedPriceChange }
       : calculatePriceChange(chartData);
 
+  // Debug logging for 1D
+  if (timeframe === '1D') {
+    console.log('[PriceChart] 1D Debug:');
+    console.log('  - timeframe:', timeframe);
+    console.log('  - prevClose:', prevClose);
+    console.log('  - chartData length:', chartData.length);
+    console.log('  - priceRange:', priceRange);
+  }
+
   // Chart dimensions
   const chartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
   const chartHeight = isResponsive ? SECTOR_CHART_CONFIG.HEIGHT : 250;
   const paddingLeft = 60;
+  const paddingRight = 60;
   const paddingTop = 40;
 
   // Responsive number of x-axis points based on chart width
@@ -94,16 +122,17 @@ const PriceChart = ({
     return 8;
   };
 
-  const numXAxisPoints = isResponsive 
+  const numXAxisPoints = isResponsive
     ? getNumXAxisPoints(chartWidth)
     : getNumXAxisPoints(CHART_CONFIG.width);
 
-  // Generate timeline points with responsive count
+  // Generate timeline points with responsive count and timeframe-aware formatting
   const timelinePoints = generateTimelinePoints(
     chartData,
     chartWidth,
     numXAxisPoints,
-    paddingLeft
+    paddingLeft,
+    timeframe
   );
 
   // Event markers (different handling for entity vs sector)
@@ -148,12 +177,21 @@ const PriceChart = ({
     const prev = (idx > 0 && chartData[idx - 1]) ? chartData[idx - 1].y : hoveredPoint.price;
     const change = hoveredPoint.price - prev;
     const changePct = prev ? (change / prev) * 100 : 0;
-    const dateStr = hoveredPoint.date ? new Date(hoveredPoint.date).toLocaleString() : '';
+    const dateStr = hoveredPoint.date ? formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time) : '';
     return { left, top, change, changePct, dateStr };
   })() : null;
 
   return (
     <div ref={chartContainerRef} className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
+      {/* PREV CLOSE label - positioned above chart as HTML overlay for 1D */}
+      {timeframe === '1D' && prevClose && (
+        <div className="absolute top-2 left-16 bg-white bg-opacity-90 border border-gray-200 rounded px-2 py-1 shadow-sm z-10">
+          <div className="text-[10px] text-gray-500 font-medium">PREV. CLOSE</div>
+          <div className="text-sm font-bold text-gray-700">
+            {prevClose.toFixed(2)} {currency || 'USD'}
+          </div>
+        </div>
+      )}
       <svg className="w-full h-full" style={{ overflow: 'visible' }}>
         {/* Gradient Definition */}
         <defs>
@@ -190,10 +228,11 @@ const PriceChart = ({
                   stroke="#e5e7eb"
                   strokeWidth="1"
                 />
+                {/* Y-axis labels on the RIGHT side */}
                 <text
-                  x={paddingLeft - 10}
+                  x={paddingLeft + chartWidth + 10}
                   y={yPos + 5}
-                  textAnchor="end"
+                  textAnchor="start"
                   fill="#9ca3af"
                   fontSize="11"
                   fontWeight="bold"
@@ -215,6 +254,20 @@ const PriceChart = ({
             />
           ))}
         </g>
+
+        {/* Previous Close Line (for 1D view) - label now rendered as HTML overlay */}
+        {timeframe === '1D' && prevClose && (
+          <line
+            x1={paddingLeft}
+            y1={paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)}
+            x2={paddingLeft + chartWidth}
+            y2={paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)}
+            stroke="#6b7280"
+            strokeWidth="1"
+            strokeDasharray="4,4"
+            opacity="0.6"
+          />
+        )}
 
         {/* Area fill - Entity mode uses helper, Sector mode inline */}
         {detectedMode === 'entity' && fillPath && (
@@ -439,21 +492,19 @@ const PriceChart = ({
           <div className="text-base font-bold text-blue-600">
             {formatPrice(hoveredPoint.price)} {currency}
           </div>
-          <div className="text-xs text-gray-600">{hoveredPoint.date}</div>
-          <div className="text-xs text-gray-500">{hoveredPoint.time}</div>
-          <div
-            className={`text-xs mt-1 ${
-              hoveredPoint.price >= (currentPrice?.y || 0) ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            {currentPrice
-              ? (((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100 >= 0 ? '+' : '')
-              : ''}
-            {currentPrice
-              ? (((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100).toFixed(2)
-              : '0.00'}
-            %
+          <div className="text-xs text-gray-600">
+            {formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time)}
           </div>
+          {currentPrice && currentPrice.y && !isNaN(currentPrice.y) && (
+            <div
+              className={`text-xs mt-1 ${
+                hoveredPoint.price >= currentPrice.y ? 'text-green-600' : 'text-red-600'
+              }`}
+            >
+              {(((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100 >= 0 ? '+' : '')}
+              {(((hoveredPoint.price - currentPrice.y) / currentPrice.y) * 100).toFixed(2)}%
+            </div>
+          )}
         </div>
       )}
 
@@ -463,35 +514,23 @@ const PriceChart = ({
           <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
             <div className="flex items-center justify-between mb-2">
               <div className="font-semibold text-xs text-gray-700">{companyName || ticker}</div>
-              <div className={`text-xs font-bold ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {tooltip.change >= 0 ? '▲' : '▼'} {tooltip.change.toFixed(2)}
-              </div>
+              {!isNaN(tooltip.change) && (
+                <div className={`text-xs font-bold ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {tooltip.change >= 0 ? '▲' : '▼'} {tooltip.change.toFixed(2)}
+                </div>
+              )}
             </div>
             <div className="text-xs text-gray-500 mb-1">{tooltip.dateStr}</div>
             <div className="flex items-baseline justify-between">
               <div className="text-lg font-bold">
                 {Number(hoveredPoint.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div className={`text-xs ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {tooltip.changePct >= 0 ? '+' : ''}{tooltip.changePct.toFixed(2)}%
-              </div>
+              {!isNaN(tooltip.changePct) && (
+                <div className={`text-xs ${tooltip.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {tooltip.changePct >= 0 ? '+' : ''}{tooltip.changePct.toFixed(2)}%
+                </div>
+              )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Entity mode: Chart Info Box */}
-      {detectedMode === 'entity' && (
-        <div className="absolute top-4 right-4 bg-white border border-blue-100 rounded p-3 shadow-md">
-          <div className="text-base font-bold text-blue-600">
-            {currentPrice ? formatPrice(currentPrice.y) : '--'} {currency}
-          </div>
-          <div className="text-xs text-gray-600">
-            {currentPrice ? currentPrice.date : '--'}
-          </div>
-          <div className={`text-xs mt-1 ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {priceChangePercent >= 0 ? '+' : ''}
-            {priceChangePercent.toFixed(2)}%
           </div>
         </div>
       )}

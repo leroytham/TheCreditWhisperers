@@ -8,7 +8,7 @@
 /**
  * Filters price data based on selected timeframe
  * @param {Array} priceData1Y - Full year of price data
- * @param {string} timeframe - Selected timeframe ('1D', '1M', '3M', '6M', 'YTD', '1Y', '5Y')
+ * @param {string} timeframe - Selected timeframe ('1D', '1M', '6M', 'YTD', '1Y', '5Y')
  * @returns {Array} Filtered price data
  */
 export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
@@ -16,48 +16,87 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
     return [];
   }
 
-  const now = new Date();
+  // Get current date in US Eastern Time (where US stock market operates)
+  // This ensures we filter correctly regardless of user's local timezone
+  const nowET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const etDate = new Date(nowET);
+
+  // Format today's date in US ET as YYYY-MM-DD for comparison
+  const todayString = etDate.getFullYear() + '-' +
+    String(etDate.getMonth() + 1).padStart(2, '0') + '-' +
+    String(etDate.getDate()).padStart(2, '0');
+
+  console.log('[filterPriceDataByTimeframe] Timeframe:', timeframe);
+  console.log('[filterPriceDataByTimeframe] Today in US ET:', todayString);
+  console.log('[filterPriceDataByTimeframe] Input data length:', priceData1Y.length);
+  if (priceData1Y.length > 0) {
+    const lastDates = priceData1Y.slice(-3).map(p => p.date);
+    console.log('[filterPriceDataByTimeframe] Last 3 dates in input:', lastDates);
+    console.log('[filterPriceDataByTimeframe] Does last date equal today (ET)?', lastDates[lastDates.length - 1] === todayString);
+    console.log('[filterPriceDataByTimeframe] Comparison:', lastDates[lastDates.length - 1], '!==', todayString);
+  }
+
   let filtered = priceData1Y;
+  const now = etDate; // Use ET date for all date calculations
 
   switch (timeframe) {
     case '1D':
-      filtered = priceData1Y.slice(-1);
+      // For 1D, return all intraday data (already filtered by backend)
+      filtered = priceData1Y;
       break;
     case '1M': {
       const oneMonthAgo = new Date(now);
       oneMonthAgo.setMonth(now.getMonth() - 1);
-      filtered = priceData1Y.filter(pt => new Date(pt.date) >= oneMonthAgo);
-      break;
-    }
-    case '3M': {
-      const threeMonthsAgo = new Date(now);
-      threeMonthsAgo.setMonth(now.getMonth() - 3);
-      filtered = priceData1Y.filter(pt => new Date(pt.date) >= threeMonthsAgo);
+      // Exclude today's data - only show completed trading days
+      filtered = priceData1Y.filter(pt => {
+        const ptDate = new Date(pt.date);
+        // Explicitly exclude today by comparing date strings
+        return ptDate >= oneMonthAgo && pt.date !== todayString;
+      });
       break;
     }
     case '6M': {
       const sixMonthsAgo = new Date(now);
       sixMonthsAgo.setMonth(now.getMonth() - 6);
-      filtered = priceData1Y.filter(pt => new Date(pt.date) >= sixMonthsAgo);
+      // Exclude today's data - only show completed trading days
+      filtered = priceData1Y.filter(pt => {
+        const ptDate = new Date(pt.date);
+        // Explicitly exclude today by comparing date strings
+        return ptDate >= sixMonthsAgo && pt.date !== todayString;
+      });
       break;
     }
     case 'YTD': {
       const startOfYear = new Date(now.getFullYear(), 0, 1);
-      filtered = priceData1Y.filter(pt => new Date(pt.date) >= startOfYear);
+      // Exclude today's data - only show completed trading days
+      filtered = priceData1Y.filter(pt => {
+        const ptDate = new Date(pt.date);
+        // Explicitly exclude today by comparing date strings
+        return ptDate >= startOfYear && pt.date !== todayString;
+      });
       break;
     }
     case '1Y':
-      filtered = priceData1Y;
+      // Exclude today's data - only show completed trading days
+      filtered = priceData1Y.filter(pt => {
+        // Explicitly exclude today by comparing date strings
+        return pt.date !== todayString;
+      });
       break;
-    case '5Y': {
-      const fiveYearsAgo = new Date(now);
-      fiveYearsAgo.setFullYear(now.getFullYear() - 5);
-      filtered = priceData1Y.filter(pt => new Date(pt.date) >= fiveYearsAgo);
-      break;
-    }
+    case '5Y':
     default:
-      filtered = priceData1Y;
+      // For 5Y, exclude today's data - only show completed trading days
+      filtered = priceData1Y.filter(pt => {
+        // Explicitly exclude today by comparing date strings
+        return pt.date !== todayString;
+      });
       break;
+  }
+
+  console.log('[filterPriceDataByTimeframe] Filtered data length:', filtered.length);
+  if (filtered.length > 0) {
+    console.log('[filterPriceDataByTimeframe] Last 3 dates after filtering:',
+      filtered.slice(-3).map(p => p.date));
   }
 
   return filtered;
@@ -101,16 +140,124 @@ export const getPriceRange = (chartData, paddingPercent = 0.1) => {
 };
 
 /**
+ * Format X-axis label based on timeframe
+ * @param {Date} date - Date object
+ * @param {string} timeframe - Timeframe (1D, 1M, 6M, YTD, 1Y, 5Y)
+ * @param {string} time - Time string (for intraday)
+ * @returns {string} Formatted label
+ */
+export const formatXAxisLabel = (date, timeframe, time = null) => {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+
+  switch (timeframe) {
+    case '1D':
+      // Show time for intraday views (hourly intervals)
+      if (time) {
+        return time;
+      }
+      return dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    case '1M':
+    case '6M':
+    case 'YTD':
+    case '1Y':
+      // Show date as "M/DD" (e.g., "10/20")
+      return `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+    case '5Y':
+      // Show year as "YYYY" (e.g., "2021")
+      return dateObj.getFullYear().toString();
+    default:
+      return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+};
+
+/**
+ * Format tooltip date/time based on timeframe
+ * @param {Date} date - Date object
+ * @param {string} timeframe - Timeframe
+ * @param {string} time - Time string (for intraday)
+ * @returns {string} Formatted tooltip string
+ */
+export const formatTooltipDateTime = (date, timeframe, time = null) => {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  const currentYear = new Date().getFullYear();
+  const dateYear = dateObj.getFullYear();
+
+  switch (timeframe) {
+    case '1D':
+      // Show only time for 1D (e.g., "12:06 PM")
+      return time || dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    case '1M':
+    case '6M':
+    case 'YTD':
+    case '1Y':
+      // Show "MMM DD" or "MMM DD, YYYY" if previous year
+      if (dateYear < currentYear) {
+        return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    case '5Y':
+      // Always show "MMM DD, YYYY"
+      return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    default:
+      return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+};
+
+/**
  * Generate timeline points for x-axis labels
  * @param {Array} chartData - Chart data points
  * @param {number} chartWidth - Width of chart in pixels (optional, for responsive mode)
  * @param {number} numPoints - Number of timeline points to generate (default 6)
  * @param {number} paddingLeft - Left padding in pixels (default 60)
+ * @param {string} timeframe - Current timeframe for label formatting
  * @returns {Array} Timeline points with label and x position
  */
-export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60) => {
+export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60, timeframe = '1Y') => {
   if (chartData.length === 0) return [];
 
+  const effectiveWidth = chartWidth || 660; // Default width for entity
+
+  // For 5Y, try to select points at year boundaries for better distribution
+  if (timeframe === '5Y') {
+    const yearMap = new Map();
+
+    console.log('[generateTimelinePoints] 5Y - Total data points:', chartData.length);
+    if (chartData.length > 0) {
+      console.log('[generateTimelinePoints] 5Y - First date:', chartData[0].date);
+      console.log('[generateTimelinePoints] 5Y - Last date:', chartData[chartData.length - 1].date);
+    }
+
+    // Group data points by year
+    chartData.forEach((point, index) => {
+      if (point.date) {
+        const year = new Date(point.date).getFullYear();
+        if (!yearMap.has(year)) {
+          yearMap.set(year, []);
+        }
+        yearMap.get(year).push({ point, index });
+      }
+    });
+
+    // Get unique years sorted
+    const years = Array.from(yearMap.keys()).sort();
+    console.log('[generateTimelinePoints] 5Y - Years found:', years);
+    console.log('[generateTimelinePoints] 5Y - Number of years:', years.length);
+
+    if (years.length > 1) {
+      // Create evenly spaced X positions for years
+      return years.map((year, yearIndex) => {
+        // Calculate evenly spaced position
+        const xPosition = paddingLeft + (yearIndex * (effectiveWidth / (years.length - 1)));
+
+        // Use the year as label
+        const label = year.toString();
+
+        return { label, x: xPosition };
+      });
+    }
+  }
+
+  // Default behavior for other timeframes
   const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
   const selectedIndices = [];
 
@@ -121,26 +268,30 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 
   const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
 
-  // Use chartWidth if provided (sector responsive mode), otherwise calculate from indices
-  const effectiveWidth = chartWidth || 660; // Default width for entity
+  return selectedPoints.map((point, i) => {
+    let xPosition;
 
-  return selectedPoints.map((point, i, arr) => {
-    const xPosition = paddingLeft + (i * (effectiveWidth / Math.max(1, arr.length - 1)));
+    // For 1D timeframe, use evenly spaced positions for better visual distribution
+    // For other timeframes, align with actual data point positions
+    if (timeframe === '1D') {
+      // Evenly space the labels across the chart width
+      xPosition = paddingLeft + (i * (effectiveWidth / Math.max(1, selectedPoints.length - 1)));
+    } else {
+      // Calculate X position based on actual data point index in chartData
+      // This ensures X-axis labels align with hoverable data points
+      const dataIndex = chartData.indexOf(point);
+      xPosition = paddingLeft + (dataIndex * (effectiveWidth / Math.max(1, chartData.length - 1)));
+    }
+
     let label = '';
 
     if (point.date) {
-      const date = new Date(point.date);
-      // Use shorter format for narrow charts
-      if (effectiveWidth < 500) {
-        label = date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
-      } else {
-        label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      }
+      label = formatXAxisLabel(point.date, timeframe, point.time);
     } else {
       label = `Point ${i + 1}`;
     }
 
-    return { label, x: xPosition };
+    return { label, x: xPosition, dataIndex: chartData.indexOf(point) };
   });
 };
 

@@ -164,6 +164,8 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                   ticker={ticker}
                   topEvents={topEvents}
                   showEvents={showEvents}
+                  timeframe={timeframe}
+                  prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
                 />
               </div>
             </div>
@@ -233,6 +235,8 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               ticker={ticker}
               topEvents={topEvents}
               showEvents={showEvents}
+              timeframe={timeframe}
+              prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
             />
           </div>
         );
