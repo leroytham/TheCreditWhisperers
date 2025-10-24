@@ -103,7 +103,8 @@ const PriceChart = ({
 
   // Chart dimensions
   const fullChartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
-  const chartHeight = isResponsive ? SECTOR_CHART_CONFIG.HEIGHT : 250;
+  const chartHeight = 250; // Consistent chart height for both modes
+  const containerHeight = 384; // h-96 in pixels
   const paddingLeft = 60;
   const paddingRight = 60; // Equal padding on both sides for balanced layout
   const paddingTop = 40;
@@ -192,7 +193,12 @@ const PriceChart = ({
 
   return (
     <div ref={chartContainerRef} className="relative h-96 bg-white">
-      <svg className="w-full h-full" style={{ overflow: 'visible' }}>
+      <svg
+        className="w-full h-full"
+        viewBox={`0 0 ${paddingLeft + fullChartWidth + paddingRight} ${containerHeight}`}
+        preserveAspectRatio="xMinYMin meet"
+        style={{ overflow: 'visible' }}
+      >
         {/* Gradient Definition */}
         <defs>
           <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
