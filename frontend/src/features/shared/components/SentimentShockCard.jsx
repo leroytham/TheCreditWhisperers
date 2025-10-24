@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import TooltipPortal from './TooltipPortal';
 
 /**
  * SentimentShockCard Component
@@ -118,23 +119,25 @@ const SentimentShockCard = ({
       <div className="flex items-start justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Sentiment Shock</h3>
         {/* Tooltip explaining Z-Score */}
-        <div className="group relative">
-          <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="absolute right-0 top-6 w-80 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-            <p className="font-semibold mb-2">Statistical Anomaly Detection</p>
-            <p className="mb-2">Z-Score measures how many standard deviations the current sentiment is from its historical average.</p>
-            <p className="font-semibold mb-1">Interpretation</p>
-            <div className="space-y-1">
-              <p>|Z| &gt; 2.0: Extreme outlier (statistically significant)</p>
-              <p>|Z| 1.5-2.0: Strong signal</p>
-              <p>|Z| 1.0-1.5: Moderate deviation</p>
-              <p>|Z| &lt; 1.0: Normal variation</p>
-            </div>
-            <p className="mt-2 text-gray-400">Note: Calculated from available news history, not database.</p>
-          </div>
-        </div>
+        <TooltipPortal>
+          <p className="font-semibold mb-2">Sentiment Shock</p>
+          <p className="mb-2">This metric measures how statistically unusual the current sentiment is compared to its recent history.</p>
+          <p className="mb-2">It answers the question: <em>"Is this sentiment normal, or is it an extreme, newsworthy event?"</em></p>
+
+          <p className="font-semibold mb-1">How it's Calculated:</p>
+          <p className="mb-2">It is a Z-Score that measures how many standard deviations the "Current Sentiment" is from its "15-Day Average."</p>
+          <p className="font-mono text-[11px] bg-gray-800 p-2 rounded mb-2">
+            Z-Score = (Current Sentiment - 15-Day Average) / Historical Volatility (Std. Dev.)
+          </p>
+
+          <p className="font-semibold mb-1">Why it's Important:</p>
+          <p className="mb-2">A raw sentiment score of +0.15 might be a massive shock for one stable stock but completely normal for another. This metric provides that context.</p>
+          <ul className="list-disc pl-4 space-y-1">
+            <li><strong>Score Near Zero (e.g., -1.0σ to +1.0σ):</strong> This is a "Normal Range." The current sentiment is within its typical, expected boundaries.</li>
+            <li><strong>High Positive Score (e.g., &gt; +2.0σ):</strong> This is an "Extreme Positive Shock." The sentiment is significantly more positive than its 15-day norm. This could signal a major positive event or a new trend.</li>
+            <li><strong>High Negative Score (e.g., &lt; -2.0σ):</strong> This is an "Extreme Negative Shock," signaling a statistically significant drop in sentiment.</li>
+          </ul>
+        </TooltipPortal>
       </div>
 
       {isInsufficientData ? (

@@ -1,5 +1,6 @@
 import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import TooltipPortal from './TooltipPortal';
 
 /**
  * SentimentBreadthCard Component
@@ -100,17 +101,28 @@ const SentimentBreadthCard = ({
       <div className="flex items-start justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Sentiment Breadth</h3>
         {/* Tooltip explaining breadth */}
-        <div className="group relative">
-          <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="absolute right-0 top-6 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-            <p className="font-semibold mb-2">Bull/Bear Ratio</p>
-            <p className="mb-2">Counts how many articles are directionally bullish vs bearish, ignoring magnitude.</p>
-            <p className="font-semibold mb-1">Why It Matters</p>
-            <p>A score of +0.15 with +0.80 breadth means "many articles slightly positive" vs. "few articles very positive". This helps identify sentiment driven by consensus vs. outliers.</p>
-          </div>
-        </div>
+        <TooltipPortal>
+          <p className="font-semibold mb-2">Sentiment Breadth</p>
+          <p className="mb-2">This metric measures the level of consensus among news articles by ignoring neutral opinions.</p>
+          <p className="mb-2">It answers the question: <em>"Of the articles that have a clear opinion, what percentage are 'Bullish' versus 'Bearish'?"</em></p>
+
+          <p className="font-semibold mb-1">How it's Calculated:</p>
+          <ul className="list-disc pl-4 mb-2 space-y-1">
+            <li>First, all "Neutral" articles (those with a sentiment score between -0.15 and +0.15) are filtered out.</li>
+            <li>It then counts the remaining "Bullish" articles and "Bearish" articles.</li>
+            <li>The final score is a ratio calculated as: <span className="font-mono text-[11px]">(Bullish - Bearish) / (Total Bullish + Bearish)</span></li>
+            <li>This gives a score from <strong>-100% (100% Bears)</strong> to <strong>+100% (100% Bulls)</strong>.</li>
+          </ul>
+
+          <p className="font-semibold mb-1">Why it's Important:</p>
+          <p className="mb-2">This is a powerful "second opinion" for the Overall Sentiment score. The Overall Sentiment is a weighted average, meaning one or two extremely negative articles can drag down the score, even if 20 other articles are only slightly positive.</p>
+          <p className="mb-1">Breadth checks for consensus:</p>
+          <ul className="list-disc pl-4 mb-2 space-y-1">
+            <li><strong>High Score (e.g., &gt; +80%):</strong> Confirms that positive sentiment is widespread and not just an outlier. This is a high-conviction signal.</li>
+            <li><strong>Low Score (e.g., near 0%):</strong> Signals a highly polarized debate (an equal number of bulls and bears).</li>
+            <li><strong>Divergence:</strong> If Overall Sentiment is positive but Breadth is negative, it warns you that the majority of articles are actually bearish, but the average is being skewed by a few very strong bullish outliers.</li>
+          </ul>
+        </TooltipPortal>
       </div>
 
       {isInsufficientData ? (
