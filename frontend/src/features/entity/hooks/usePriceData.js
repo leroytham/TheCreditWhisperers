@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { PRICE_POLL_INTERVAL } from '../../shared/utils/constants';
 
-export const usePriceData = (ticker, maxTimeframe = '5Y') => {
+export const usePriceData = (ticker, timeframe = '5Y') => {
   const [priceData1Y, setPriceData1Y] = useState([]);
   const [companyName, setCompanyName] = useState('');
   const [currency, setCurrency] = useState('USD');
