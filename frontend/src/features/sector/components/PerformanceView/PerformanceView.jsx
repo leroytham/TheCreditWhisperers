@@ -29,7 +29,7 @@ import PerformanceHeader from './PerformanceHeader';
 import TopConstituents from './TopConstituents';
 
 /**
- * PerformanceView component - orchestrates the sector performance dashboard
+ * PerformanceView components - orchestrates the sector performance dashboard
  */
 const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab }) => {
   const countryCode = context?.countryCode || '';
