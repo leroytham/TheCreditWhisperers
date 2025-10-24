@@ -32,7 +32,7 @@ function App() {
   })() : 'default'}`;
 
   const { isConnected, hasError } = useNotificationSocket(clientId, {
-    autoConnect: true, // Set to false if backend is not running
+    autoConnect: false, // Temporarily disabled - WebSocket hanging on Windows
     maxReconnectAttempts: 3, // Reduced attempts to fail faster in development
     onConnect: () => console.log('📡 Real-time notifications connected'),
     onDisconnect: () => console.log('📡 Real-time notifications disconnected'),

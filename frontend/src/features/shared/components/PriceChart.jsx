@@ -52,7 +52,8 @@ const PriceChart = ({
   responsive = false,
   mode,
   timeframe = '1Y',
-  prevClose = null
+  prevClose = null,
+  exchange = ''
 }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const chartContainerRef = useRef(null);
@@ -132,7 +133,8 @@ const PriceChart = ({
     chartWidth,
     numXAxisPoints,
     paddingLeft,
-    timeframe
+    timeframe,
+    exchange
   );
 
   // Event markers (different handling for entity vs sector)
@@ -183,15 +185,6 @@ const PriceChart = ({
 
   return (
     <div ref={chartContainerRef} className="relative h-96 bg-white border border-gray-200 rounded-lg shadow-md">
-      {/* PREV CLOSE label - positioned above chart as HTML overlay for 1D */}
-      {timeframe === '1D' && prevClose && (
-        <div className="absolute top-2 left-16 bg-white bg-opacity-90 border border-gray-200 rounded px-2 py-1 shadow-sm z-10">
-          <div className="text-[10px] text-gray-500 font-medium">PREV. CLOSE</div>
-          <div className="text-sm font-bold text-gray-700">
-            {prevClose.toFixed(2)} {currency || 'USD'}
-          </div>
-        </div>
-      )}
       <svg className="w-full h-full" style={{ overflow: 'visible' }}>
         {/* Gradient Definition */}
         <defs>
@@ -255,19 +248,59 @@ const PriceChart = ({
           ))}
         </g>
 
-        {/* Previous Close Line (for 1D view) - label now rendered as HTML overlay */}
-        {timeframe === '1D' && prevClose && (
-          <line
-            x1={paddingLeft}
-            y1={paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)}
-            x2={paddingLeft + chartWidth}
-            y2={paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)}
-            stroke="#6b7280"
-            strokeWidth="1"
-            strokeDasharray="4,4"
-            opacity="0.6"
-          />
-        )}
+        {/* Previous Close Line (for 1D view) with label */}
+        {timeframe === '1D' && prevClose && (() => {
+          const prevCloseY = paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+          return (
+            <g>
+              <line
+                x1={paddingLeft}
+                y1={prevCloseY}
+                x2={paddingLeft + chartWidth}
+                y2={prevCloseY}
+                stroke="#6b7280"
+                strokeWidth="1"
+                strokeDasharray="4,4"
+                opacity="0.6"
+              />
+              {/* Label box overlaying the chart at left edge, ABOVE the line (Bloomberg style) */}
+              <g transform={`translate(${paddingLeft + 5}, ${prevCloseY - 50})`}>
+                <rect
+                  x="0"
+                  y="0"
+                  width="110"
+                  height="46"
+                  fill="white"
+                  fillOpacity="0.75"
+                  stroke="#d1d5db"
+                  strokeWidth="1"
+                  rx="3"
+                />
+                <text
+                  x="8"
+                  y="16"
+                  textAnchor="start"
+                  fontSize="10"
+                  fontWeight="600"
+                  fill="#6b7280"
+                  letterSpacing="0.3"
+                >
+                  PREV. CLOSE
+                </text>
+                <text
+                  x="8"
+                  y="34"
+                  textAnchor="start"
+                  fontSize="14"
+                  fontWeight="bold"
+                  fill="#1f2937"
+                >
+                  {prevClose.toFixed(2)} {currency || 'USD'}
+                </text>
+              </g>
+            </g>
+          );
+        })()}
 
         {/* Area fill - Entity mode uses helper, Sector mode inline */}
         {detectedMode === 'entity' && fillPath && (
@@ -362,23 +395,18 @@ const PriceChart = ({
         {/* Timeline */}
         {timelinePoints.map((point, i) => (
           <g key={`timeline-${i}`}>
-            <circle
-              cx={point.x}
-              cy={paddingTop + chartHeight + 20}
-              r="8"
-              fill="#f9fafb"
-              stroke="#d1d5db"
+            {/* Tick mark instead of circle */}
+            <line
+              x1={point.x}
+              y1={paddingTop + chartHeight}
+              x2={point.x}
+              y2={paddingTop + chartHeight + 8}
+              stroke="#6b7280"
               strokeWidth="2"
-            />
-            <circle
-              cx={point.x}
-              cy={paddingTop + chartHeight + 20}
-              r="3"
-              fill="#3b82f6"
             />
             <text
               x={point.x}
-              y={paddingTop + chartHeight + 40}
+              y={paddingTop + chartHeight + 24}
               textAnchor="middle"
               fill="#374151"
               fontSize={chartWidth < 500 ? "10" : "11"}

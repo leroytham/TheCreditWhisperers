@@ -38,6 +38,7 @@ const PerformanceView = ({
   ticker,
   companyName,
   currency,
+  exchange,
   priceData1Y,
   priceData1D,
   dailySentiment,
@@ -292,6 +293,7 @@ const PerformanceView = ({
                   priceData={priceData}
                   ticker={ticker}
                   currency={currency}
+                  exchange={exchange}
                   significantEvents={significantEvents}
                   timeframe={timeframe}
                   prevClose={activePrevClose}
@@ -338,6 +340,7 @@ const PerformanceView = ({
               priceData={priceData}
               ticker={ticker}
               currency={currency}
+              exchange={exchange}
               significantEvents={significantEvents}
               timeframe={timeframe}
               prevClose={activePrevClose}

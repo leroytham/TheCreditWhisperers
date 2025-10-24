@@ -171,6 +171,58 @@ export const formatXAxisLabel = (date, timeframe, time = null) => {
 };
 
 /**
+ * Get market hours based on exchange
+ * @param {string} exchange - Exchange code (e.g., "NMS", "NYQ", "LSE", "JPX")
+ * @returns {Array} Array of time strings for market hours
+ */
+export const getMarketHours = (exchange) => {
+  // Normalize exchange string
+  const exchangeUpper = (exchange || '').toUpperCase();
+
+  // US Markets (NASDAQ, NYSE, etc.)
+  if (exchangeUpper.includes('NMS') || // NASDAQ
+      exchangeUpper.includes('NYQ') || // NYSE
+      exchangeUpper.includes('NASDAQ') ||
+      exchangeUpper.includes('NYSE') ||
+      exchangeUpper === '') { // Default to US market hours
+    return ['09:30', '11:00', '12:30', '14:00', '16:00'];
+  }
+
+  // London Stock Exchange
+  if (exchangeUpper.includes('LSE') || exchangeUpper.includes('LON')) {
+    return ['08:00', '10:00', '12:00', '14:00', '16:30'];
+  }
+
+  // Tokyo Stock Exchange
+  if (exchangeUpper.includes('JPX') || exchangeUpper.includes('TYO')) {
+    return ['09:00', '10:30', '12:00', '13:30', '15:00'];
+  }
+
+  // Hong Kong Stock Exchange
+  if (exchangeUpper.includes('HKG') || exchangeUpper.includes('HKEX')) {
+    return ['09:30', '11:00', '13:00', '14:30', '16:00'];
+  }
+
+  // Shanghai Stock Exchange
+  if (exchangeUpper.includes('SHG') || exchangeUpper.includes('SSE')) {
+    return ['09:30', '11:00', '13:00', '14:00', '15:00'];
+  }
+
+  // Toronto Stock Exchange
+  if (exchangeUpper.includes('TOR') || exchangeUpper.includes('TSX')) {
+    return ['09:30', '11:00', '12:30', '14:00', '16:00'];
+  }
+
+  // Singapore Exchange (SGX) - 9:00 AM to 5:00 PM SGT
+  if (exchangeUpper.includes('SES') || exchangeUpper.includes('SGX') || exchangeUpper.includes('SIN')) {
+    return ['09:00', '11:00', '13:00', '15:00', '17:00'];
+  }
+
+  // Default to US market hours for unknown exchanges
+  return ['09:30', '11:00', '12:30', '14:00', '16:00'];
+};
+
+/**
  * Format tooltip date/time based on timeframe
  * @param {Date} date - Date object
  * @param {string} timeframe - Timeframe
@@ -210,9 +262,10 @@ export const formatTooltipDateTime = (date, timeframe, time = null) => {
  * @param {number} numPoints - Number of timeline points to generate (default 6)
  * @param {number} paddingLeft - Left padding in pixels (default 60)
  * @param {string} timeframe - Current timeframe for label formatting
+ * @param {string} exchange - Exchange code for determining market hours (1D only)
  * @returns {Array} Timeline points with label and x position
  */
-export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60, timeframe = '1Y') => {
+export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60, timeframe = '1Y', exchange = '') => {
   if (chartData.length === 0) return [];
 
   const effectiveWidth = chartWidth || 660; // Default width for entity
@@ -243,11 +296,14 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
     console.log('[generateTimelinePoints] 5Y - Years found:', years);
     console.log('[generateTimelinePoints] 5Y - Number of years:', years.length);
 
-    if (years.length > 1) {
+    if (years.length >= 1) {
       // Create evenly spaced X positions for years
       return years.map((year, yearIndex) => {
         // Calculate evenly spaced position
-        const xPosition = paddingLeft + (yearIndex * (effectiveWidth / (years.length - 1)));
+        // Handle single year case
+        const xPosition = years.length === 1
+          ? paddingLeft + (effectiveWidth / 2)
+          : paddingLeft + (yearIndex * (effectiveWidth / (years.length - 1)));
 
         // Use the year as label
         const label = year.toString();
@@ -255,6 +311,29 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
         return { label, x: xPosition };
       });
     }
+  }
+
+  // Handle 1D timeframe - show market hours based on exchange
+  if (timeframe === '1D') {
+    // Get market hours for the specific exchange
+    const targetTimes = getMarketHours(exchange);
+    const timelinePoints = [];
+
+    targetTimes.forEach((targetTime, index) => {
+      // Calculate evenly spaced position based on target time index
+      const xPosition = paddingLeft + (index * (effectiveWidth / (targetTimes.length - 1)));
+
+      // Format the label (convert to 12-hour format with AM/PM)
+      const [hour, minute] = targetTime.split(':');
+      const hourNum = parseInt(hour);
+      const hour12 = hourNum > 12 ? hourNum - 12 : (hourNum === 0 ? 12 : hourNum);
+      const ampm = hourNum >= 12 ? 'PM' : 'AM';
+      const label = `${hour12}:${minute} ${ampm}`;
+
+      timelinePoints.push({ label, x: xPosition });
+    });
+
+    return timelinePoints;
   }
 
   // Default behavior for other timeframes
@@ -269,19 +348,10 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
   const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
 
   return selectedPoints.map((point, i) => {
-    let xPosition;
-
-    // For 1D timeframe, use evenly spaced positions for better visual distribution
-    // For other timeframes, align with actual data point positions
-    if (timeframe === '1D') {
-      // Evenly space the labels across the chart width
-      xPosition = paddingLeft + (i * (effectiveWidth / Math.max(1, selectedPoints.length - 1)));
-    } else {
-      // Calculate X position based on actual data point index in chartData
-      // This ensures X-axis labels align with hoverable data points
-      const dataIndex = chartData.indexOf(point);
-      xPosition = paddingLeft + (dataIndex * (effectiveWidth / Math.max(1, chartData.length - 1)));
-    }
+    // Calculate X position based on actual data point index in chartData
+    // This ensures X-axis labels align with hoverable data points
+    const dataIndex = chartData.indexOf(point);
+    const xPosition = paddingLeft + (dataIndex * (effectiveWidth / Math.max(1, chartData.length - 1)));
 
     let label = '';
 
