@@ -64,7 +64,7 @@ class StockDataService:
 
         Args:
             df: DataFrame with datetime index
-            timeframe: One of "5D", "1M", "3M", "6M", "1Y", "YTD"
+            timeframe: One of "1D", "1M", "3M", "6M", "1Y", "YTD", "5Y"
 
         Returns:
             Filtered DataFrame or original if timeframe not recognized
@@ -74,11 +74,12 @@ class StockDataService:
 
         end_date = datetime.today()
         time_deltas = {
-            "5D": 4,
+            "1D": 0,
             "1M": 29,
             "3M": 89,
             "6M": 179,
-            "1Y": 364
+            "1Y": 364,
+            "5Y": 1824  # 5 years * 365 days - 1
         }
 
         if timeframe in time_deltas:

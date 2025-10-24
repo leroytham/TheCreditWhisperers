@@ -16,10 +16,10 @@ const TimeRangeSelector = ({
   onTimeframeChange,
   className = ''
 }) => {
-  const timeframes = ['1W', '1M'];
+  const timeframes = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
 
   return (
-    <div className={`flex space-x-1 ${className}`}>
+    <div className={`flex flex-wrap gap-1 ${className}`}>
       {timeframes.map((tf) => (
         <button
           key={tf}

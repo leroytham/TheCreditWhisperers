@@ -9,7 +9,7 @@ import useAppStore from '../store/useAppStore';
  * Custom hook for fetching stock price data
  *
  * @param {string} ticker - Stock ticker symbol
- * @param {string} timeframe - Timeframe for data (5D, 1M, 3M, 6M, 1Y, YTD)
+ * @param {string} timeframe - Timeframe for data (1D, 1M, 3M, 6M, YTD, 1Y, 5Y)
  * @param {object} options - React Query options
  * @returns {object} Query result with data, loading, error states
  */

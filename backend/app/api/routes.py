@@ -45,8 +45,12 @@ def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
     Example: /stocks/AAPL/historical-data?timeframe=3M
     """
     try:
-        # 1. Fetch 1 year of data from the service
-        full_data = stock_data_service.get_stock_data(ticker)
+        # Determine the period to fetch based on timeframe
+        # For 5Y, we need to fetch 5 years of data
+        period = "5y" if timeframe == "5Y" else "1y"
+        
+        # 1. Fetch data from the service with appropriate period
+        full_data = stock_data_service.get_stock_data(ticker, period=period)
         if full_data is None:
             raise HTTPException(status_code=404, detail=f"Data not found for ticker {ticker}")
 
@@ -137,8 +141,11 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
     Example: /api/price?ticker=AAPL&timeframe=1Y
     """
     try:
-        # Fetch stock data using the stock data service
-        stock_data = stock_data_service.get_stock_data(ticker)
+        # Determine the period to fetch based on timeframe
+        period = "5y" if timeframe == "5Y" else "1y"
+        
+        # Fetch stock data using the stock data service with appropriate period
+        stock_data = stock_data_service.get_stock_data(ticker, period=period)
 
         if stock_data is None or stock_data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
@@ -230,6 +237,93 @@ async def get_news_data(ticker: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
+@router.get("/news/sources")
+async def get_news_sources(ticker: str):
+    """
+    API endpoint to get news source reliability and sentiment breakdown.
+    Returns metrics for each news source including reliability score based on:
+    - Article volume (consistency)
+    - Sentiment consistency
+    - Coverage breadth
+    Example: /api/news/sources?ticker=AAPL
+    """
+    try:
+        # Fetch news articles
+        news_articles = await news_service_instance.get_ticker_news(ticker)
+
+        if not news_articles:
+            return {"ticker": ticker, "sources": []}
+
+        # Analyze sentiment to get scores
+        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+        articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+        # Group articles by source
+        source_map = {}
+        for article in articles_with_sentiment:
+            source = article.get("provider", "Unknown")
+            if source not in source_map:
+                source_map[source] = {
+                    "name": source,
+                    "articles": [],
+                    "sentiment_scores": []
+                }
+            
+            sentiment_score = article.get("sentiment_score_raw", 0)
+            source_map[source]["articles"].append(article)
+            source_map[source]["sentiment_scores"].append(sentiment_score)
+
+        # Calculate metrics for each source
+        sources = []
+        total_articles = len(articles_with_sentiment)
+        
+        for source_name, source_data in source_map.items():
+            article_count = len(source_data["articles"])
+            sentiment_scores = source_data["sentiment_scores"]
+            
+            # Calculate average sentiment
+            avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
+            
+            # Calculate reliability score based on multiple factors:
+            # 1. Volume factor (0-0.4): More articles = more reliable
+            volume_factor = min(0.4, (article_count / total_articles) * 0.8)
+            
+            # 2. Consistency factor (0-0.3): Lower standard deviation = more consistent
+            if len(sentiment_scores) > 1:
+                mean = sum(sentiment_scores) / len(sentiment_scores)
+                variance = sum((x - mean) ** 2 for x in sentiment_scores) / len(sentiment_scores)
+                std_dev = variance ** 0.5
+                # Normalize std_dev (0-1 range maps to 0.3-0 reliability)
+                consistency_factor = max(0, 0.3 - (std_dev * 0.15))
+            else:
+                consistency_factor = 0.15  # Neutral for single article
+            
+            # 3. Base reliability (0.3): All sources start with base reliability
+            base_reliability = 0.3
+            
+            # Total reliability score (0-1 scale)
+            reliability = base_reliability + volume_factor + consistency_factor
+            reliability = min(1.0, max(0.0, reliability))  # Clamp to 0-1
+            
+            sources.append({
+                "name": source_name,
+                "sentiment": avg_sentiment,
+                "reliability": reliability,
+                "articles": article_count,
+                "consistency": 1.0 - min(1.0, std_dev) if len(sentiment_scores) > 1 else 0.5
+            })
+
+        # Sort by reliability (descending)
+        sources.sort(key=lambda x: x["reliability"], reverse=True)
+
+        return {
+            "ticker": ticker,
+            "sources": sources
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
 @router.get("/daily-sentiment")
 async def get_daily_sentiment(ticker: str, days: int = 7):
     """
@@ -313,7 +407,7 @@ async def get_daily_sentiment(ticker: str, days: int = 7):
 async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
     """
     API endpoint to get rolling-window sentiment data for different timeframes.
-    Supports: 1W (hourly, 168 points), 1M (6-hourly, 120 points)
+    Supports: 1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y
     Example: /api/rolling-sentiment?ticker=AAPL&timeframe=1W
     """
     try:
@@ -340,119 +434,104 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
         # Determine granularity and time range based on timeframe
         now = datetime.now(timezone.utc)
+        
+        # Configure timeframe parameters for Rolling 24h Windows
+        # 1D: Hourly intervals, 24h rolling window
+        # 1W: 6-hourly intervals, 24h rolling window
+        # 1M: 12-hourly intervals, 24h rolling window
+        # 3M+: 24-hourly (daily) intervals, 24h rolling window
+        timeframe_configs = {
+            '1D': {'hours': 24, 'interval_hours': 1, 'window_hours': 24},       # 24 points, hourly, 24h window
+            '1W': {'hours': 168, 'interval_hours': 6, 'window_hours': 24},      # 28 points, 6-hourly, 24h window
+            '1M': {'hours': 720, 'interval_hours': 12, 'window_hours': 24},     # 60 points, 12-hourly, 24h window
+            '3M': {'days': 90, 'interval_hours': 24, 'window_hours': 24},       # 90 points, daily, 24h window
+            '6M': {'days': 180, 'interval_hours': 24, 'window_hours': 24},      # 180 points, daily, 24h window
+            'YTD': {'days': (now - datetime(now.year, 1, 1, tzinfo=timezone.utc)).days, 'interval_hours': 24, 'window_hours': 24},
+            '1Y': {'days': 365, 'interval_hours': 24, 'window_hours': 24},      # 365 points, daily, 24h window
+            '5Y': {'days': 1825, 'interval_hours': 24, 'window_hours': 24}      # 1825 points, daily, 24h window
+        }
+        
+        config = timeframe_configs.get(timeframe, timeframe_configs['1W'])
+        data_points = []
 
-        if timeframe == "1W":
-            # Hourly rolling 24h windows for past 7 days (168 data points)
-            data_points = []
+        # Calculate number of data points based on config
+        if 'days' in config:
+            num_points = config['days'] * (24 // config['interval_hours'])
+        else:
+            num_points = config['hours'] // config['interval_hours']
+        
+        # Unified approach for all timeframes
+        for i in range(num_points):
+            point_time = now - timedelta(hours=i * config['interval_hours'])
+            window_start = point_time - timedelta(hours=config['window_hours'])
 
-            for i in range(168):  # 7 days * 24 hours
-                point_time = now - timedelta(hours=i)
-                window_start = point_time - timedelta(hours=24)
-
-                # Find articles published within this 24h window using exact timestamps
-                window_articles = []
-                for a in articles_with_sentiment:
-                    pub_timestamp_str = a.get("publish_timestamp")
-                    if pub_timestamp_str:
-                        try:
-                            pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
-                            # Ensure timezone-aware comparison
-                            if pub_timestamp.tzinfo is None:
-                                pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
-                            if window_start <= pub_timestamp <= point_time:
+            # Find articles published within this window using exact timestamps
+            window_articles = []
+            for a in articles_with_sentiment:
+                pub_timestamp_str = a.get("publish_timestamp")
+                if pub_timestamp_str:
+                    try:
+                        pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
+                        # Ensure timezone-aware comparison
+                        if pub_timestamp.tzinfo is None:
+                            pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
+                        if window_start <= pub_timestamp <= point_time:
+                            window_articles.append(a)
+                    except Exception:
+                        # Fallback to date-based filtering if timestamp parsing fails
+                        publish_date = a.get("publish_date")
+                        if publish_date:
+                            window_start_date = window_start.date()
+                            window_end_date = point_time.date()
+                            if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
                                 window_articles.append(a)
-                        except Exception:
-                            # Fallback to date-based filtering if timestamp parsing fails
-                            publish_date = a.get("publish_date")
-                            if publish_date:
-                                window_start_date = window_start.date()
-                                window_end_date = point_time.date()
-                                if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
-                                    window_articles.append(a)
 
-                volume = len(window_articles)
-                avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
+            volume = len(window_articles)
+            avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
 
-                top_headlines = sorted(
-                    window_articles,
-                    key=lambda x: abs(x.get("sentiment_score_raw", 0)),
-                    reverse=True
-                )[:10]  # Increased from 5 to 10 for detail panel
+            top_headlines = sorted(
+                window_articles,
+                key=lambda x: abs(x.get("sentiment_score_raw", 0)),
+                reverse=True
+            )[:10]
 
-                data_points.append({
-                    "timestamp": point_time.isoformat(),
-                    "label": point_time.strftime("%a %-I%p"),
-                    "volume": volume,
-                    "sentiment": avg_sentiment,
-                    "headlines": [{
-                        "title": h.get("title", ""),
-                        "provider": h.get("provider", "Unknown"),
-                        "sentiment_score": h.get("sentiment_score_raw", 0),
-                        "link": h.get("link", "")
-                    } for h in top_headlines]
-                })
+            # Format label based on timeframe and interval
+            if timeframe == '1D':
+                # Hourly: "3PM", "4PM", etc.
+                label = point_time.strftime("%-I%p")
+            elif timeframe == '1W':
+                # 6-hourly: "Mon 6PM", "Mon 12AM", etc.
+                label = point_time.strftime("%a %-I%p")
+            elif timeframe == '1M':
+                # 12-hourly: "Jan 15 12AM", "Jan 15 12PM", etc.
+                label = point_time.strftime("%b %-d %-I%p")
+            elif timeframe in ['3M', '6M']:
+                # Daily: "Jan 15", "Jan 16", etc.
+                label = point_time.strftime("%b %-d")
+            elif timeframe in ['YTD', '1Y']:
+                # Daily: "Jan 15", "Feb 1", etc.
+                label = point_time.strftime("%b %-d")
+            elif timeframe == '5Y':
+                # Daily: Show date, but could be sampled for display
+                label = point_time.strftime("%b %-d, %Y")
+            else:
+                label = point_time.strftime("%b %-d")
 
-            # Reverse to show oldest to newest
-            data_points.reverse()
-
-        else:  # timeframe == "1M"
-            # 6-hourly rolling 24h windows for past 30 days (120 data points)
-            # Time points: 00:00, 06:00, 12:00, 18:00 daily
-            data_points = []
-
-            # Generate 120 time points (30 days * 4 points per day)
-            for day_offset in range(30):
-                for hour in [0, 6, 12, 18]:
-                    point_time = now - timedelta(days=29 - day_offset)
-                    point_time = point_time.replace(hour=hour, minute=0, second=0, microsecond=0)
-                    window_start = point_time - timedelta(hours=24)
-
-                    # Find articles published within this 24h window using exact timestamps
-                    window_articles = []
-                    for a in articles_with_sentiment:
-                        pub_timestamp_str = a.get("publish_timestamp")
-                        if pub_timestamp_str:
-                            try:
-                                pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
-                                # Ensure timezone-aware comparison
-                                if pub_timestamp.tzinfo is None:
-                                    pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
-                                if window_start <= pub_timestamp <= point_time:
-                                    window_articles.append(a)
-                            except Exception:
-                                # Fallback to date-based filtering if timestamp parsing fails
-                                publish_date = a.get("publish_date")
-                                if publish_date:
-                                    window_start_date = window_start.date()
-                                    window_end_date = point_time.date()
-                                    if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
-                                        window_articles.append(a)
-
-                    volume = len(window_articles)
-                    avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
-
-                    top_headlines = sorted(
-                        window_articles,
-                        key=lambda x: abs(x.get("sentiment_score_raw", 0)),
-                        reverse=True
-                    )[:10]  # Increased from 5 to 10 for detail panel
-
-                    # Format label based on hour
-                    hour_labels = {0: "12AM", 6: "6AM", 12: "12PM", 18: "6PM"}
-                    label = point_time.strftime(f"%b %-d {hour_labels[hour]}")
-
-                    data_points.append({
-                        "timestamp": point_time.isoformat(),
-                        "label": label,
-                        "volume": volume,
-                        "sentiment": avg_sentiment,
-                        "headlines": [{
-                            "title": h.get("title", ""),
-                            "provider": h.get("provider", "Unknown"),
-                            "sentiment_score": h.get("sentiment_score_raw", 0),
-                            "link": h.get("link", "")
-                        } for h in top_headlines]
-                    })
+            data_points.append({
+                "timestamp": point_time.isoformat(),
+                "label": label,
+                "volume": volume,
+                "sentiment": avg_sentiment,
+                "headlines": [{
+                    "title": h.get("title", ""),
+                    "provider": h.get("provider", "Unknown"),
+                    "sentiment_score": h.get("sentiment_score_raw", 0),
+                    "link": h.get("link", "")
+                } for h in top_headlines]
+            })
+        
+        # Reverse to show oldest to newest
+        data_points.reverse()
 
         # Check if we have sufficient data
         has_data = any(point["volume"] > 0 for point in data_points)

@@ -46,6 +46,24 @@ const CombinedSentimentVolumeChart = ({
     }
   }, [pinnedIndex]);
 
+  // Helper function to get sentiment label based on score
+  const getSentimentLabel = (sentiment) => {
+    if (sentiment >= 0.35) return 'Bullish';
+    if (sentiment >= 0.15) return 'Somewhat-Bullish';
+    if (sentiment >= -0.15) return 'Neutral';
+    if (sentiment >= -0.35) return 'Somewhat-Bearish';
+    return 'Bearish';
+  };
+
+  // Helper function to get sentiment color based on score
+  const getSentimentColor = (sentiment) => {
+    if (sentiment >= 0.35) return '#10b981'; // Bullish - green-500
+    if (sentiment >= 0.15) return '#34d399'; // Somewhat-Bullish - green-400
+    if (sentiment >= -0.15) return '#9ca3af'; // Neutral - gray-400
+    if (sentiment >= -0.35) return '#fb923c'; // Somewhat-Bearish - orange-400
+    return '#ef4444'; // Bearish - red-500
+  };
+
   // Chart dimensions - adjusted for side panel layout (2/3 and 1/3 split)
   const topPadding = 50;
   const leftPadding = 60;
@@ -82,14 +100,30 @@ const CombinedSentimentVolumeChart = ({
     if (!data || data.length === 0) return [];
 
     let step;
-    if (timeframe === '1W') {
-      // Show every 24th point (once per day) for 168 hourly points
-      step = 24;
+    // Adjust label density based on timeframe and data points
+    if (timeframe === '1D') {
+      // 24 hourly points: show every 3 hours (8 labels)
+      step = 3;
+    } else if (timeframe === '1W') {
+      // 28 six-hourly points: show every 4th point (7 labels)
+      step = 4;
     } else if (timeframe === '1M') {
-      // Show ~8-10 labels for 120 six-hourly points
-      step = Math.max(1, Math.floor(data.length / 8));
+      // 60 12-hourly points: show every 10th point (6 labels)
+      step = 10;
+    } else if (timeframe === '3M') {
+      // 90 daily points: show every 15th day (6 labels)
+      step = 15;
+    } else if (timeframe === '6M') {
+      // 180 daily points: show every 30th day (6 labels)
+      step = 30;
+    } else if (timeframe === 'YTD' || timeframe === '1Y') {
+      // 365 daily points: show every 60th day (~6 labels)
+      step = 60;
+    } else if (timeframe === '5Y') {
+      // 1825 daily points: show every 365th day (~5 labels)
+      step = 365;
     } else {
-      // Default: show ~7 labels
+      // Default: ~7-8 labels
       step = Math.max(1, Math.floor(data.length / 7));
     }
 
@@ -114,11 +148,34 @@ const CombinedSentimentVolumeChart = ({
 
   const xAxisPoints = getXAxisPoints();
 
-  // Chart title based on view mode
+  // Chart title based on timeframe with accurate granularity
   const getChartTitle = () => {
+    const granularityMap = {
+      '1D': 'Hourly',
+      '1W': '6-Hourly',
+      '1M': '12-Hourly',
+      '3M': 'Daily',
+      '6M': 'Daily',
+      'YTD': 'Daily',
+      '1Y': 'Daily',
+      '5Y': 'Daily'
+    };
+    
+    const windowMap = {
+      '1D': '24h',
+      '1W': '24h',
+      '1M': '24h',
+      '3M': '24h',
+      '6M': '24h',
+      'YTD': '24h',
+      '1Y': '24h',
+      '5Y': '24h'
+    };
+
     if (viewMode === 'rolling') {
-      const granularity = timeframe === '1W' ? 'Hourly' : '6-Hourly';
-      return `Combined Sentiment & Volume - Rolling 24h Windows (${timeframe}, ${granularity})`;
+      const granularity = granularityMap[timeframe] || 'Hourly';
+      const window = windowMap[timeframe] || '24h';
+      return `Combined Sentiment & Volume - ${granularity} Rolling ${window} Windows`;
     } else {
       const days = timeframe === '1W' ? '7 Days' : '30 Days';
       return `Combined Sentiment & Volume - Daily Average (${timeframe}, ${days})`;
@@ -126,15 +183,45 @@ const CombinedSentimentVolumeChart = ({
   };
 
   // Detail Panel Component
-  const DetailPanel = ({ dataPoint }) => (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-4 pb-4 border-b border-gray-300">
-        <h4 className="text-lg font-bold text-gray-900">{dataPoint.label}</h4>
-        <div className="text-xs text-gray-500 mt-1">
-          {new Date(dataPoint.timestamp).toLocaleString()}
+  const DetailPanel = ({ dataPoint }) => {
+    // Calculate the time window range for rolling mode
+    const getTimeWindowRange = () => {
+      if (viewMode !== 'rolling') {
+        return null;
+      }
+
+      const endTime = new Date(dataPoint.timestamp);
+      const startTime = new Date(endTime.getTime() - (24 * 60 * 60 * 1000)); // 24h window
+
+      const formatDateTime = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
+      };
+
+      return `${formatDateTime(startTime)} - ${formatDateTime(endTime)}`;
+    };
+
+    const timeWindowRange = getTimeWindowRange();
+
+    return (
+      <div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="mb-4 pb-4 border-b border-gray-300">
+          <h4 className="text-lg font-bold text-gray-900">{dataPoint.label}</h4>
+          <div className="text-xs text-gray-500 mt-1">
+            {new Date(dataPoint.timestamp).toLocaleString()}
+          </div>
+          {timeWindowRange && (
+            <div className="text-xs text-blue-600 font-medium mt-2 bg-blue-50 px-2 py-1 rounded">
+              Rolling 24h Window: {timeWindowRange}
+            </div>
+          )}
         </div>
-      </div>
 
       {/* Metrics */}
       <div className="space-y-3 mb-4">
@@ -142,13 +229,35 @@ const CombinedSentimentVolumeChart = ({
           <span className="text-sm text-gray-600">Articles</span>
           <span className="text-2xl font-bold text-blue-600">{dataPoint.volume}</span>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">Sentiment</span>
-          <span className={`text-2xl font-bold ${
-            dataPoint.sentiment >= 0 ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {dataPoint.sentiment >= 0 ? '+' : ''}{dataPoint.sentiment.toFixed(3)}
-          </span>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-600">Sentiment</span>
+            <span 
+              className="text-2xl font-bold"
+              style={{ color: getSentimentColor(dataPoint.sentiment) }}
+            >
+              {dataPoint.sentiment >= 0 ? '+' : ''}{dataPoint.sentiment.toFixed(3)}
+            </span>
+          </div>
+          <div className="flex justify-end">
+            <span 
+              className="text-xs font-semibold px-2 py-1 rounded"
+              style={{ 
+                backgroundColor: dataPoint.sentiment >= 0.35 ? '#d1fae5' :
+                                 dataPoint.sentiment >= 0.15 ? '#a7f3d0' :
+                                 dataPoint.sentiment >= -0.15 ? '#e5e7eb' :
+                                 dataPoint.sentiment >= -0.35 ? '#fed7aa' :
+                                 '#fecaca',
+                color: dataPoint.sentiment >= 0.35 ? '#065f46' :
+                       dataPoint.sentiment >= 0.15 ? '#047857' :
+                       dataPoint.sentiment >= -0.15 ? '#374151' :
+                       dataPoint.sentiment >= -0.35 ? '#9a3412' :
+                       '#991b1b'
+              }}
+            >
+              {getSentimentLabel(dataPoint.sentiment)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -170,11 +279,21 @@ const CombinedSentimentVolumeChart = ({
               </a>
               <div className="flex items-center justify-between text-xs mt-2">
                 <span className="text-gray-500 truncate mr-2">{headline.provider}</span>
-                <span className={`font-semibold px-2 py-0.5 rounded whitespace-nowrap ${
-                  headline.sentiment_score >= 0
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
-                }`}>
+                <span 
+                  className="font-semibold px-2 py-0.5 rounded whitespace-nowrap"
+                  style={{ 
+                    backgroundColor: headline.sentiment_score >= 0.35 ? '#d1fae5' :
+                                     headline.sentiment_score >= 0.15 ? '#a7f3d0' :
+                                     headline.sentiment_score >= -0.15 ? '#e5e7eb' :
+                                     headline.sentiment_score >= -0.35 ? '#fed7aa' :
+                                     '#fecaca',
+                    color: headline.sentiment_score >= 0.35 ? '#065f46' :
+                           headline.sentiment_score >= 0.15 ? '#047857' :
+                           headline.sentiment_score >= -0.15 ? '#374151' :
+                           headline.sentiment_score >= -0.35 ? '#9a3412' :
+                           '#991b1b'
+                  }}
+                >
                   {headline.sentiment_score >= 0 ? '+' : ''}
                   {headline.sentiment_score.toFixed(2)}
                 </span>
@@ -184,7 +303,8 @@ const CombinedSentimentVolumeChart = ({
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // Empty State Component
   const EmptyState = () => (
@@ -277,7 +397,7 @@ const CombinedSentimentVolumeChart = ({
         {/* Left: Chart Area (2/3 on desktop, full width on mobile) */}
         <div className="w-full lg:flex-[2] bg-white border border-gray-200 rounded-lg shadow-sm p-6" style={{ height: '450px' }}>
             <svg className="w-full h-full" viewBox={`0 0 ${leftPadding + chartWidth + rightPadding} ${topPadding + chartHeight + 50}`} preserveAspectRatio="xMidYMid meet">
-              {/* Left Y-axis label (Volume) */}
+              {/* Left Y-axis label (Volume) - dynamic based on window size */}
               <text
                 x="-250"
                 y="20"
@@ -287,7 +407,12 @@ const CombinedSentimentVolumeChart = ({
                 transform="rotate(-90)"
                 textAnchor="middle"
               >
-                Number of Articles (24h Rolling Window)
+                Number of Articles ({
+                  timeframe === '1D' ? '6h' :
+                  timeframe === '1W' ? '24h' :
+                  timeframe === '5Y' ? '30d' :
+                  '7d'
+                } Rolling Window)
               </text>
 
               {/* Right Y-axis label (Sentiment) */}
@@ -388,19 +513,36 @@ const CombinedSentimentVolumeChart = ({
                 );
               })}
 
-              {/* Sentiment Line */}
-              <path
-                d={data.map((point, i) => {
-                  const x = leftPadding + (i * (chartWidth / data.length)) + (chartWidth / data.length / 2);
-                  const normalizedSentiment = (sentimentMax - point.sentiment) / sentimentRange;
-                  const y = topPadding + (normalizedSentiment * chartHeight);
-                  return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
-                }).join(' ')}
-                stroke="#10b981"
-                strokeWidth="2.5"
-                fill="none"
-                className="pointer-events-none"
-              />
+              {/* Sentiment Line - removed single color path, will use segments */}
+              {/* Draw line segments with appropriate colors */}
+              {data.map((point, i) => {
+                if (i === 0) return null;
+                
+                const x1 = leftPadding + ((i - 1) * (chartWidth / data.length)) + (chartWidth / data.length / 2);
+                const x2 = leftPadding + (i * (chartWidth / data.length)) + (chartWidth / data.length / 2);
+                
+                const normalizedSentiment1 = (sentimentMax - data[i - 1].sentiment) / sentimentRange;
+                const y1 = topPadding + (normalizedSentiment1 * chartHeight);
+                
+                const normalizedSentiment2 = (sentimentMax - point.sentiment) / sentimentRange;
+                const y2 = topPadding + (normalizedSentiment2 * chartHeight);
+                
+                // Use the average sentiment of the two points to determine color
+                const avgSentiment = (data[i - 1].sentiment + point.sentiment) / 2;
+                
+                return (
+                  <line
+                    key={`line-${i}`}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={getSentimentColor(avgSentiment)}
+                    strokeWidth="3"
+                    className="pointer-events-none"
+                  />
+                );
+              })}
 
               {/* Sentiment Line Points */}
               {data.map((point, i) => {
@@ -413,8 +555,8 @@ const CombinedSentimentVolumeChart = ({
                     key={`point-${i}`}
                     cx={x}
                     cy={y}
-                    r={(hoveredIndex === i || pinnedIndex === i) ? 5 : 3}
-                    fill={point.sentiment >= 0 ? '#10b981' : '#ef4444'}
+                    r={(hoveredIndex === i || pinnedIndex === i) ? 6 : 4}
+                    fill={getSentimentColor(point.sentiment)}
                     stroke="white"
                     strokeWidth="2"
                     className="cursor-pointer transition-all"

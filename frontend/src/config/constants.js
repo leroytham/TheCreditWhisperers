@@ -51,12 +51,13 @@ export const CACHE_TIMES = {
 
 // Timeframe options
 export const TIMEFRAMES = [
-  { value: '5D', label: '5 Days' },
+  { value: '1D', label: '1 Day' },
   { value: '1M', label: '1 Month' },
   { value: '3M', label: '3 Months' },
   { value: '6M', label: '6 Months' },
-  { value: '1Y', label: '1 Year' },
   { value: 'YTD', label: 'Year to Date' },
+  { value: '1Y', label: '1 Year' },
+  { value: '5Y', label: '5 Years' },
 ];
 
 // Sentiment labels (new standardized Bullish/Bearish terminology)

@@ -2,12 +2,13 @@
  * usePriceData Hook
  *
  * Custom hook for fetching and polling price data
+ * Dynamically fetches 1Y or 5Y of data based on needs
  */
 
 import { useState, useEffect } from 'react';
 import { PRICE_POLL_INTERVAL } from '../../shared/utils/constants';
 
-export const usePriceData = (ticker, timeframe = '1Y') => {
+export const usePriceData = (ticker, maxTimeframe = '5Y') => {
   const [priceData1Y, setPriceData1Y] = useState([]);
   const [companyName, setCompanyName] = useState('');
   const [currency, setCurrency] = useState('USD');
@@ -25,7 +26,8 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=1Y`);
+        // Fetch with maxTimeframe to ensure we have enough data
+        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${maxTimeframe}`);
         const data = await response.json();
 
         setPriceData1Y(data.prices || []);
@@ -46,7 +48,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
     if (ticker) {
       fetchPriceData();
     }
-  }, [ticker]);
+  }, [ticker, maxTimeframe]);
 
   // Poll for real-time price updates
   useEffect(() => {
@@ -54,7 +56,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
 
     const intervalId = setInterval(async () => {
       try {
-        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=1Y`);
+        const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${maxTimeframe}`);
         const data = await response.json();
 
         setPriceData1Y(data.prices || []);
@@ -70,7 +72,7 @@ export const usePriceData = (ticker, timeframe = '1Y') => {
     }, PRICE_POLL_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [ticker]);
+  }, [ticker, maxTimeframe]);
 
   return {
     priceData1Y,

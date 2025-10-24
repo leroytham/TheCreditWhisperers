@@ -147,7 +147,7 @@ const EntityPage = () => {
                   }`}>
                     {marketState === 'REGULAR' ? 'Market Open' : 
                      marketState === 'CLOSED' ? 'Market Closed' :
-                     marketState === 'PRE' ? 'Pre-Market' :
+                     marketState === 'PRE' || marketState === 'PREPRE' ? 'Pre-Market' :
                      marketState === 'POST' || marketState === 'POSTPOST' ? 'After Hours' : marketState}
                   </span>
                 </>

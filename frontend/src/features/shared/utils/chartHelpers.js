@@ -8,7 +8,7 @@
 /**
  * Filters price data based on selected timeframe
  * @param {Array} priceData1Y - Full year of price data
- * @param {string} timeframe - Selected timeframe ('5D', '1M', '3M', '6M', 'YTD', '1Y')
+ * @param {string} timeframe - Selected timeframe ('1D', '1M', '3M', '6M', 'YTD', '1Y', '5Y')
  * @returns {Array} Filtered price data
  */
 export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
@@ -20,8 +20,8 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
   let filtered = priceData1Y;
 
   switch (timeframe) {
-    case '5D':
-      filtered = priceData1Y.slice(-5);
+    case '1D':
+      filtered = priceData1Y.slice(-1);
       break;
     case '1M': {
       const oneMonthAgo = new Date(now);
@@ -47,6 +47,14 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
       break;
     }
     case '1Y':
+      filtered = priceData1Y;
+      break;
+    case '5Y': {
+      const fiveYearsAgo = new Date(now);
+      fiveYearsAgo.setFullYear(now.getFullYear() - 5);
+      filtered = priceData1Y.filter(pt => new Date(pt.date) >= fiveYearsAgo);
+      break;
+    }
     default:
       filtered = priceData1Y;
       break;

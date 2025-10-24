@@ -22,3 +22,9 @@ export { default as NewsError } from './NewsError';
 export { default as SentimentBadge } from './SentimentBadge';
 export { default as NewsToolbar } from './NewsToolbar';
 
+// Newly added components for the sentiment redesign
+export { default as SentimentMetricsCard } from './SentimentMetricsCard';
+export { default as SentimentTrendSummary } from './SentimentTrendSummary';
+export { default as SentimentSourceBreakdown } from './SentimentSourceBreakdown';
+export { default as HistoricalSentimentTimeline } from './HistoricalSentimentTimeline';
+
