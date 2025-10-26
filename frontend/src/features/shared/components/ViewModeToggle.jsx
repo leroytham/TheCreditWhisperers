@@ -5,17 +5,38 @@ import React from 'react';
  *
  * Toggle switch for sentiment visualization modes
  * Switches between "Rolling 24h Windows" and "Daily Average" views
+ * Hides toggle completely for aggregated timeframes (shows read-only indicator instead)
  *
  * @param {Object} props
- * @param {string} props.activeMode - Currently selected mode ('rolling' or 'daily')
+ * @param {string} props.activeMode - Currently selected mode ('rolling', 'daily', 'weekly', or 'monthly')
  * @param {function} props.onModeChange - Callback when mode is changed
+ * @param {string} props.timeframe - Current timeframe (affects which modes are available)
  * @param {string} props.className - Additional CSS classes for wrapper
  */
 const ViewModeToggle = ({
   activeMode = 'rolling',
   onModeChange,
+  timeframe = '1W',
   className = ''
 }) => {
+  // For long timeframes, show read-only aggregation indicator instead of toggle
+  if (['1Y', '5Y'].includes(timeframe)) {
+    return (
+      <div className={`inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 ${className}`}>
+        <span className="text-sm font-medium text-gray-700">Monthly Averages</span>
+      </div>
+    );
+  }
+
+  if (['3M', '6M', 'YTD'].includes(timeframe)) {
+    return (
+      <div className={`inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 ${className}`}>
+        <span className="text-sm font-medium text-gray-700">Weekly Averages</span>
+      </div>
+    );
+  }
+
+  // For 1D, 1W, 1M: show toggle between rolling and daily
   const modes = [
     { id: 'rolling', label: 'Rolling 24h Windows' },
     { id: 'daily', label: 'Daily Average' }

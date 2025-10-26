@@ -37,7 +37,7 @@ const EntityPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
   const [activeSubTab, setActiveSubTab] = useState('overview');
-  const [sentimentTimeframe, setSentimentTimeframe] = useState('1W');
+  const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
 
   // Session management
   useEffect(() => {
@@ -90,7 +90,7 @@ const EntityPage = () => {
   // Fetch real-time 1D data for current price display
   const { priceData1Y: priceData1D, prevClose: prevClose1D } = usePriceData(ticker, '1D');
 
-  const { news, sentiment, apiMetadata } = useNewsData(ticker);
+  const { news, sentiment, apiMetadata } = useNewsData(ticker, '1Y');
   const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
   const { significantEvents } = useSignificantEvents(ticker);
 

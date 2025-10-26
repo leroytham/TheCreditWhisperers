@@ -84,7 +84,7 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
 
     // Use aggregated news if yfinanceKey is available, otherwise use single ticker news
     const fetchNews = yfinanceKey
-      ? apiService.getSectorAggregatedNews(yfinanceKey, { limit: 100, timeframe: '1W' })
+      ? apiService.getSectorAggregatedNews(yfinanceKey, { limit: 1000, timeframe: '1W' })
           .then(r => r.data)
       : fetch(`/api/news?ticker=${encodeURIComponent(newsTicker)}`)
           .then(r => r.json());
@@ -125,19 +125,11 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
           const isAggregatedNews = n.success && n.articles;
 
           if (isAggregatedNews) {
-            // Process aggregated news response
+            // Process aggregated news response - articles are already in Alpha Vantage feed format
             const raw = n.articles || [];
-            const normalized = raw.map(article => ({
-              title: article.title || article.headline || article.headline_text || article.summary || '',
-              link: article.link || article.url || article.href || article.source_link || article.source || '#',
-              publish_date: article.publish_date || article.date || article.publishedAt || article.pub_date || '',
-              provider: article.provider || article.source || article.source_name || '',
-              sentiment_score: (article.sentiment_score ?? article.score ?? null),
-              sentiment_label: article.sentiment_label || 'Neutral',
-              image: article.image || null,
-              relevance_score: article.relevance_score || null
-            }));
-            newData.news = normalized;
+            
+            // Articles are already in Alpha Vantage format, just use them directly
+            newData.news = raw;
 
             // Store aggregation metadata
             newData.newsAggregationMetadata = {

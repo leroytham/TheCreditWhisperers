@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 
-export const useNewsData = (ticker) => {
+export const useNewsData = (ticker, timeframe = '1Y') => {
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
   const [apiMetadata, setApiMetadata] = useState({});
@@ -19,7 +19,7 @@ export const useNewsData = (ticker) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/news?ticker=${ticker}`);
+        const response = await fetch(`/api/news?ticker=${ticker}&timeframe=${timeframe}`);
         const data = await response.json();
 
         // Store full feed data from Alpha Vantage
@@ -89,7 +89,7 @@ export const useNewsData = (ticker) => {
     if (ticker) {
       fetchNewsData();
     }
-  }, [ticker]);
+  }, [ticker, timeframe]);
 
   return {
     news,

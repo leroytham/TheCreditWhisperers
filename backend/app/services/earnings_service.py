@@ -227,45 +227,232 @@ class EarningsService:
         """
         Generate list of potential quarters to check for transcripts.
         Since API doesn't provide a list endpoint, we generate recent quarters.
-        
+
         Earnings calls typically happen 2-4 weeks after quarter end, so we exclude:
         - Current quarter (not yet ended)
         - Most recent completed quarter (earnings call may not have happened yet)
-        
+
         Args:
             ticker: Stock ticker symbol
             years_back: Number of years to go back (default: 5)
-        
+
         Returns:
             List of quarter strings in YYYYQM format, most recent first
         """
         from datetime import datetime, timedelta
-        
+
         current_date = datetime.now()
         current_year = current_date.year
         current_month = current_date.month
         current_quarter = (current_month - 1) // 3 + 1
-        
+
         # Calculate day within quarter (to determine if earnings call likely happened)
         quarter_start_month = (current_quarter - 1) * 3 + 1
         days_into_quarter = (current_date - datetime(current_year, quarter_start_month, 1)).days
-        
+
         quarters = []
-        
+
         for year in range(current_year, current_year - years_back - 1, -1):
             for quarter in range(4, 0, -1):
                 # Skip current quarter
                 if year == current_year and quarter >= current_quarter:
                     continue
-                
+
                 # Skip most recent completed quarter if we're less than 30 days into current quarter
                 # (earnings calls typically happen 2-4 weeks after quarter end)
                 if year == current_year and quarter == current_quarter - 1 and days_into_quarter < 30:
                     continue
-                
+
                 quarters.append(f"{year}Q{quarter}")
-        
+
         return quarters
+
+    @async_cache_result(ttl=86400)  # Cache for 24 hours
+    async def fetch_earnings_calendar(
+        self,
+        ticker: str,
+        horizon: str = "12month"
+    ) -> Dict:
+        """
+        Fetch upcoming earnings calendar events for a given company.
+
+        Args:
+            ticker: Stock ticker symbol (e.g., 'AAPL')
+            horizon: Time horizon for earnings events (e.g., '3month', '6month', '12month')
+
+        Returns:
+            Dictionary containing:
+            - ticker: Ticker symbol
+            - earnings_events: List of upcoming earnings events
+            - total_events: Count of earnings events
+            - error: Error message if request fails
+
+        Example Response:
+        {
+            "ticker": "AAPL",
+            "earnings_events": [
+                {
+                    "earnings_date": "2025-01-30",
+                    "fiscal_period_ending": "2024-12-31",
+                    "estimated_eps": "2.35",
+                    "reported_eps": None,
+                    "currency": "USD",
+                    "days_until": 95
+                }
+            ],
+            "total_events": 4
+        }
+        """
+        if not self.alpha_vantage_api_key:
+            return {
+                "error": "Alpha Vantage API key not configured",
+                "ticker": ticker,
+                "earnings_events": []
+            }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = (
+                    f"https://www.alphavantage.co/query?"
+                    f"function=EARNINGS_CALENDAR"
+                    f"&symbol={ticker.upper()}"
+                    f"&horizon={horizon}"
+                    f"&apikey={self.alpha_vantage_api_key}"
+                )
+
+                print(f"Fetching earnings calendar for {ticker} with horizon {horizon}...")
+
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    if response.status != 200:
+                        return {
+                            "error": f"API returned status code {response.status}",
+                            "ticker": ticker,
+                            "earnings_events": []
+                        }
+
+                    # EARNINGS_CALENDAR returns CSV format, not JSON
+                    text_data = await response.text()
+
+                    # Check for API errors in text response
+                    if "Error Message" in text_data:
+                        return {
+                            "error": "API error occurred",
+                            "ticker": ticker,
+                            "earnings_events": []
+                        }
+
+                    if "Premium Endpoint" in text_data or "higher API tier" in text_data:
+                        return {
+                            "error": "Earnings calendar requires premium Alpha Vantage subscription",
+                            "ticker": ticker,
+                            "earnings_events": []
+                        }
+
+                    if "Thank you for using Alpha Vantage" in text_data and "rate limit" in text_data.lower():
+                        return {
+                            "error": "API rate limit reached. Please try again later.",
+                            "ticker": ticker,
+                            "earnings_events": []
+                        }
+
+                    # Parse CSV data
+                    events = self._parse_earnings_calendar_csv(text_data, ticker)
+
+                    if not events:
+                        return {
+                            "error": f"No earnings calendar data available for {ticker}",
+                            "ticker": ticker,
+                            "earnings_events": []
+                        }
+
+                    return {
+                        "ticker": ticker.upper(),
+                        "earnings_events": events,
+                        "total_events": len(events),
+                        "fetched_at": datetime.utcnow().isoformat()
+                    }
+
+        except asyncio.TimeoutError:
+            print(f"Timeout fetching earnings calendar for {ticker}")
+            return {
+                "error": "Request timeout",
+                "ticker": ticker,
+                "earnings_events": []
+            }
+        except aiohttp.ClientError as e:
+            print(f"Network error fetching earnings calendar: {str(e)}")
+            return {
+                "error": f"Network error: {str(e)}",
+                "ticker": ticker,
+                "earnings_events": []
+            }
+        except Exception as e:
+            print(f"Unexpected error fetching earnings calendar: {str(e)}")
+            return {
+                "error": f"Unexpected error: {str(e)}",
+                "ticker": ticker,
+                "earnings_events": []
+            }
+
+    def _parse_earnings_calendar_csv(self, csv_text: str, ticker: str) -> List[Dict]:
+        """
+        Parse CSV earnings calendar data from Alpha Vantage.
+
+        Args:
+            csv_text: Raw CSV text from API
+            ticker: Ticker symbol for filtering (API may return multiple symbols)
+
+        Returns:
+            List of parsed earnings events
+        """
+        import csv
+        from io import StringIO
+        from datetime import datetime
+
+        events = []
+
+        try:
+            csv_reader = csv.DictReader(StringIO(csv_text))
+            current_date = datetime.now().date()
+
+            for row in csv_reader:
+                # Filter by ticker (case-insensitive)
+                if row.get('symbol', '').upper() != ticker.upper():
+                    continue
+
+                earnings_date_str = row.get('reportDate', '').strip()
+                if not earnings_date_str:
+                    continue
+
+                try:
+                    earnings_date = datetime.strptime(earnings_date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    continue
+
+                # Calculate days until earnings
+                days_until = (earnings_date - current_date).days
+
+                event = {
+                    "earnings_date": earnings_date_str,
+                    "fiscal_period_ending": row.get('fiscalDateEnding', '').strip() or None,
+                    "estimated_eps": row.get('estimate', '').strip() or None,
+                    "reported_eps": row.get('reportedEPS', '').strip() or None,
+                    "currency": row.get('currency', 'USD').strip() or 'USD',
+                    "days_until": days_until,
+                    "surprise": row.get('surprise', '').strip() or None,
+                    "surprise_percentage": row.get('surprisePercentage', '').strip() or None
+                }
+
+                events.append(event)
+
+            # Sort by date (earliest first)
+            events.sort(key=lambda x: x['earnings_date'])
+
+        except Exception as e:
+            print(f"Error parsing earnings calendar CSV: {str(e)}")
+            return []
+
+        return events
 
 
 # Create singleton instance

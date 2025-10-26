@@ -1,4 +1,95 @@
 /**
+ * Get timezone for a stock exchange
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE', 'LSE', 'HKEX')
+ * @returns {string} IANA timezone identifier
+ */
+export const getExchangeTimezone = (exchange) => {
+  const timezones = {
+    // US Exchanges
+    'NASDAQ': 'America/New_York',
+    'NYSE': 'America/New_York',
+    'NYSEARCA': 'America/New_York',
+    'AMEX': 'America/New_York',
+    'BATS': 'America/New_York',
+    
+    // European Exchanges
+    'LSE': 'Europe/London',
+    'LON': 'Europe/London',
+    'FRA': 'Europe/Berlin',
+    'PAR': 'Europe/Paris',
+    'AMS': 'Europe/Amsterdam',
+    'SWX': 'Europe/Zurich',
+    
+    // Asian Exchanges
+    'HKEX': 'Asia/Hong_Kong',
+    'HKG': 'Asia/Hong_Kong',
+    'TSE': 'Asia/Tokyo',
+    'TYO': 'Asia/Tokyo',
+    'SSE': 'Asia/Shanghai',
+    'SHH': 'Asia/Shanghai',
+    'KRX': 'Asia/Seoul',
+    'NSE': 'Asia/Kolkata',
+    'BOM': 'Asia/Kolkata',
+    
+    // Other Exchanges
+    'ASX': 'Australia/Sydney',
+    'TSX': 'America/Toronto',
+    'BMV': 'America/Mexico_City',
+    'BOVESPA': 'America/Sao_Paulo',
+  };
+  
+  return timezones[exchange?.toUpperCase()] || 'America/New_York'; // Default to ET
+};
+
+/**
+ * Format timestamp with exchange timezone
+ * @param {string|Date} timestamp - Timestamp to format
+ * @param {string} exchange - Exchange code
+ * @param {Object} options - Additional formatting options
+ * @returns {string} Formatted timestamp string
+ */
+export const formatTimestampWithTimezone = (timestamp, exchange, options = {}) => {
+  if (!timestamp) return '';
+  
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  const timezone = getExchangeTimezone(exchange);
+  
+  const defaultOptions = {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+    timeZone: timezone,
+    timeZoneName: 'short'
+  };
+  
+  return date.toLocaleString('en-US', { ...defaultOptions, ...options });
+};
+
+/**
+ * Get short timezone abbreviation
+ * @param {string} exchange - Exchange code
+ * @returns {string} Timezone abbreviation (e.g., 'ET', 'GMT', 'HKT')
+ */
+export const getTimezoneAbbreviation = (exchange) => {
+  const date = new Date();
+  const timezone = getExchangeTimezone(exchange);
+  
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    timeZoneName: 'short'
+  });
+  
+  const parts = formatter.formatToParts(date);
+  const timezonePart = parts.find(part => part.type === 'timeZoneName');
+  
+  return timezonePart?.value || 'UTC';
+};
+
+/**
  * Shared Formatting Utilities
  *
  * Consolidated functions for formatting prices, dates, percentages, and other data

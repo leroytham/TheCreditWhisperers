@@ -1,6 +1,6 @@
 // src/features/sector/components/PerformanceView/PerformanceView.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { resolveSectorTicker } from '../../utils/tickerResolver';
 import { useSectorData } from '../../hooks/useSectorData';
 import { usePriceData } from '../../hooks/usePriceData';
@@ -41,8 +41,17 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
 
   const [timeframe, setTimeframe] = useState('1M');
   const [showEvents, setShowEvents] = useState(true);
-  const [sentimentTimeframe, setSentimentTimeframe] = useState('1W');
+  const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
   const [viewMode, setViewMode] = useState('rolling');
+
+  // Auto-switch view mode based on timeframe
+  // For sectors, all timeframes (1D, 1W, 1M) support both rolling and daily modes
+  // No forced switching needed
+  useEffect(() => {
+    // Sectors use exponential decay with 1M data fetch for all timeframes
+    // All timeframes support both rolling 24h windows and daily averages
+    // No auto-switching required
+  }, [sentimentTimeframe]);
 
   // Resolve ticker
   const ticker = resolveSectorTicker(sector, countryCode);
@@ -64,7 +73,12 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
   } = useSectorData(ticker, timeframe, sector);
 
   // Fetch rolling sentiment data for the combined chart
-  const { data: rollingData, hasData: hasRollingData, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
+  const {
+    data: rollingData,
+    hasData: hasRollingData,
+    sourceEarliestDates,
+    loading: sentimentLoading
+  } = useRollingSentiment(ticker, sentimentTimeframe);
 
   // Map sentiment timeframe to days for existing charts
   const getDaysToShow = (tf) => {
@@ -261,29 +275,47 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
                 <div className="flex items-center space-x-4">
-                  <TimeRangeSelector
-                    activeTimeframe={sentimentTimeframe}
-                    onTimeframeChange={setSentimentTimeframe}
-                  />
                   <ViewModeToggle
                     activeMode={viewMode}
                     onModeChange={setViewMode}
+                    timeframe={sentimentTimeframe}
+                  />
+                  <TimeRangeSelector
+                    activeTimeframe={sentimentTimeframe}
+                    onTimeframeChange={setSentimentTimeframe}
+                    timeframes={['1D', '1W', '1M']}
                   />
                 </div>
               </div>
-              <CombinedSentimentVolumeChart
-                data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment).map(([date, data]) => ({
-                  timestamp: date,
-                  label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                  volume: data.count || 0,
-                  sentiment: data.score || 0,
-                  headlines: data.headlines || []
-                }))}
-                timeframe={sentimentTimeframe}
-                viewMode={viewMode}
-                hasData={viewMode === 'rolling' ? hasRollingData : Object.keys(dailySentiment).length > 0}
-                sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
-              />
+              
+              {/* Loading Overlay */}
+              {sentimentLoading ? (
+                <div className="relative" style={{ minHeight: '400px' }}>
+                  <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10 rounded-lg">
+                    <div className="text-center">
+                      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                      <p className="text-gray-600 font-medium">Loading sentiment data...</p>
+                      <p className="text-gray-400 text-sm mt-2">Fetching {sentimentTimeframe} timeframe</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <CombinedSentimentVolumeChart
+                  data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment).map(([date, data]) => ({
+                    timestamp: date,
+                    label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    volume: data.count || 0,
+                    sentiment: data.score || 0,
+                    headlines: data.headlines || []
+                  }))}
+                  timeframe={sentimentTimeframe}
+                  viewMode={viewMode}
+                  hasData={viewMode === 'rolling' ? hasRollingData : Object.keys(dailySentiment).length > 0}
+                  sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
+                  exchange="NYSE"
+                  ticker={ticker}
+                />
+              )}
             </div>
 
             {/* Row 2: Core Metrics (4 columns) */}

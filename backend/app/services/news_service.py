@@ -266,7 +266,9 @@ class NewsService:
         self,
         session: aiohttp.ClientSession,
         ticker: str,
-        months_back: int = 6
+        months_back: int = 6,
+        max_batches: int = None,
+        preserve_all_tickers: bool = False
     ) -> list[dict]:
         """
         Fetches historical news from Alpha Vantage in batches until we have {months_back} months of data.
@@ -280,6 +282,8 @@ class NewsService:
             session: aiohttp ClientSession for async requests
             ticker: Stock ticker symbol
             months_back: Number of months of historical data to fetch (default: 6)
+            max_batches: Maximum number of batches to fetch (default: auto-determined by months_back)
+            preserve_all_tickers: If True, preserves full ticker_sentiment array for multi-ticker processing (sector mode)
 
         Returns:
             List of all news articles from the time period
@@ -296,7 +300,12 @@ class NewsService:
         time_to_str = now.strftime("%Y%m%dT%H%M")
 
         batch_count = 0
-        max_batches = 20  # Safety limit to prevent infinite loops
+        # Auto-determine max_batches if not provided, with safety ceiling
+        if max_batches is None:
+            max_batches = self._get_max_batches_for_months(months_back)
+        else:
+            # Safety ceiling to prevent runaway requests
+            max_batches = min(max_batches, 200)
 
         print(f"[BATCH FETCH] Starting batch fetch for {ticker} from {target_start_date.date()} to {now.date()}")
 
@@ -320,7 +329,8 @@ class NewsService:
                 ticker,
                 time_from=time_from_str,
                 time_to=time_to_str,
-                limit=1000
+                limit=1000,
+                preserve_all_tickers=preserve_all_tickers
             )
 
             if not batch_articles:
@@ -349,9 +359,10 @@ class NewsService:
                 print(f"[BATCH FETCH] Reached target date: {earliest_date.date()} <= {target_start_date.date()}")
                 break
 
-            # Check if we got less than limit, meaning no more data available
-            if len(batch_articles) < 1000:
-                print(f"[BATCH FETCH] Received {len(batch_articles)} < 1000 articles, no more data available")
+            # Only stop if we got ZERO articles (truly no more data)
+            # Don't stop just because we got < 1000 - there may be more historical data
+            if len(batch_articles) == 0:
+                print(f"[BATCH FETCH] No articles returned, stopping")
                 break
 
             # Update time_to for next batch
@@ -574,25 +585,63 @@ class NewsService:
             print(f"Error fetching news from MarketAux for {ticker}: {e}")
             return []
 
-    def _get_timeframe_months(self, timeframe: str) -> int:
-        """Convert timeframe string to number of months for data fetching."""
-        timeframe_map = {
-            '1D': 0.033,  # ~1 day
-            '1W': 0.25,   # ~1 week
-            '1M': 1,
-            '3M': 3,
-            '6M': 6,
-            'YTD': None,  # Calculate dynamically
-            '1Y': 12,
-            '5Y': 60
-        }
-        if timeframe == 'YTD':
-            # Calculate months since start of year
-            now = datetime.now(timezone.utc)
-            start_of_year = datetime(now.year, 1, 1, tzinfo=timezone.utc)
-            days_since_start = (now - start_of_year).days
-            return days_since_start / 30  # Approximate months
-        return timeframe_map.get(timeframe, 1)
+    def _get_max_batches_for_months(self, months: float) -> int:
+        """
+        Determines appropriate max_batches based on months of historical data requested.
+
+        Batching strategy:
+        - Short timeframes (< 6 months): 20 batches (20,000 articles max)
+        - Medium timeframes (6-12 months): 50 batches (50,000 articles max)
+        - Long timeframes (1-5 years): 100 batches (100,000 articles max)
+        - Very long timeframes (> 5 years): 150 batches (150,000 articles max)
+
+        Args:
+            months: Number of months of historical data requested
+
+        Returns:
+            Maximum number of batches to fetch
+        """
+        if months < 6:
+            return 20
+        elif months <= 12:
+            return 50
+        elif months <= 60:  # Up to 5 years
+            return 100
+        else:  # > 5 years
+            return 150
+
+    def _get_timeframe_months(self, timeframe: str, is_sector: bool = False) -> float:
+        """
+        Convert timeframe string to number of months for data fetching.
+        
+        Strategy for ENTITIES (stocks): Always fetch 1Y (12 months) worth of data for all timeframes except 5Y.
+        This ensures consistent data availability and better caching efficiency.
+        The filtering to the actual timeframe is done in the API layer.
+        
+        Strategy for SECTORS: Fetch 2M worth of data to ensure better historical coverage.
+        Even though exponential decay makes news >10 days old irrelevant (<0.1% weight),
+        we fetch 2 months to ensure we have continuous data for the past month, accounting
+        for gaps in news coverage and API data availability.
+        
+        Args:
+            timeframe: Timeframe string ('1D', '1W', '1M', etc.)
+            is_sector: If True, fetch 2M of data for better historical coverage
+        """
+        # For 5Y, fetch 5 years of data (both entities and sectors)
+        if timeframe == '5Y':
+            return 60
+        
+        # SECTOR MODE: Fetch 2M of data to ensure full 1M coverage with gaps
+        # This provides better historical coverage while respecting exponential decay limits
+        if is_sector:
+            return 2  # Fetch 2 months for sectors to ensure complete 1M coverage
+        
+        # ENTITY MODE: For all other timeframes (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 10Y, MAX), fetch 1Y
+        # This provides:
+        # - Consistent data availability across all timeframes
+        # - Better cache reuse (same data for multiple timeframes)
+        # - Minimal API calls (1Y is optimal batch size)
+        return 12
 
     def _get_cache_ttl_for_timeframe(self, timeframe: str) -> int:
         """Get appropriate cache TTL based on timeframe."""
@@ -604,7 +653,9 @@ class NewsService:
             '6M': 3600,     # 1 hour
             'YTD': 14400,   # 4 hours
             '1Y': 43200,    # 12 hours
-            '5Y': 86400     # 24 hours
+            '5Y': 86400,    # 24 hours
+            '10Y': 172800,  # 48 hours (2 days)
+            'MAX': 259200   # 72 hours (3 days)
         }
         return ttl_map.get(timeframe, settings.NEWS_CACHE_TTL)
 
@@ -641,9 +692,9 @@ class NewsService:
             # Calculate months to fetch
             months = self._get_timeframe_months(timeframe)
 
-            # Fetch data
+            # Fetch data with appropriate max_batches for timeframe
             async with aiohttp.ClientSession() as session:
-                articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=int(months))
+                articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=months)
 
             if articles:
                 # Store in cache with timeframe-specific TTL
@@ -692,7 +743,7 @@ class NewsService:
         """
         Trigger progressive background fetching for a timeframe and queue subsequent timeframes.
 
-        Fetching order: 1M → 6M → YTD → 1Y → 5Y
+        Fetching order: 1M → 6M → YTD → 1Y → 5Y → 10Y → MAX
 
         Args:
             ticker: Stock ticker symbol
@@ -710,7 +761,9 @@ class NewsService:
             '6M': 'YTD',
             'YTD': '1Y',
             '1Y': '5Y',
-            '5Y': None       # End of chain
+            '5Y': '10Y',
+            '10Y': 'MAX',
+            'MAX': None       # End of chain
         }
 
         task_key = f"{ticker}:{timeframe}"
@@ -750,15 +803,19 @@ class NewsService:
         self,
         ticker: str,
         timeframe: str = '1M',
-        trigger_progressive: bool = True
+        trigger_progressive: bool = True,
+        preserve_all_tickers: bool = False,
+        is_sector: bool = False
     ) -> list[dict]:
         """
         Get news for a ticker with timeframe-specific caching and progressive background fetching.
 
         Args:
             ticker: Stock ticker symbol
-            timeframe: Timeframe filter ('1M', '6M', 'YTD', '1Y', '5Y')
+            timeframe: Timeframe filter ('1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', 'MAX')
             trigger_progressive: Whether to trigger background fetch for future timeframes
+            preserve_all_tickers: If True, preserves full ticker_sentiment array for multi-ticker processing (sector mode)
+            is_sector: If True, only fetch the requested timeframe (for sector exponential decay)
 
         Returns:
             List of news articles for the timeframe (may return partial data while fetching)
@@ -782,20 +839,26 @@ class NewsService:
         print(f"[CACHE MISS] {cache_key}")
 
         # Not in cache - fetch based on timeframe
-        months = self._get_timeframe_months(timeframe)
+        months = self._get_timeframe_months(timeframe, is_sector=is_sector)
+        print(f"[NEWS FETCH] Fetching {months} months of data for {ticker} (timeframe: {timeframe}, is_sector: {is_sector})")
 
         async with aiohttp.ClientSession() as session:
-            if months <= 1:
-                # For short timeframes, use simple fetch
-                articles = await self._fetch_alpha_vantage_news(session, ticker)
-            else:
-                # For longer timeframes, use batch fetch
-                articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=int(months))
+            # Always use batch fetch to get sufficient data (1Y for most timeframes, 5Y for 5Y)
+            # The filtering to the actual timeframe is done in the API layer
+            articles = await self._fetch_alpha_vantage_batch(
+                session,
+                ticker,
+                months_back=months,
+                preserve_all_tickers=preserve_all_tickers
+            )
+
+        print(f"[NEWS FETCH] Retrieved {len(articles) if articles else 0} articles for {ticker}")
 
         # Cache the result
         if redis_cache.async_client and articles:
             ttl = self._get_cache_ttl_for_timeframe(timeframe)
             await redis_cache.aset(cache_key, articles, ttl=ttl)
+            print(f"[CACHE SET] Cached {len(articles)} articles with TTL {ttl}s for {cache_key}")
 
         # Trigger progressive fetch for next timeframe
         if trigger_progressive:
@@ -1066,41 +1129,39 @@ class NewsService:
                 sector_name = get_sector_display_name(sector_key)
                 print(f"[All Sectors] Fetching {len(tickers)} tickers from {sector_name}...")
 
-                # Fetch news for these tickers
-                async with aiohttp.ClientSession() as session:
-                    await self._check_rate_limit()
+                # Fetch news for these tickers - use is_sector=True for exponential decay
+                tasks = [
+                    self.get_ticker_news_for_timeframe(
+                        ticker=ticker,
+                        timeframe=timeframe,
+                        trigger_progressive=False,
+                        preserve_all_tickers=True,
+                        is_sector=True  # Only fetch requested timeframe for sectors
+                    )
+                    for ticker in tickers
+                ]
 
-                    tasks = [
-                        self._fetch_alpha_vantage_news(
-                            session=session,
-                            ticker=ticker,
-                            limit=1000,
-                            preserve_all_tickers=True
-                        )
-                        for ticker in tickers
-                    ]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                sector_article_count = 0
+                for ticker, result in zip(tickers, batch_results):
+                    if isinstance(result, Exception):
+                        print(f"WARNING: Failed to fetch news for {ticker}: {result}")
+                        continue
 
-                    sector_article_count = 0
-                    for ticker, result in zip(tickers, batch_results):
-                        if isinstance(result, Exception):
-                            print(f"WARNING: Failed to fetch news for {ticker}: {result}")
-                            continue
+                    if result:
+                        all_articles.extend(result)
+                        sector_article_count += len(result)
 
-                        if result:
-                            all_articles.extend(result)
-                            sector_article_count += len(result)
+                total_articles_fetched += sector_article_count
+                sector_results[sector_name] = {
+                    'tickers': len(tickers),
+                    'articles': sector_article_count
+                }
+                print(f"[All Sectors] {sector_name}: {sector_article_count} articles")
 
-                    total_articles_fetched += sector_article_count
-                    sector_results[sector_name] = {
-                        'tickers': len(tickers),
-                        'articles': sector_article_count
-                    }
-                    print(f"[All Sectors] {sector_name}: {sector_article_count} articles")
-
-                    # Add delay between sectors
-                    await asyncio.sleep(0.3)
+                # Add delay between sectors
+                await asyncio.sleep(0.3)
 
             except Exception as e:
                 print(f"ERROR: Failed to fetch news for sector {sector_key}: {e}")
@@ -1164,10 +1225,14 @@ class NewsService:
         3. Deduplicates by both URL and normalized title
         4. Returns comprehensive sector news with metadata
 
+        IMPORTANT: For sectors, we ALWAYS fetch maximum 1 month of data regardless of timeframe.
+        This is because sector sentiment uses exponential decay with half-life of 24 hours.
+        After 10 half-lives (10 days), news relevance drops to <0.1% and becomes statistically insignificant.
+
         Args:
             sector_key: yfinance sector key (e.g., 'technology', 'healthcare')
             limit: Maximum number of unique articles to return (default: 100)
-            timeframe: Time range for news (e.g., '1D', '1W', '1M')
+            timeframe: Time range for news (e.g., '1D', '1W', '1M') - capped at 1M for sectors
 
         Returns:
             Dictionary containing:
@@ -1183,11 +1248,17 @@ class NewsService:
             - cached: Whether result was from cache
             - metadata: Deduplication statistics
         """
-        print(f"Fetching aggregated news for sector: {sector_key} (timeframe: {timeframe})")
+        # SECTOR OVERRIDE: Cap timeframe at 1M maximum for exponential decay relevance
+        # After 10 days (10 half-lives), news has <0.1% relevance
+        sector_timeframe = timeframe if timeframe in ['1D', '1W', '1M'] else '1M'
+        if sector_timeframe != timeframe:
+            print(f"[SECTOR OVERRIDE] Requested timeframe '{timeframe}' capped to '1M' for sector analysis")
+        
+        print(f"Fetching aggregated news for sector: {sector_key} (timeframe: {sector_timeframe})")
 
         # Check if this is "All Sectors" request
         if is_all_sectors_identifier(sector_key):
-            return await self._get_all_sectors_news(limit=limit, timeframe=timeframe)
+            return await self._get_all_sectors_news(limit=limit, timeframe=sector_timeframe)
 
         try:
             # Get sector tickers from sector service (now returns tuple)
@@ -1207,49 +1278,48 @@ class NewsService:
             successful_tickers = []
 
             # Fetch news for all tickers in parallel (batches of 10 for rate limiting)
+            # SECTOR LIMIT: Only fetch 1M of data maximum (capped above)
             all_articles = []
             batch_size = 10
 
-            async with aiohttp.ClientSession() as session:
-                for i in range(0, len(tickers), batch_size):
-                    batch = tickers[i:i + batch_size]
-                    print(f"Fetching batch {i//batch_size + 1}/{(len(tickers) + batch_size - 1)//batch_size}: {batch}")
+            for i in range(0, len(tickers), batch_size):
+                batch = tickers[i:i + batch_size]
+                print(f"Fetching batch {i//batch_size + 1}/{(len(tickers) + batch_size - 1)//batch_size}: {batch}")
 
-                    # Check rate limit before batch
-                    await self._check_rate_limit()
+                # Fetch news for all tickers in batch concurrently
+                # Use sector_timeframe (capped at 1M) instead of original timeframe
+                tasks = [
+                    self.get_ticker_news_for_timeframe(
+                        ticker=ticker,
+                        timeframe=sector_timeframe,
+                        trigger_progressive=False,  # Don't trigger progressive fetching for sector queries
+                        preserve_all_tickers=True,  # Preserve full ticker_sentiment array for multi-ticker processing
+                        is_sector=True  # CRITICAL: Only fetch requested timeframe for sectors (exponential decay)
+                    )
+                    for ticker in batch
+                ]
 
-                    # Fetch news for all tickers in batch concurrently
-                    tasks = [
-                        self._fetch_alpha_vantage_news(
-                            session=session,
-                            ticker=ticker,
-                            limit=1000,  # Get max articles per ticker
-                            preserve_all_tickers=True  # Preserve full ticker_sentiment array for multi-ticker processing
-                        )
-                        for ticker in batch
-                    ]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                # Collect articles from successful fetches
+                for ticker, result in zip(batch, batch_results):
+                    if isinstance(result, Exception):
+                        print(f"WARNING: Failed to fetch news for {ticker}: {result}")
+                        failed_tickers.append(ticker)
+                        continue
 
-                    # Collect articles from successful fetches
-                    for ticker, result in zip(batch, batch_results):
-                        if isinstance(result, Exception):
-                            print(f"WARNING: Failed to fetch news for {ticker}: {result}")
-                            failed_tickers.append(ticker)
-                            continue
+                    if result:
+                        all_articles.extend(result)
+                        successful_tickers.append(ticker)
+                        print(f"  {ticker}: {len(result)} articles")
+                    else:
+                        # Empty result but no exception
+                        successful_tickers.append(ticker)
+                        print(f"  {ticker}: 0 articles")
 
-                        if result:
-                            all_articles.extend(result)
-                            successful_tickers.append(ticker)
-                            print(f"  {ticker}: {len(result)} articles")
-                        else:
-                            # Empty result but no exception
-                            successful_tickers.append(ticker)
-                            print(f"  {ticker}: 0 articles")
-
-                    # Add delay between batches (200ms)
-                    if i + batch_size < len(tickers):
-                        await asyncio.sleep(0.2)
+                # Add delay between batches (200ms)
+                if i + batch_size < len(tickers):
+                    await asyncio.sleep(0.2)
 
             print(f"Total articles fetched before deduplication: {len(all_articles)}")
 
@@ -1258,6 +1328,60 @@ class NewsService:
 
             print(f"Unique articles after deduplication: {len(unique_articles)}")
             print(f"Deduplication stats: {dedup_stats}")
+
+            # Filter articles by timeframe (time-based filtering)
+            # This ensures 1W and 1M return different datasets even though we fetch 2M for both
+            from datetime import datetime, timezone, timedelta
+            now_utc = datetime.now(timezone.utc)
+            
+            # Map timeframe to days
+            timeframe_days_map = {
+                '1D': 1,
+                '1W': 7,
+                '1M': 30,
+                '3M': 90,
+                '6M': 180,
+                'YTD': None,  # Handled separately
+                '1Y': 365,
+                '5Y': 1825,
+                '10Y': 3650,
+                'MAX': None  # No filtering
+            }
+            
+            days_back = timeframe_days_map.get(sector_timeframe)
+            
+            if days_back is not None:
+                cutoff_date = now_utc - timedelta(days=days_back)
+                filtered_articles = []
+                
+                for article in unique_articles:
+                    pub_timestamp_str = article.get("publish_timestamp")
+                    pub_datetime = None
+                    
+                    if pub_timestamp_str:
+                        try:
+                            pub_datetime = datetime.fromisoformat(pub_timestamp_str)
+                            if pub_datetime.tzinfo is None:
+                                pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+                        except (ValueError, AttributeError):
+                            pass
+                    
+                    # Fallback to date if timestamp not available
+                    if pub_datetime is None:
+                        pub_date_str = article.get("publish_date")
+                        if pub_date_str:
+                            try:
+                                pub_datetime = datetime.strptime(pub_date_str, "%Y-%m-%d")
+                                pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+                            except ValueError:
+                                continue
+                    
+                    # Include article if within timeframe
+                    if pub_datetime and pub_datetime >= cutoff_date:
+                        filtered_articles.append(article)
+                
+                unique_articles = filtered_articles
+                print(f"Filtered to {len(unique_articles)} articles within {sector_timeframe} timeframe (cutoff: {cutoff_date.date()})")
 
             # Sort by date (newest first)
             unique_articles.sort(
@@ -1299,7 +1423,7 @@ class NewsService:
                 'unique_articles': total_unique,
                 'deduplication_rate': round(dedup_rate, 2),
                 'articles': limited_articles,
-                'timeframe': timeframe,
+                'timeframe': sector_timeframe,  # Return capped timeframe, not original
                 'cached': False,  # Will be True if returned from cache
                 'metadata': dedup_stats,
                 # Sector sentiment metrics (NEW)

@@ -13,6 +13,8 @@ export const useDailySentiment = (ticker, timeframe = '7D') => {
   const [error, setError] = useState(null);
 
   // Map timeframe to number of days
+  // Note: This mapping is kept for reference but not used in API call
+  // The backend handles timeframe-to-days conversion internally
   const getDaysFromTimeframe = (tf) => {
     const map = {
       '1D': 1,
@@ -23,6 +25,8 @@ export const useDailySentiment = (ticker, timeframe = '7D') => {
       'YTD': 365, // Will be calculated on backend
       '1Y': 365,
       '5Y': 1825, // 5 years
+      '10Y': 3650, // 10 years
+      'MAX': 7300, // ~20 years
       '7D': 7  // Fallback for legacy usage
     };
     return map[tf] || 7;
@@ -34,8 +38,9 @@ export const useDailySentiment = (ticker, timeframe = '7D') => {
         setLoading(true);
         setError(null);
 
-        const days = getDaysFromTimeframe(timeframe);
-        const response = await fetch(`/api/daily-sentiment?ticker=${ticker}&days=${days}`);
+        // Pass timeframe parameter to backend for proper news fetching
+        // Backend will use timeframe to fetch appropriate amount of historical news
+        const response = await fetch(`/api/daily-sentiment?ticker=${ticker}&timeframe=${timeframe}`);
         const data = await response.json();
 
         setDailySentiment(data.daily || {});

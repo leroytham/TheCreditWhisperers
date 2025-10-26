@@ -9,15 +9,15 @@ import React from 'react';
  * @param {Object} props
  * @param {string} props.activeTimeframe - Currently selected timeframe
  * @param {function} props.onTimeframeChange - Callback when timeframe is changed
+ * @param {Array} props.timeframes - Custom array of timeframes to display (optional)
  * @param {string} props.className - Additional CSS classes for wrapper
  */
 const TimeRangeSelector = ({
   activeTimeframe = '1W',
   onTimeframeChange,
+  timeframes = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y'],
   className = ''
 }) => {
-  const timeframes = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
-
   return (
     <div className={`flex flex-wrap gap-1 ${className}`}>
       {timeframes.map((tf) => (

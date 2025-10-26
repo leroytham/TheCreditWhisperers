@@ -753,8 +753,15 @@ class SectorSentimentService:
             daily_articles[pub_date].append(article)
 
         # Calculate sentiment for each day
+        # Get all dates within the requested days range (oldest to newest)
+        now_date = now_utc.date()
+        cutoff_date = now_date - timedelta(days=days)
+        
+        # Filter dates to only those within the range
+        valid_dates = [date for date in daily_articles.keys() if date >= cutoff_date]
+        sorted_dates = sorted(valid_dates)  # Sort oldest to newest for proper x-axis ordering
+        
         daily_results = {}
-        sorted_dates = sorted(daily_articles.keys(), reverse=True)[:days]
 
         for date in sorted_dates:
             articles_for_day = daily_articles[date]
@@ -774,16 +781,19 @@ class SectorSentimentService:
                 if mentions:
                     day_ticker_mentions.extend(mentions)
 
-                    # Calculate average sentiment score for this article from ticker mentions
+                    # Calculate average sentiment and relevance score for this article from ticker mentions
                     article_sentiment = 0.0
+                    article_relevance = 0.0
                     if mentions:
                         article_sentiment = sum(m["sentiment_score"] for m in mentions) / len(mentions)
+                        article_relevance = sum(m["relevance_score"] for m in mentions) / len(mentions)
 
                     headlines.append({
                         "title": article.get("title", ""),
                         "url": article.get("url", ""),
                         "provider": article.get("provider", ""),
                         "sentiment_score": round(article_sentiment, 4),
+                        "relevance_score": round(article_relevance, 4),
                         "link": article.get("url", "")  # Add link field for frontend compatibility
                     })
 
@@ -794,10 +804,17 @@ class SectorSentimentService:
                     self.k_slow
                 )
 
+                # Sort headlines by product of sentiment strength and relevance score
+                headlines_sorted = sorted(
+                    headlines,
+                    key=lambda x: abs(x.get("sentiment_score", 0)) * x.get("relevance_score", 0),
+                    reverse=True
+                )
+
                 daily_results[date.strftime("%Y-%m-%d")] = {
                     "score": round(score, 4) if score is not None else 0.0,
                     "count": len(day_ticker_mentions),
-                    "headlines": headlines[:10]  # Limit to 10 headlines per day
+                    "headlines": headlines_sorted  # Return all headlines (no limit)
                 }
 
         return daily_results
@@ -917,12 +934,14 @@ class SectorSentimentService:
                         pub_datetime  # Pass pre-parsed datetime for performance
                     )
 
-                    # Calculate sentiment if article has ticker mentions
+                    # Calculate sentiment and relevance if article has ticker mentions
                     article_sentiment = 0.0
+                    article_relevance = 0.0
                     if mentions:
                         window_ticker_mentions.extend(mentions)
-                        # Calculate average sentiment for this article from ticker mentions
+                        # Calculate average sentiment and relevance for this article from ticker mentions
                         article_sentiment = sum(m["sentiment_score"] for m in mentions) / len(mentions)
+                        article_relevance = sum(m["relevance_score"] for m in mentions) / len(mentions)
 
                     # Always add to headlines if in time window (regardless of ticker mentions)
                     article_url = article.get("url", "")
@@ -933,6 +952,7 @@ class SectorSentimentService:
                             "link": article_url,
                             "provider": article.get("provider", ""),
                             "sentiment_score": round(article_sentiment, 4),
+                            "relevance_score": round(article_relevance, 4),
                             "publish_date": pub_datetime.strftime("%Y-%m-%d")  # For sorting by recency
                         }
 
@@ -949,15 +969,12 @@ class SectorSentimentService:
             # Debug logging
             print(f"  Window {i}: {len(window_articles_map)} articles, {len(window_ticker_mentions)} mentions, sentiment={avg_sentiment:.4f}")
 
-            # Get top headlines sorted by recency (most recent first), then by sentiment strength
+            # Sort headlines by product of sentiment strength and relevance score
             headlines = sorted(
                 window_articles_map.values(),
-                key=lambda x: (
-                    x.get("publish_date", ""),  # Primary sort: Most recent first
-                    abs(x.get("sentiment_score", 0))  # Secondary sort: Strongest sentiment
-                ),
+                key=lambda x: abs(x.get("sentiment_score", 0)) * x.get("relevance_score", 0),
                 reverse=True
-            )[:10]
+            )  # Return all headlines (no limit)
 
             # Format label based on timeframe
             point_datetime = point_time
@@ -984,8 +1001,14 @@ class SectorSentimentService:
 
         # Reverse to show oldest to newest
         data_points.reverse()
+        
+        # Filter out data points with no volume (no news articles)
+        # This prevents showing empty/zero data for time periods with no news coverage
+        filtered_data_points = [point for point in data_points if point["volume"] > 0]
+        
+        print(f"Returning {len(filtered_data_points)} data points (filtered from {len(data_points)} total)")
 
-        return data_points
+        return filtered_data_points
 
     def analyze_sector_sentiment_with_momentum(
         self,

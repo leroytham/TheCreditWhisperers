@@ -21,6 +21,7 @@ import {
   SentimentConfidenceCard
 } from '../../../shared/components';
 import CompanyOverview from '../CompanyOverview';
+import EarningsCalendar from '../EarningsCalendar/EarningsCalendar';
 import { useRollingSentiment } from '../../hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
@@ -59,6 +60,23 @@ const PerformanceView = ({
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [showSignificantEvents, setShowSignificantEvents] = useState(true);
 
+  // Auto-switch view mode based on timeframe
+  useEffect(() => {
+    // For 1Y and 5Y: force to 'monthly' (monthly aggregation, both rolling/daily disabled)
+    if (['1Y', '5Y'].includes(sentimentTimeframe)) {
+      setViewMode('monthly');
+    }
+    // For 3M, 6M, YTD: force to 'weekly' (weekly aggregation, rolling disabled)
+    else if (['3M', '6M', 'YTD'].includes(sentimentTimeframe)) {
+      setViewMode('weekly');
+    }
+    // For 1D, 1W, 1M: default to rolling if currently on monthly/weekly
+    else if (['monthly', 'weekly'].includes(viewMode)) {
+      setViewMode('rolling');
+    }
+    // For 1D, 1W, 1M: allow both rolling and daily modes (no forced change)
+  }, [sentimentTimeframe, viewMode]);
+
   // Fetch data based on selected timeframe (only for 5Y, since 1D comes from parent)
   const {
     priceData1Y: timeframeSpecificData,
@@ -96,7 +114,7 @@ const PerformanceView = ({
   }, [priceData1Y]);
 
   // Fetch rolling sentiment data for the combined chart
-  const { data: rollingData, hasData: hasRollingData, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
+  const { data: rollingData, hasData: hasRollingData, loading: sentimentLoading, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
 
   // Filter price data based on timeframe
   // FIXED: Only depend on activePriceData and timeframe to prevent infinite loop
@@ -323,29 +341,47 @@ const PerformanceView = ({
               <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Sentiment Analysis</h3>
                 <div className="flex items-center space-x-4">
-                  <TimeRangeSelector
-                    activeTimeframe={sentimentTimeframe}
-                    onTimeframeChange={setSentimentTimeframe}
-                  />
                   <ViewModeToggle
                     activeMode={viewMode}
                     onModeChange={setViewMode}
+                    timeframe={sentimentTimeframe}
+                  />
+                  <TimeRangeSelector
+                    activeTimeframe={sentimentTimeframe}
+                    onTimeframeChange={setSentimentTimeframe}
+                    timeframes={['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y']}
                   />
                 </div>
               </div>
-              <CombinedSentimentVolumeChart
-                data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment || {}).map(([date, data]) => ({
-                  timestamp: date,
-                  label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                  volume: data.count || 0,
-                  sentiment: data.score || 0,
-                  headlines: data.headlines || []
-                }))}
-                timeframe={sentimentTimeframe}
-                viewMode={viewMode}
-                hasData={viewMode === 'rolling' ? hasRollingData : Object.keys(dailySentiment || {}).length > 0}
-                sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
-              />
+              
+              {/* Loading Overlay */}
+              {sentimentLoading ? (
+                <div className="relative" style={{ minHeight: '400px' }}>
+                  <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10 rounded-lg">
+                    <div className="text-center">
+                      <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                      <p className="text-gray-600 font-medium">Loading sentiment data...</p>
+                      <p className="text-gray-400 text-sm mt-2">Fetching {sentimentTimeframe} timeframe</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <CombinedSentimentVolumeChart
+                  data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment || {}).map(([date, data]) => ({
+                    timestamp: date,
+                    label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    volume: data.count || 0,
+                    sentiment: data.score || 0,
+                    headlines: data.headlines || []
+                  }))}
+                  timeframe={sentimentTimeframe}
+                  viewMode={viewMode}
+                  hasData={viewMode === 'rolling' ? hasRollingData : Object.keys(dailySentiment || {}).length > 0}
+                  sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
+                  exchange={exchange}
+                  ticker={ticker}
+                />
+              )}
             </div>
 
             {/* Row 2: Core Metrics (4 columns) */}
@@ -436,10 +472,7 @@ const PerformanceView = ({
         return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <SignificantEvents events={significantEvents} ticker={ticker} />
-            <div className="bg-white border border-gray-200 rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Event Timeline</h3>
-              <p className="text-gray-600">Detailed event timeline visualization coming soon...</p>
-            </div>
+            <EarningsCalendar ticker={ticker} />
           </div>
         );
 

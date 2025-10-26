@@ -163,31 +163,83 @@ async def get_earnings_transcript(ticker: str, quarter: str):
 async def get_available_earnings_quarters(ticker: str, years_back: int = 5):
     """
     API endpoint to get a list of potential earnings quarters to query.
-    
+
     Args:
         ticker: Stock ticker symbol
         years_back: Number of years to look back (default: 5, max: 15)
-    
+
     Returns:
         {
             "ticker": "IBM",
             "quarters": ["2024Q3", "2024Q2", "2024Q1", ...]
         }
-    
+
     Example: /stocks/IBM/earnings-quarters?years_back=3
     """
     try:
         # Limit years_back to reasonable range
         years_back = min(max(1, years_back), 15)
-        
+
         quarters = await earnings_service.get_available_quarters(ticker, years_back)
-        
+
         return {
             "ticker": ticker.upper(),
             "quarters": quarters,
             "count": len(quarters)
         }
-    
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stocks/{ticker}/earnings-calendar")
+async def get_earnings_calendar(ticker: str, horizon: str = "12month"):
+    """
+    API endpoint to get upcoming earnings calendar events for a given ticker.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., 'AAPL', 'IBM')
+        horizon: Time horizon for earnings events (e.g., '3month', '6month', '12month')
+
+    Returns:
+        {
+            "ticker": "AAPL",
+            "earnings_events": [
+                {
+                    "earnings_date": "2025-01-30",
+                    "fiscal_period_ending": "2024-12-31",
+                    "estimated_eps": "2.35",
+                    "reported_eps": null,
+                    "currency": "USD",
+                    "days_until": 95,
+                    "surprise": null,
+                    "surprise_percentage": null
+                }
+            ],
+            "total_events": 4,
+            "fetched_at": "2025-10-26T10:30:00"
+        }
+
+    Example: /stocks/AAPL/earnings-calendar?horizon=12month
+    """
+    try:
+        result = await earnings_service.fetch_earnings_calendar(ticker, horizon)
+
+        if "error" in result:
+            # Return 404 if no data available, 500 for other errors
+            if "not available" in result["error"].lower() or "not configured" in result["error"].lower():
+                raise HTTPException(status_code=404, detail=result["error"])
+            elif "rate limit" in result["error"].lower():
+                raise HTTPException(status_code=429, detail=result["error"])
+            elif "premium" in result["error"].lower():
+                raise HTTPException(status_code=403, detail=result["error"])
+            else:
+                raise HTTPException(status_code=500, detail=result["error"])
+
+        return result
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -377,12 +429,13 @@ async def get_sector_daily_sentiment(
 
         # Fetch aggregated news (we need a larger timeframe to get enough days)
         # For 30 days, fetch 1M of news
+        # Use higher limit (5000) to ensure full coverage for high-volume sectors
         timeframe_map = {7: "1W", 14: "2W", 30: "1M", 60: "2M", 90: "3M"}
         timeframe = timeframe_map.get(days, "1M")
 
         news_result = await news_service_instance.get_sector_news(
             sector_key=sector_key,
-            limit=1000,  # Get more articles for daily aggregation
+            limit=5000,  # Higher limit to ensure full coverage for high-volume sectors
             timeframe=timeframe
         )
 
@@ -523,11 +576,15 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/news")
-async def get_news_data(ticker: str):
+async def get_news_data(ticker: str, timeframe: str = "1Y"):
     """
     API endpoint to get recent news and sentiment for a ticker with momentum analysis.
-    Example: /api/news?ticker=AAPL
-    
+    Example: /api/news?ticker=AAPL&timeframe=1Y
+
+    Args:
+        ticker: Stock ticker symbol
+        timeframe: Time range for news data (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y) - default: 1Y
+
     Returns comprehensive sentiment data including:
     - feed: Raw Alpha Vantage feed data with all details
     - news: Formatted/simplified news articles for backward compatibility
@@ -540,8 +597,12 @@ async def get_news_data(ticker: str):
     - momentum_quality: Data quality indicator
     """
     try:
-        # Fetch news articles using the news service
-        news_articles = await news_service_instance.get_ticker_news(ticker)
+        # Fetch news articles using the timeframe-aware news service
+        news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+            ticker,
+            timeframe=timeframe,
+            trigger_progressive=True
+        )
         
         # Also fetch raw Alpha Vantage data if available
         raw_feed = []
@@ -747,9 +808,10 @@ async def get_news_sources(ticker: str):
 async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = None):
     """
     API endpoint to get daily sentiment data for a ticker.
-    Supports configurable number of days OR timeframe (e.g., '1M', '6M', 'YTD', '1Y', '5Y')
+    Supports configurable number of days OR timeframe (e.g., '1M', '6M', 'YTD', '1Y', '5Y', '10Y', 'MAX')
     Example: /api/daily-sentiment?ticker=AAPL&timeframe=6M
     Example: /api/daily-sentiment?ticker=AAPL&days=30
+    Example: /api/daily-sentiment?ticker=AAPL&timeframe=10Y
     """
     try:
         from datetime import datetime, timedelta, timezone
@@ -764,7 +826,9 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
                 '6M': 180,
                 'YTD': None,  # Will be calculated
                 '1Y': 365,
-                '5Y': 1825
+                '5Y': 1825,
+                '10Y': 3650,
+                'MAX': 7300  # ~20 years max for display purposes
             }
 
             if timeframe == 'YTD':
@@ -779,7 +843,7 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
             days = 7
 
         # Validate and cap days parameter
-        days = min(max(days, 1), 1825)  # Max 5 years
+        days = min(max(days, 1), 7300)  # Max ~20 years for display
 
         # Fetch news articles using timeframe-aware method if timeframe specified
         if timeframe:
@@ -858,14 +922,15 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
 async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
     """
     API endpoint to get rolling-window sentiment data for different timeframes.
-    Supports: 1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y
+    Supports: 1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y, 10Y, MAX
     Uses progressive background fetching to pre-load future timeframes.
 
     Supports both individual stock tickers (e.g., AAPL) and sector identifiers
     (e.g., XLK, technology, ^SP500-45, Information Technology).
 
     Example: /api/rolling-sentiment?ticker=AAPL&timeframe=1W
-    Example: /api/rolling-sentiment?ticker=XLK&timeframe=1W
+    Example: /api/rolling-sentiment?ticker=XLK&timeframe=5Y
+    Example: /api/rolling-sentiment?ticker=AAPL&timeframe=10Y
     """
     try:
         from datetime import datetime, timedelta, timezone
@@ -892,23 +957,34 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
             '6M': {'days': 180, 'interval_hours': 24, 'window_hours': 24},
             'YTD': {'days': (datetime.now(timezone.utc) - datetime(datetime.now(timezone.utc).year, 1, 1, tzinfo=timezone.utc)).days, 'interval_hours': 24, 'window_hours': 24},
             '1Y': {'days': 365, 'interval_hours': 24, 'window_hours': 24},
-            '5Y': {'days': 1825, 'interval_hours': 24, 'window_hours': 24}
+            '5Y': {'days': 1825, 'interval_hours': 24, 'window_hours': 24},
+            '10Y': {'days': 3650, 'interval_hours': 48, 'window_hours': 168},  # 48h interval, 7-day rolling window
+            'MAX': {'days': 7300, 'interval_hours': 168, 'window_hours': 720}  # Weekly interval, 30-day rolling window
         }
 
         config = timeframe_configs.get(timeframe, timeframe_configs['1W'])
 
+        # SECTOR LIMIT: For sectors, cap timeframe at 1M for exponential decay (10 half-lives = <0.1% relevance)
+        effective_timeframe = timeframe
+        if is_sector:
+            effective_timeframe = timeframe if timeframe in ['1D', '1W', '1M'] else '1M'
+            if effective_timeframe != timeframe:
+                print(f"[SECTOR OVERRIDE] Timeframe '{timeframe}' capped to '1M' for sector analysis")
+
         if is_sector:
             # SECTOR PATH: Fetch aggregated sector news and calculate rolling sentiment
-            print(f"Fetching sector rolling sentiment for: {sector_key} (timeframe: {timeframe})")
+            print(f"Fetching sector rolling sentiment for: {sector_key} (timeframe: {effective_timeframe})")
 
             # Get sector tickers
             tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
 
-            # Fetch aggregated sector news
+            # Fetch aggregated sector news with capped timeframe
+            # Use higher limit (5000) to ensure full coverage for high-volume sectors
+            # This prevents the issue where high-volume sectors get fewer days of data
             news_result = await news_service_instance.get_sector_news(
                 sector_key=sector_key,
-                limit=1000,
-                timeframe=timeframe
+                limit=5000,
+                timeframe=effective_timeframe
             )
 
             articles = news_result.get('articles', [])
@@ -917,20 +993,21 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
                 score_defs = get_score_definitions()
                 return {
                     "ticker": ticker,
-                    "timeframe": timeframe,
+                    "timeframe": effective_timeframe,
                     "data": [],
                     "has_data": False,
                     "message": "No news articles found for sector",
                     **score_defs
                 }
 
-            # Calculate rolling sector sentiment
+            # Calculate rolling sector sentiment with capped timeframe config
+            sector_config = timeframe_configs.get(effective_timeframe, timeframe_configs['1W'])
             data_points = sector_sentiment_service.calculate_rolling_sector_sentiment(
                 articles=articles,
                 sector_tickers=tickers,
-                timeframe=timeframe,
-                interval_hours=config['interval_hours'],
-                window_hours=config['window_hours']
+                timeframe=effective_timeframe,
+                interval_hours=sector_config['interval_hours'],
+                window_hours=sector_config['window_hours']
             )
 
             has_data = any(point["volume"] > 0 for point in data_points)
@@ -947,10 +1024,13 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
                 trigger_progressive=True
             )
 
+            print(f"[ROLLING SENTIMENT] Received {len(news_articles) if news_articles else 0} articles from news service")
+
             # Add score definitions to response
             score_defs = get_score_definitions()
 
             if not news_articles:
+                print(f"[ROLLING SENTIMENT] No articles found for {ticker} - returning empty response")
                 return {
                     "ticker": ticker,
                     "timeframe": timeframe,
@@ -1002,11 +1082,13 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
                 volume = len(window_articles)
                 avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
 
+                # Sort headlines by sentiment * relevance
+                # For individual stocks, relevance_score is already extracted and stored in the article
                 top_headlines = sorted(
                     window_articles,
-                    key=lambda x: abs(x.get("sentiment_score_raw", 0)),
+                    key=lambda x: abs(x.get("sentiment_score_raw", 0)) * x.get("relevance_score", 1.0),
                     reverse=True
-                )[:10]
+                )  # Return all headlines (no limit)
 
                 # Format label based on timeframe and interval
                 if timeframe == '1D':
@@ -1033,6 +1115,7 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
                         "title": h.get("title", ""),
                         "provider": h.get("provider", "Unknown"),
                         "sentiment_score": h.get("sentiment_score_raw", 0),
+                        "relevance_score": h.get("relevance_score", 1.0),
                         "link": h.get("link", "")
                     } for h in top_headlines]
                 })
@@ -1042,6 +1125,9 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
             # Check if we have sufficient data
             has_data = any(point["volume"] > 0 for point in data_points)
+
+            print(f"[ROLLING SENTIMENT] Generated {len(data_points)} data points, has_data={has_data}")
+            print(f"[ROLLING SENTIMENT] Data points with volume: {sum(1 for p in data_points if p['volume'] > 0)}")
 
             # Extract source earliest dates metadata if available
             source_earliest_dates = None
@@ -1056,7 +1142,7 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
         response_data = {
             "ticker": ticker,
-            "timeframe": timeframe,
+            "timeframe": effective_timeframe,
             "data": data_points,
             "has_data": has_data,
             **score_defs
