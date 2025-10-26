@@ -137,20 +137,27 @@ class StockDataService:
         return result
 
     @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents_v2")
-    def get_sector_top_constituents(self, sector_ticker: str) -> list[dict]:
+    def get_sector_top_constituents(self, sector_ticker: str, limit: int = 30) -> list[dict]:
         """
-        Fetches all holdings for a given S&P 500 sector ticker.
+        Fetches all holdings for a given S&P 500 sector ticker with sentiment data.
         Results are cached in Redis for SECTOR_CACHE_TTL seconds.
 
         Args:
             sector_ticker: S&P 500 sector ticker (e.g., "^SP500-45" for Tech)
+            limit: Maximum number of constituents to return (default 30, increased from 10)
 
         Returns:
-            List of dictionaries containing constituent information
+            List of dictionaries containing constituent information with sentiment scores
 
         Raises:
             ValueError: If sector ticker is invalid or unsupported
         """
+        from app.services.news_service import NewsService
+        from app.services.sentiment_service import SentimentService
+        
+        news_service = NewsService()
+        sentiment_service = SentimentService()
+        
         etf_ticker = self.sector_etf_map.get(sector_ticker)
         if not etf_ticker:
             raise ValueError(f"Invalid or unsupported sector ticker: {sector_ticker}")
@@ -178,6 +185,24 @@ class StockDataService:
                     continue
 
                 p = price_data.get(symbol, {})
+                
+                # Fetch 1M news and calculate sentiment for this ticker
+                sentiment_score = None
+                sentiment_momentum = None
+                try:
+                    news_articles = news_service.get_news_for_ticker(
+                        ticker=symbol,
+                        timeframe="1M",
+                        limit=200  # Get enough articles for 1 month
+                    )
+                    
+                    if news_articles:
+                        sentiment_analysis = sentiment_service.analyze_sentiment_with_momentum(news_articles)
+                        sentiment_score = sentiment_analysis.get("slow_score")  # Use slow score as overall sentiment
+                        sentiment_momentum = sentiment_analysis.get("sentiment_momentum")
+                except Exception as e:
+                    print(f"Error fetching sentiment for {symbol}: {e}")
+                
                 all_constituents.append({
                     "symbol": symbol,
                     "name": p.get("shortName") or h.get("holdingName"),
@@ -195,9 +220,18 @@ class StockDataService:
                     "dividendYield": p.get("dividendYield"),
                     "sector": p.get("sector"),
                     "industry": p.get("industry"),
+                    "sentimentScore": sentiment_score,
+                    "sentimentMomentum": sentiment_momentum,
                 })
 
-            return all_constituents
+            # Sort by market cap and return top N (default 30)
+            sorted_constituents = sorted(
+                all_constituents,
+                key=lambda x: x.get("marketCap") or 0,
+                reverse=True
+            )
+            
+            return sorted_constituents[:limit]
         except Exception as e:
             print(f"Error fetching constituents for {etf_ticker}: {e}")
             return []

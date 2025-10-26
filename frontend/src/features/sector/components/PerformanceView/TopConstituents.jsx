@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * TopConstituents component - displays all holdings in the sector
  */
 const TopConstituents = ({ constituents, sectorName }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'percentOfAssets', direction: 'desc' });
+
+  // Debug: Log constituent data
+  useEffect(() => {
+    if (constituents && constituents.length > 0) {
+      console.log('TopConstituents received data:', constituents);
+      console.log('First constituent:', constituents[0]);
+    }
+  }, [constituents]);
 
   if (!constituents || constituents.length === 0) {
     return (
@@ -26,9 +34,21 @@ const TopConstituents = ({ constituents, sectorName }) => {
 
   // Calculate summary statistics
   const totalMarketCap = constituents.reduce((sum, c) => sum + (c.marketCap || 0), 0);
-  const avgChange = constituents.reduce((sum, c) => sum + (c.percentChange || 0), 0) / constituents.length;
-  const gainers = constituents.filter(c => (c.percentChange || 0) > 0).length;
-  const losers = constituents.filter(c => (c.percentChange || 0) < 0).length;
+  const constituentsWithSentiment = constituents.filter(c => {
+    const score = c.sentimentScore ?? c.sentiment_score;
+    return score !== null && score !== undefined;
+  });
+  const avgSentiment = constituentsWithSentiment.length > 0
+    ? constituentsWithSentiment.reduce((sum, c) => sum + (c.sentimentScore ?? c.sentiment_score), 0) / constituentsWithSentiment.length
+    : 0;
+  const bullishCount = constituents.filter(c => {
+    const score = c.sentimentScore ?? c.sentiment_score;
+    return (score || 0) > 0.15;
+  }).length;
+  const bearishCount = constituents.filter(c => {
+    const score = c.sentimentScore ?? c.sentiment_score;
+    return (score || 0) < -0.15;
+  }).length;
 
   // Sort function
   const handleSort = (key) => {
@@ -74,15 +94,15 @@ const TopConstituents = ({ constituents, sectorName }) => {
           </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg shadow p-4">
-          <div className="text-sm text-gray-600 mb-1">Avg Change</div>
-          <div className={`text-2xl font-bold ${avgChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {avgChange >= 0 ? '+' : ''}{avgChange.toFixed(2)}%
+          <div className="text-sm text-gray-600 mb-1">Avg Sentiment</div>
+          <div className={`text-2xl font-bold ${avgSentiment >= 0.15 ? 'text-green-600' : avgSentiment >= -0.15 ? 'text-gray-600' : 'text-red-600'}`}>
+            {avgSentiment >= 0 ? '+' : ''}{avgSentiment.toFixed(3)}
           </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg shadow p-4">
-          <div className="text-sm text-gray-600 mb-1">Gainers / Losers</div>
+          <div className="text-sm text-gray-600 mb-1">Bullish / Bearish</div>
           <div className="text-2xl font-bold text-gray-900">
-            <span className="text-green-600">{gainers}</span> / <span className="text-red-600">{losers}</span>
+            <span className="text-green-600">{bullishCount}</span> / <span className="text-red-600">{bearishCount}</span>
           </div>
         </div>
       </div>
@@ -114,12 +134,6 @@ const TopConstituents = ({ constituents, sectorName }) => {
                 </th>
                 <th 
                   className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('percentChange')}
-                >
-                  Change % <SortIcon columnKey="percentChange" />
-                </th>
-                <th 
-                  className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('marketCap')}
                 >
                   Market Cap <SortIcon columnKey="marketCap" />
@@ -136,25 +150,33 @@ const TopConstituents = ({ constituents, sectorName }) => {
                 >
                   Volume <SortIcon columnKey="volume" />
                 </th>
-                <th 
-                  className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('peRatio')}
-                >
-                  P/E Ratio <SortIcon columnKey="peRatio" />
-                </th>
                 <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   52W Range
+                </th>
+                <th 
+                  className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('sentimentScore')}
+                >
+                  Sentiment Score <SortIcon columnKey="sentimentScore" />
+                </th>
+                <th 
+                  className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('sentimentMomentum')}
+                >
+                  Sentiment Momentum <SortIcon columnKey="sentimentMomentum" />
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sortedConstituents.map((c, idx) => {
-                const percentChange = c.percentChange ?? c.percent_change ?? c.change_percent;
-                const hasChange = percentChange !== null && percentChange !== undefined;
                 const percentOfAssets = c.percentOfAssets ?? c.percent_of_assets;
-                const fiftyTwoWeekRange = c.fiftyTwoWeekLow && c.fiftyTwoWeekHigh
-                  ? ((c.price - c.fiftyTwoWeekLow) / (c.fiftyTwoWeekHigh - c.fiftyTwoWeekLow)) * 100
+                const fiftyTwoWeekHigh = c.fiftyTwoWeekHigh ?? c.fifty_two_week_high;
+                const fiftyTwoWeekLow = c.fiftyTwoWeekLow ?? c.fifty_two_week_low;
+                const fiftyTwoWeekRange = fiftyTwoWeekLow && fiftyTwoWeekHigh
+                  ? ((c.price - fiftyTwoWeekLow) / (fiftyTwoWeekHigh - fiftyTwoWeekLow)) * 100
                   : null;
+                const sentimentScore = c.sentimentScore ?? c.sentiment_score;
+                const sentimentMomentum = c.sentimentMomentum ?? c.sentiment_momentum;
 
                 return (
                   <tr
@@ -182,20 +204,6 @@ const TopConstituents = ({ constituents, sectorName }) => {
                         </div>
                       )}
                     </td>
-                    <td className="py-4 px-6 text-right">
-                      {hasChange ? (
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${
-                          percentChange >= 0
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {percentChange >= 0 ? '▲' : '▼'}
-                          {Math.abs(percentChange).toFixed(2)}%
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">--</span>
-                      )}
-                    </td>
                     <td className="py-4 px-6 text-right text-gray-900">
                       {c.marketCap || c.market_cap
                         ? `$${(Number(c.marketCap || c.market_cap) / 1e9).toFixed(2)}B`
@@ -211,11 +219,6 @@ const TopConstituents = ({ constituents, sectorName }) => {
                     <td className="py-4 px-6 text-right text-gray-900">
                       {c.volume
                         ? `${(c.volume / 1e6).toFixed(2)}M`
-                        : '--'}
-                    </td>
-                    <td className="py-4 px-6 text-right text-gray-900">
-                      {c.peRatio
-                        ? c.peRatio.toFixed(2)
                         : '--'}
                     </td>
                     <td className="py-4 px-6">
@@ -234,6 +237,37 @@ const TopConstituents = ({ constituents, sectorName }) => {
                             {fiftyTwoWeekRange.toFixed(0)}%
                           </span>
                         </div>
+                      ) : (
+                        <span className="text-gray-400">--</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      {sentimentScore !== null && sentimentScore !== undefined ? (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${
+                          sentimentScore >= 0.35 ? 'bg-green-100 text-green-800' :
+                          sentimentScore >= 0.15 ? 'bg-green-50 text-green-700' :
+                          sentimentScore >= -0.15 ? 'bg-gray-100 text-gray-700' :
+                          sentimentScore >= -0.35 ? 'bg-red-50 text-red-700' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {sentimentScore >= 0 ? '+' : ''}{sentimentScore.toFixed(3)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">--</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      {sentimentMomentum !== null && sentimentMomentum !== undefined ? (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${
+                          sentimentMomentum >= 0.05 ? 'bg-green-100 text-green-800' :
+                          sentimentMomentum >= 0.01 ? 'bg-green-50 text-green-700' :
+                          sentimentMomentum >= -0.01 ? 'bg-gray-100 text-gray-700' :
+                          sentimentMomentum >= -0.05 ? 'bg-red-50 text-red-700' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {sentimentMomentum >= 0 ? '▲' : '▼'}
+                          {Math.abs(sentimentMomentum).toFixed(3)}
+                        </span>
                       ) : (
                         <span className="text-gray-400">--</span>
                       )}

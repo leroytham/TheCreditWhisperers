@@ -420,14 +420,6 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
           </div>
         );
 
-      case 'events':
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <SignificantEvents events={topEvents} sectorName={sectorName} />
-            <RelatedNews news={news} companyName={companyName} error={error} />
-          </div>
-        );
-
       default:
         return null;
     }
