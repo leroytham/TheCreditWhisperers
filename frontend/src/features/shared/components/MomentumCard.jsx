@@ -18,6 +18,7 @@ import TooltipPortal from './TooltipPortal';
  * @param {number} props.halfLifeFastHours - Fast score half-life in hours
  * @param {number} props.halfLifeSlowHours - Slow score half-life in hours
  * @param {string} props.className - Additional CSS classes
+ * @param {string} props.context - Context: 'entity' (default) or 'sector'
  */
 const MomentumCard = ({
   sentimentMomentum,
@@ -28,7 +29,8 @@ const MomentumCard = ({
   slowScore,
   halfLifeFastHours = 7,
   halfLifeSlowHours = 24,
-  className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
+  className = 'bg-white border border-gray-200 rounded-lg shadow p-6',
+  context = 'entity'
 }) => {
   // Get momentum details
   const momentumDetails = getMomentumDetails(sentimentMomentum);
@@ -45,19 +47,39 @@ const MomentumCard = ({
         {/* Tooltip explaining momentum */}
         <TooltipPortal>
           <p className="font-semibold mb-2">Sentiment Momentum</p>
-          <p className="mb-2">This metric measures the direction and speed of sentiment change.</p>
-          <p className="mb-2">It answers: <em>"Is the news sentiment getting better or worse?"</em></p>
-          <p className="mb-2">It is calculated by subtracting the "Slow" trend from the "Fast" trend:</p>
-          <ul className="list-disc pl-4 mb-2 space-y-1">
-            <li><strong>Fast ({halfLifeFastHours}h):</strong> A weighted average with a {halfLifeFastHours}-hour half-life. This reflects the most current, short-term mood.</li>
-            <li><strong>Slow ({halfLifeSlowHours}h):</strong> A weighted average with a {halfLifeSlowHours}-hour half-life. This represents the established baseline trend.</li>
-          </ul>
-          <p className="font-semibold mb-1">How to Read the Score:</p>
-          <ul className="list-disc pl-4 mb-1 space-y-1">
-            <li><strong>Positive:</strong> The "Fast" score is higher than the "Slow" score. This signals that recent news is more positive than the trend, and sentiment is improving.</li>
-            <li><strong>Negative:</strong> The "Fast" score is lower than the "Slow" score. This signals that recent news is more negative, and sentiment is worsening.</li>
-            <li><strong>Near Zero:</strong> The sentiment is stable.</li>
-          </ul>
+          {context === 'entity' ? (
+            <>
+              <p className="mb-2">This metric measures the direction and speed of sentiment change.</p>
+              <p className="mb-2">It answers: <em>"Is the news sentiment getting better or worse?"</em></p>
+              <p className="mb-2">It is calculated by subtracting the "Slow" trend from the "Fast" trend:</p>
+              <ul className="list-disc pl-4 mb-2 space-y-1">
+                <li><strong>Fast ({halfLifeFastHours}h):</strong> A weighted average with a {halfLifeFastHours}-hour half-life. This reflects the most current, short-term mood.</li>
+                <li><strong>Slow ({halfLifeSlowHours}h):</strong> A weighted average with a {halfLifeSlowHours}-hour half-life. This represents the established baseline trend.</li>
+              </ul>
+              <p className="font-semibold mb-1">How to Read the Score:</p>
+              <ul className="list-disc pl-4 mb-1 space-y-1">
+                <li><strong>Positive:</strong> The "Fast" score is higher than the "Slow" score. This signals that recent news is more positive than the trend, and sentiment is improving.</li>
+                <li><strong>Negative:</strong> The "Fast" score is lower than the "Slow" score. This signals that recent news is more negative, and sentiment is worsening.</li>
+                <li><strong>Near Zero:</strong> The sentiment is stable.</li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="mb-2">This metric measures whether sector-wide sentiment is improving or declining.</p>
+              <p className="mb-2">It answers: <em>"Is the overall sector sentiment trending up or down?"</em></p>
+              <p className="mb-2">It is calculated by comparing short-term vs. long-term sector sentiment trends:</p>
+              <ul className="list-disc pl-4 mb-2 space-y-1">
+                <li><strong>Fast ({halfLifeFastHours}h):</strong> Recent sector sentiment aggregated from all companies (short-term trend).</li>
+                <li><strong>Slow ({halfLifeSlowHours}h):</strong> Established sector baseline over a longer time period.</li>
+              </ul>
+              <p className="font-semibold mb-1">How to Read the Score:</p>
+              <ul className="list-disc pl-4 mb-1 space-y-1">
+                <li><strong>Positive:</strong> Recent sector news is more positive than the baseline. The sector sentiment is improving.</li>
+                <li><strong>Negative:</strong> Recent sector news is more negative. The sector sentiment is deteriorating.</li>
+                <li><strong>Near Zero:</strong> The sector sentiment is stable with no significant trend change.</li>
+              </ul>
+            </>
+          )}
         </TooltipPortal>
       </div>
 

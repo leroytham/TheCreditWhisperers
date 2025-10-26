@@ -232,30 +232,30 @@ const CombinedSentimentVolumeChart = ({
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm text-gray-600">Sentiment</span>
-            <span 
+            <span
               className="text-2xl font-bold"
-              style={{ color: getSentimentColor(dataPoint.sentiment) }}
+              style={{ color: getSentimentColor(dataPoint.sentiment ?? 0) }}
             >
-              {dataPoint.sentiment >= 0 ? '+' : ''}{dataPoint.sentiment.toFixed(3)}
+              {(dataPoint.sentiment ?? 0) >= 0 ? '+' : ''}{(dataPoint.sentiment ?? 0).toFixed(3)}
             </span>
           </div>
           <div className="flex justify-end">
-            <span 
+            <span
               className="text-xs font-semibold px-2 py-1 rounded"
-              style={{ 
-                backgroundColor: dataPoint.sentiment >= 0.35 ? '#d1fae5' :
-                                 dataPoint.sentiment >= 0.15 ? '#a7f3d0' :
-                                 dataPoint.sentiment >= -0.15 ? '#e5e7eb' :
-                                 dataPoint.sentiment >= -0.35 ? '#fed7aa' :
+              style={{
+                backgroundColor: (dataPoint.sentiment ?? 0) >= 0.35 ? '#d1fae5' :
+                                 (dataPoint.sentiment ?? 0) >= 0.15 ? '#a7f3d0' :
+                                 (dataPoint.sentiment ?? 0) >= -0.15 ? '#e5e7eb' :
+                                 (dataPoint.sentiment ?? 0) >= -0.35 ? '#fed7aa' :
                                  '#fecaca',
-                color: dataPoint.sentiment >= 0.35 ? '#065f46' :
-                       dataPoint.sentiment >= 0.15 ? '#047857' :
-                       dataPoint.sentiment >= -0.15 ? '#374151' :
-                       dataPoint.sentiment >= -0.35 ? '#9a3412' :
+                color: (dataPoint.sentiment ?? 0) >= 0.35 ? '#065f46' :
+                       (dataPoint.sentiment ?? 0) >= 0.15 ? '#047857' :
+                       (dataPoint.sentiment ?? 0) >= -0.15 ? '#374151' :
+                       (dataPoint.sentiment ?? 0) >= -0.35 ? '#9a3412' :
                        '#991b1b'
               }}
             >
-              {getSentimentLabel(dataPoint.sentiment)}
+              {getSentimentLabel(dataPoint.sentiment ?? 0)}
             </span>
           </div>
         </div>
@@ -264,43 +264,53 @@ const CombinedSentimentVolumeChart = ({
       {/* Headlines */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <h5 className="text-sm font-semibold text-gray-700 mb-2">
-          Top Headlines ({dataPoint.headlines.length})
+          Top Headlines ({dataPoint.headlines?.length || 0})
         </h5>
-        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-          {dataPoint.headlines.map((headline, idx) => (
-            <div key={idx} className="border-l-4 border-blue-400 pl-3 py-2 bg-white rounded-r shadow-sm">
-              <a
-                href={headline.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-gray-800 hover:text-blue-600 font-medium block mb-1 line-clamp-3 leading-tight"
-              >
-                {headline.title}
-              </a>
-              <div className="flex items-center justify-between text-xs mt-2">
-                <span className="text-gray-500 truncate mr-2">{headline.provider}</span>
-                <span 
-                  className="font-semibold px-2 py-0.5 rounded whitespace-nowrap"
-                  style={{ 
-                    backgroundColor: headline.sentiment_score >= 0.35 ? '#d1fae5' :
-                                     headline.sentiment_score >= 0.15 ? '#a7f3d0' :
-                                     headline.sentiment_score >= -0.15 ? '#e5e7eb' :
-                                     headline.sentiment_score >= -0.35 ? '#fed7aa' :
-                                     '#fecaca',
-                    color: headline.sentiment_score >= 0.35 ? '#065f46' :
-                           headline.sentiment_score >= 0.15 ? '#047857' :
-                           headline.sentiment_score >= -0.15 ? '#374151' :
-                           headline.sentiment_score >= -0.35 ? '#9a3412' :
-                           '#991b1b'
-                  }}
+
+        {dataPoint.headlines && dataPoint.headlines.length > 0 ? (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            {dataPoint.headlines.map((headline, idx) => (
+              <div key={idx} className="border-l-4 border-blue-400 pl-3 py-2 bg-white rounded-r shadow-sm">
+                <a
+                  href={headline.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-gray-800 hover:text-blue-600 font-medium block mb-1 line-clamp-3 leading-tight"
                 >
-                  {headline.sentiment_score >= 0 ? '+' : ''}
-                  {headline.sentiment_score.toFixed(2)}
-                </span>
+                  {headline.title}
+                </a>
+                <div className="flex items-center justify-between text-xs mt-2">
+                  <span className="text-gray-500 truncate mr-2">{headline.provider}</span>
+                  <span
+                    className="font-semibold px-2 py-0.5 rounded whitespace-nowrap"
+                    style={{
+                      backgroundColor: (headline.sentiment_score ?? 0) >= 0.35 ? '#d1fae5' :
+                                       (headline.sentiment_score ?? 0) >= 0.15 ? '#a7f3d0' :
+                                       (headline.sentiment_score ?? 0) >= -0.15 ? '#e5e7eb' :
+                                       (headline.sentiment_score ?? 0) >= -0.35 ? '#fed7aa' :
+                                       '#fecaca',
+                      color: (headline.sentiment_score ?? 0) >= 0.35 ? '#065f46' :
+                             (headline.sentiment_score ?? 0) >= 0.15 ? '#047857' :
+                             (headline.sentiment_score ?? 0) >= -0.15 ? '#374151' :
+                             (headline.sentiment_score ?? 0) >= -0.35 ? '#9a3412' :
+                             '#991b1b'
+                    }}
+                  >
+                    {(headline.sentiment_score ?? 0) >= 0 ? '+' : ''}
+                    {(headline.sentiment_score ?? 0).toFixed(2)}
+                  </span>
+                </div>
               </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center text-gray-400 p-6">
+              <p className="text-sm">No headlines available for this time window.</p>
+              <p className="text-xs mt-2">Sentiment score is calculated from aggregated article data.</p>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
     );

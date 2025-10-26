@@ -55,18 +55,18 @@ const SentimentConfidenceCard = ({
   return (
     <div className={className}>
       <div className="flex items-start justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Sentiment Confidence</h3>
-        {/* Tooltip explaining volatility/confidence */}
+        <h3 className="text-lg font-semibold text-gray-900">Sentiment Volatility</h3>
+        {/* Tooltip explaining volatility/disagreement */}
         <TooltipPortal>
-          <p className="font-semibold mb-2">Sentiment Confidence</p>
+          <p className="font-semibold mb-2">Sentiment Volatility</p>
           <p className="mb-2">This metric measures the volatility (or disagreement) among news articles.</p>
           <p className="mb-2">It answers: <em>"Do all the articles agree?"</em></p>
           <p className="mb-2">It is calculated using the weighted standard deviation of all article sentiment scores.</p>
-          <p className="mb-2">This can be read as an "uncertainty" or "noise" level.</p>
+          <p className="mb-2">This measures the "uncertainty" or "noise" level in the news.</p>
           <p className="font-semibold mb-1">How to Read the Score:</p>
           <ul className="list-disc pl-4 mb-1 space-y-1">
-            <li><strong>Low Score (High Confidence):</strong> A low value (e.g., &lt; 0.15) indicates a strong consensus. Most articles share a similar sentiment, making the "Overall Sentiment" score very clear.</li>
-            <li><strong>High Score (Low Confidence):</strong> A high value (e.g., &gt; 0.30) indicates conflicting news. There is a wide mix of very positive and very negative articles, which means the "Overall Sentiment" is an average of a highly polarized debate.</li>
+            <li><strong>Low Score (Low Volatility):</strong> A low value (e.g., &lt; 0.15) indicates strong consensus. Most articles share a similar sentiment, making the "Overall Sentiment" score very reliable.</li>
+            <li><strong>High Score (High Volatility):</strong> A high value (e.g., &gt; 0.30) indicates conflicting news. There is a wide mix of very positive and very negative articles, which means the "Overall Sentiment" is an average of a highly polarized debate.</li>
           </ul>
         </TooltipPortal>
       </div>
@@ -80,7 +80,7 @@ const SentimentConfidenceCard = ({
                 <strong>Insufficient Data</strong>
               </p>
               <p className="text-xs text-yellow-700 mt-1">
-                No recent news with sufficient relevance to calculate confidence metrics.
+                No recent news with sufficient relevance to calculate volatility metrics.
               </p>
             </div>
           </div>

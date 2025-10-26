@@ -17,6 +17,7 @@ import TooltipPortal from './TooltipPortal';
  * @param {string} props.zScoreQuality - Quality indicator
  * @param {number} props.currentScore - Current slow score (for comparison)
  * @param {string} props.className - Additional CSS classes
+ * @param {string} props.context - Context: 'entity' (default) or 'sector'
  */
 const SentimentShockCard = ({
   sentimentZScore,
@@ -26,7 +27,8 @@ const SentimentShockCard = ({
   zScoreDaysOfHistory = 0,
   zScoreQuality,
   currentScore,
-  className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
+  className = 'bg-white border border-gray-200 rounded-lg shadow p-6',
+  context = 'entity'
 }) => {
   // Determine if data is insufficient
   const isInsufficientData = zScoreQuality === 'no_data' || zScoreQuality === 'insufficient_history';
@@ -103,7 +105,9 @@ const SentimentShockCard = ({
 
   // Generate contextual explanation
   const generateExplanation = () => {
-    if (!sentimentZScore || !zScoreHistoricalMean || currentScore === null || currentScore === undefined) return null;
+    if (!sentimentZScore || 
+        zScoreHistoricalMean === null || zScoreHistoricalMean === undefined ||
+        currentScore === null || currentScore === undefined) return null;
 
     const diff = currentScore - zScoreHistoricalMean;
     const diffPercent = ((diff / Math.abs(zScoreHistoricalMean)) * 100).toFixed(0);
@@ -121,22 +125,41 @@ const SentimentShockCard = ({
         {/* Tooltip explaining Z-Score */}
         <TooltipPortal>
           <p className="font-semibold mb-2">Sentiment Shock</p>
-          <p className="mb-2">This metric measures how statistically unusual the current sentiment is compared to its recent history.</p>
-          <p className="mb-2">It answers the question: <em>"Is this sentiment normal, or is it an extreme, newsworthy event?"</em></p>
-
-          <p className="font-semibold mb-1">How it's Calculated:</p>
-          <p className="mb-2">It is a Z-Score that measures how many standard deviations the "Current Sentiment" is from its "15-Day Average."</p>
-          <p className="font-mono text-[11px] bg-gray-800 p-2 rounded mb-2">
-            Z-Score = (Current Sentiment - 15-Day Average) / Historical Volatility (Std. Dev.)
-          </p>
-
-          <p className="font-semibold mb-1">Why it's Important:</p>
-          <p className="mb-2">A raw sentiment score of +0.15 might be a massive shock for one stable stock but completely normal for another. This metric provides that context.</p>
-          <ul className="list-disc pl-4 space-y-1">
-            <li><strong>Score Near Zero (e.g., -1.0σ to +1.0σ):</strong> This is a "Normal Range." The current sentiment is within its typical, expected boundaries.</li>
-            <li><strong>High Positive Score (e.g., &gt; +2.0σ):</strong> This is an "Extreme Positive Shock." The sentiment is significantly more positive than its 15-day norm. This could signal a major positive event or a new trend.</li>
-            <li><strong>High Negative Score (e.g., &lt; -2.0σ):</strong> This is an "Extreme Negative Shock," signaling a statistically significant drop in sentiment.</li>
-          </ul>
+          {context === 'entity' ? (
+            <>
+              <p className="mb-2">This metric measures how statistically unusual the current sentiment is compared to its recent history.</p>
+              <p className="mb-2">It answers the question: <em>"Is this sentiment normal, or is it an extreme, newsworthy event?"</em></p>
+              <p className="font-semibold mb-1">How it's Calculated:</p>
+              <p className="mb-2">It is a Z-Score that measures how many standard deviations the "Current Sentiment" is from its "15-Day Average."</p>
+              <p className="font-mono text-[11px] bg-gray-800 p-2 rounded mb-2">
+                Z-Score = (Current Sentiment - 15-Day Average) / Historical Volatility (Std. Dev.)
+              </p>
+              <p className="font-semibold mb-1">Why it's Important:</p>
+              <p className="mb-2">A raw sentiment score of +0.15 might be a massive shock for one stable stock but completely normal for another. This metric provides that context.</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong>Score Near Zero (e.g., -1.0σ to +1.0σ):</strong> This is a "Normal Range." The current sentiment is within its typical, expected boundaries.</li>
+                <li><strong>High Positive Score (e.g., &gt; +2.0σ):</strong> This is an "Extreme Positive Shock." The sentiment is significantly more positive than its 15-day norm. This could signal a major positive event or a new trend.</li>
+                <li><strong>High Negative Score (e.g., &lt; -2.0σ):</strong> This is an "Extreme Negative Shock," signaling a statistically significant drop in sentiment.</li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="mb-2">This metric measures how unusual the current sector sentiment is compared to its historical baseline.</p>
+              <p className="mb-2">It answers: <em>"Is this sector experiencing a sentiment shock, or is this normal volatility?"</em></p>
+              <p className="font-semibold mb-1">How it's Calculated:</p>
+              <p className="mb-2">It's a Z-Score measuring how many standard deviations the current sector sentiment deviates from its 15-day average.</p>
+              <p className="font-mono text-[11px] bg-gray-800 p-2 rounded mb-2">
+                Z-Score = (Current Sector Sentiment - 15-Day Average) / Historical Std. Dev.
+              </p>
+              <p className="font-semibold mb-1">Why it's Important for Sectors:</p>
+              <p className="mb-2">Sectors have different baseline volatility. Technology might swing ±0.3 normally, while utilities stay stable. This normalizes for that.</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong>Normal Range (-1.0σ to +1.0σ):</strong> The sector sentiment is within expected bounds.</li>
+                <li><strong>Extreme Positive (&gt; +2.0σ):</strong> The sector is experiencing unusually positive sentiment—possible sector-wide catalyst or trend shift.</li>
+                <li><strong>Extreme Negative (&lt; -2.0σ):</strong> The sector is facing unusual negative sentiment—possible sector-wide risk event or regulatory concerns.</li>
+              </ul>
+            </>
+          )}
         </TooltipPortal>
       </div>
 
@@ -209,7 +232,8 @@ const SentimentShockCard = ({
             </div>
 
             {/* Visual Comparison */}
-            {currentScore !== null && zScoreHistoricalMean !== null && (
+            {currentScore !== null && currentScore !== undefined && 
+             zScoreHistoricalMean !== null && zScoreHistoricalMean !== undefined && (
               <div className="relative pt-2">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
                   <span>Bearish</span>
@@ -251,7 +275,7 @@ const SentimentShockCard = ({
           </div>
 
           {/* Severity Indicator for Extreme Cases */}
-          {sentimentZScore !== null && Math.abs(sentimentZScore) > 2.0 && (
+          {sentimentZScore !== null && sentimentZScore !== undefined && Math.abs(sentimentZScore) > 2.0 && (
             <>
               <div className="border-t border-gray-200"></div>
               <div className="bg-red-50 border border-red-200 rounded-md p-3">

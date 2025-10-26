@@ -14,11 +14,19 @@ import { BarChart3, AlertTriangle, CheckCircle, Info } from 'lucide-react';
  * @param {string} props.className - Additional CSS classes
  */
 const SourceConcentrationCard = ({
-  sourceConcentrationHhi,
-  concentrationInterpretation,
-  topSources = [],
+  sourceConcentrationHhi: sourceConcentrationHhiProp,
+  source_concentration_hhi,
+  concentrationInterpretation: concentrationInterpretationProp,
+  concentration_interpretation,
+  topSources: topSourcesProp,
+  top_sources,
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
 }) => {
+  // Support both camelCase and snake_case prop names
+  const sourceConcentrationHhi = sourceConcentrationHhiProp ?? source_concentration_hhi;
+  const concentrationInterpretation = concentrationInterpretationProp ?? concentration_interpretation;
+  const topSources = topSourcesProp ?? top_sources ?? [];
+
   // Determine if data is available
   const hasData = sourceConcentrationHhi !== null && 
                   sourceConcentrationHhi !== undefined && 

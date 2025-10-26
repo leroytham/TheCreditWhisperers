@@ -20,7 +20,15 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
         setError(null);
 
         const response = await fetch(`/api/rolling-sentiment?ticker=${ticker}&timeframe=${timeframe}`);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Rolling sentiment API error (${response.status}):`, errorText);
+          throw new Error(`Failed to fetch rolling sentiment: ${response.status} ${response.statusText}`);
+        }
+
         const result = await response.json();
+        console.log('[useRollingSentiment] Response:', result);
 
         setData(result.data || []);
         setHasData(result.has_data !== false);

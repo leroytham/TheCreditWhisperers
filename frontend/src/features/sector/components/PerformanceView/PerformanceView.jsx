@@ -22,7 +22,8 @@ import {
   SentimentBreadthCard,
   SentimentShockCard,
   SourceConcentrationCard,
-  SentimentByTopicCard
+  SentimentByTopicCard,
+  TickerCoverageCard
 } from '../../../shared/components';
 import { formatFullTimestamp } from '../../../shared/utils/formatters';
 import PerformanceHeader from './PerformanceHeader';
@@ -50,7 +51,6 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
   const {
     priceData1Y,
     news,
-    sentimentAvg,
     dailySentiment,
     topConstituents,
     topEvents,
@@ -59,17 +59,9 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     loading,
     error,
     lastFetched,
-    // Momentum fields
-    sentiment_momentum,
-    fast_score,
-    slow_score,
-    momentum_label,
-    momentum_interpretation,
-    momentum_quality,
-    half_life_fast_hours,
-    half_life_slow_hours,
-    data_quality
-  } = useSectorData(ticker, timeframe);
+    sentiment,
+    newsAggregationMetadata
+  } = useSectorData(ticker, timeframe, sector);
 
   // Fetch rolling sentiment data for the combined chart
   const { data: rollingData, hasData: hasRollingData, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
@@ -148,9 +140,9 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               {/* Sentiment Score Card - Row 1, Col 2 */}
               <div className="lg:col-start-2 lg:row-start-1 h-full">
                 <SentimentScoreCard
-                  sentimentAvg={sentimentAvg}
-                  newsCount={news?.length || 0}
-                  dataQuality={data_quality}
+                  sentimentAvg={sentiment?.avg}
+                  newsCount={sentiment?.total_articles_analyzed || news?.length || 0}
+                  dataQuality={sentiment?.data_quality}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full"
                 />
               </div>
@@ -294,24 +286,87 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               />
             </div>
 
-            {/* Row 2: Core Metrics (2 columns for sector, using same grid as entity) */}
+            {/* Row 2: Core Metrics (4 columns) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               <SentimentScoreCard
-                sentimentAvg={sentimentAvg}
-                newsCount={news?.length || 0}
-                dataQuality={data_quality}
+                sentimentAvg={sentiment?.avg}
+                newsCount={sentiment?.total_articles_analyzed || news?.length || 0}
+                dataQuality={sentiment?.data_quality}
+                context="sector"
               />
               <MomentumCard
-                sentimentMomentum={sentiment_momentum}
-                momentumLabel={momentum_label}
-                momentumInterpretation={momentum_interpretation}
-                momentumQuality={momentum_quality}
-                fastScore={fast_score}
-                slowScore={slow_score}
-                halfLifeFastHours={half_life_fast_hours}
-                halfLifeSlowHours={half_life_slow_hours}
+                sentimentMomentum={sentiment?.momentum}
+                momentumLabel={sentiment?.momentum_label}
+                momentumInterpretation={sentiment?.momentum_interpretation}
+                momentumQuality={sentiment?.momentum_quality}
+                fastScore={sentiment?.fast_score}
+                slowScore={sentiment?.slow_score}
+                halfLifeFastHours={sentiment?.half_life_fast_hours}
+                halfLifeSlowHours={sentiment?.half_life_slow_hours}
+                context="sector"
+              />
+              <NewsCoverageCard
+                effectiveNewsVolume={sentiment?.effective_news_volume}
+                volumeInterpretation={sentiment?.volume_interpretation}
+                dataQuality={sentiment?.data_quality}
+                context="sector"
+              />
+              <SentimentConfidenceCard
+                sentimentVolatility={sentiment?.sentiment_volatility}
+                volatilityQuality={sentiment?.volatility_quality}
+                dataQuality={sentiment?.data_quality}
+                context="sector"
               />
             </div>
+
+            {/* Row 3: Advanced Analytics (2 columns) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SentimentBreadthCard
+                sentimentBreadthScore={sentiment?.breadth_score}
+                numBullishArticles={sentiment?.num_bullish_mentions || 0}
+                numBearishArticles={sentiment?.num_bearish_mentions || 0}
+                totalDirectionalArticles={(sentiment?.num_bullish_mentions || 0) + (sentiment?.num_bearish_mentions || 0)}
+                breadthInterpretation={sentiment?.breadth_interpretation}
+                breadthQuality={sentiment?.data_quality}
+                avgScore={sentiment?.avg}
+                context="sector"
+              />
+              <SentimentShockCard
+                sentimentZScore={sentiment?.z_score}
+                zScoreInterpretation={sentiment?.z_score_interpretation}
+                zScoreHistoricalMean={sentiment?.z_score_historical_mean}
+                zScoreHistoricalStd={sentiment?.z_score_historical_std}
+                zScoreDaysOfHistory={sentiment?.z_score_days_of_history}
+                zScoreQuality={sentiment?.z_score_quality}
+                currentScore={sentiment?.slow_score}
+                context="sector"
+              />
+            </div>
+
+            {/* Row 4: Source & Topic Analysis (2 columns) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SourceConcentrationCard
+                sourceConcentrationHhi={sentiment?.source_concentration_hhi}
+                concentrationInterpretation={sentiment?.concentration_interpretation}
+                topSources={sentiment?.top_sources || []}
+                context="sector"
+              />
+              <SentimentByTopicCard
+                dominantTopic={sentiment?.dominant_topic}
+                dominantTopicWeight={sentiment?.dominant_topic_weight}
+                dominantTopicPercentage={sentiment?.dominant_topic_percentage}
+                topicCount={sentiment?.topic_count}
+                sentimentByTopic={sentiment?.sentiment_by_topic}
+                topicWeights={sentiment?.topic_weights}
+                context="sector"
+              />
+            </div>
+
+            {/* Row 5: Ticker Coverage (Full Width) */}
+            <TickerCoverageCard
+              tickerCoverage={sentiment?.ticker_coverage}
+              totalTickers={newsAggregationMetadata?.total_tickers}
+            />
           </div>
         );
 
@@ -321,6 +376,67 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
       case 'news':
         return (
           <div className="grid grid-cols-1 gap-8">
+            {/* Aggregated News Metadata Banner */}
+            {newsAggregationMetadata && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <h3 className="text-sm font-medium text-blue-800">
+                      Aggregated Sector News
+                    </h3>
+                    <div className="mt-2 text-sm text-blue-700">
+                      <p>
+                        Showing <strong>{newsAggregationMetadata.unique_articles}</strong> unique articles
+                        from <strong>{newsAggregationMetadata.total_tickers}</strong> companies in {newsAggregationMetadata.sector_name}
+                      </p>
+                      <p className="mt-1">
+                        <span className="text-xs text-blue-600">
+                          {newsAggregationMetadata.total_articles_fetched} total articles fetched
+                          ({newsAggregationMetadata.deduplication_rate}% duplicates removed)
+                        </span>
+                      </p>
+                      {newsAggregationMetadata.total_market_weight_coverage && (
+                        <p className="mt-1">
+                          <span className="text-xs text-blue-600">
+                            Market weight coverage: <strong>{(newsAggregationMetadata.total_market_weight_coverage * 100).toFixed(1)}%</strong>
+                            {' '}• Success rate: <strong>{newsAggregationMetadata.success_rate}%</strong>
+                          </span>
+                        </p>
+                      )}
+                      {sentiment?.breadth_score !== null && sentiment?.breadth_score !== undefined && (
+                        <p className="mt-2 pt-2 border-t border-blue-200">
+                          <span className="text-xs text-blue-800 font-medium">
+                            Sector Sentiment: <strong className={sentiment.breadth_score > 0.2 ? 'text-green-700' : sentiment.breadth_score < -0.2 ? 'text-red-700' : 'text-gray-700'}>
+                              {sentiment.breadth_interpretation || `Score: ${sentiment.breadth_score.toFixed(2)}`}
+                            </strong>
+                          </span>
+                          {sentiment?.ticker_coverage && sentiment.ticker_coverage.coverage_percentage && (
+                            <span className="text-xs text-blue-600 ml-2">
+                              • Coverage: {sentiment.ticker_coverage.coverage_percentage}% of sector tickers
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-800">
+                          View source companies ({newsAggregationMetadata.total_tickers})
+                        </summary>
+                        <div className="mt-2 p-2 bg-white rounded border border-blue-100">
+                          <p className="text-xs text-gray-700 font-mono">
+                            {newsAggregationMetadata.tickers_queried.join(', ')}
+                          </p>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <RelatedNews
                 news={news}
                 displayName={companyName}

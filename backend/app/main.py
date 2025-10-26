@@ -5,10 +5,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api import routes as api_routes
 from .api.websocket import websocket_endpoint
 import logging
+import warnings
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Suppress resource_tracker warnings from loky (used by sentence-transformers, torch)
+# These semaphore objects are properly cleaned up by the OS, but loky's tracker
+# complains about them during shutdown. This is a known issue with loky.
+warnings.filterwarnings("ignore", category=UserWarning, module="multiprocessing.resource_tracker")
+
+# Configure loky to use fewer resources (reduces semaphore usage)
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", "2")
 
 # VVV THIS IS THE LINE THE ERROR IS ABOUT VVV
 # Ensure this line exists and the variable is named 'app'.
@@ -52,3 +62,26 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "websocket_endpoint": "/ws/notifications/{client_id}"}
+
+# Cleanup handler for multiprocessing resources
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Clean up multiprocessing resources on application shutdown.
+    This helps prevent resource_tracker warnings from loky.
+    """
+    logger.info("Shutting down application and cleaning up resources...")
+
+    # Force cleanup of any remaining loky executors
+    try:
+        from loky import get_reusable_executor
+        executor = get_reusable_executor(max_workers=None)
+        executor.shutdown(wait=True, kill_workers=True)
+        logger.info("Successfully cleaned up loky executor")
+    except ImportError:
+        # loky not installed or not used
+        pass
+    except Exception as e:
+        logger.warning(f"Error during loky cleanup: {e}")
+
+    logger.info("Shutdown complete")

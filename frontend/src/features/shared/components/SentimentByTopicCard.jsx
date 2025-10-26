@@ -17,14 +17,28 @@ import { Tag, TrendingUp, TrendingDown, Minus } from 'lucide-react';
  * @param {string} props.className - Additional CSS classes
  */
 const SentimentByTopicCard = ({
-  dominantTopic,
-  dominantTopicWeight,
-  dominantTopicPercentage,
-  topicCount = 0,
-  sentimentByTopic = {},
-  topicWeights = {},
+  dominantTopic: dominantTopicProp,
+  dominant_topic,
+  dominantTopicWeight: dominantTopicWeightProp,
+  dominant_topic_weight,
+  dominantTopicPercentage: dominantTopicPercentageProp,
+  dominant_topic_percentage,
+  topicCount: topicCountProp,
+  topic_count,
+  sentimentByTopic: sentimentByTopicProp,
+  sentiment_by_topic,
+  topicWeights: topicWeightsProp,
+  topic_weights,
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
 }) => {
+  // Support both camelCase and snake_case prop names
+  const dominantTopic = dominantTopicProp ?? dominant_topic;
+  const dominantTopicWeight = dominantTopicWeightProp ?? dominant_topic_weight;
+  const dominantTopicPercentage = dominantTopicPercentageProp ?? dominant_topic_percentage;
+  const topicCount = topicCountProp ?? topic_count ?? 0;
+  const sentimentByTopic = sentimentByTopicProp ?? sentiment_by_topic ?? {};
+  const topicWeights = topicWeightsProp ?? topic_weights ?? {};
+
   // Check if we have data
   const hasData = dominantTopic || (topicCount > 0 && Object.keys(sentimentByTopic).length > 0);
 

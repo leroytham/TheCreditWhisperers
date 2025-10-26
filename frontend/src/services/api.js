@@ -17,7 +17,7 @@ import {
  */
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 seconds
+  timeout: 60000, // 60 seconds (increased for sector news aggregation)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -212,6 +212,12 @@ const apiService = {
   // Sector endpoints
   getSectorConstituents: (sectorTicker) =>
     api.get(`/sectors/${encodeURIComponent(sectorTicker)}/top-constituents`),
+
+  getSectorAggregatedNews: (sectorIdentifier, params = {}) =>
+    api.get(`/sectors/${encodeURIComponent(sectorIdentifier)}/aggregated-news`, { params }),
+
+  getSectorDailySentiment: (sectorIdentifier, days = 30) =>
+    api.get(`/sectors/${encodeURIComponent(sectorIdentifier)}/daily-sentiment`, { params: { days } }),
 
   // Search
   searchTicker: (query) =>

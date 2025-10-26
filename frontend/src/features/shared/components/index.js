@@ -33,6 +33,7 @@ export { default as SentimentBreadthCard } from './SentimentBreadthCard';
 export { default as SentimentShockCard } from './SentimentShockCard';
 export { default as SourceConcentrationCard } from './SourceConcentrationCard';
 export { default as SentimentByTopicCard } from './SentimentByTopicCard';
+export { default as TickerCoverageCard } from './TickerCoverageCard';
 
 // Modular sentiment components (reorganization)
 export { default as SentimentScoreCard } from './SentimentScoreCard';

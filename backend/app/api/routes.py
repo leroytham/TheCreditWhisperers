@@ -14,6 +14,8 @@ from app.services.news_service import news_service_instance
 from app.services.stock_data_service import stock_data_service
 from app.services.sentiment_service import sentiment_service
 from app.services.market_analysis_service import market_analysis_service
+from app.services.sector_service import sector_service_instance
+from app.services.sector_sentiment_service import sector_sentiment_service
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -129,7 +131,164 @@ def get_top_constituents_for_sector(sector_ticker: str):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
-    
+
+@router.get("/sectors/{sector_identifier}/aggregated-news")
+async def get_sector_aggregated_news(
+    sector_identifier: str,
+    limit: int = 100,
+    timeframe: str = "1W"
+):
+    """
+    API endpoint to get aggregated news for all companies in a sector.
+
+    This endpoint:
+    1. Resolves the sector identifier to a yfinance sector key
+    2. Fetches the list of constituent tickers dynamically from yfinance
+    3. Queries Alpha Vantage for news on each ticker in parallel
+    4. Deduplicates by both URL and normalized title
+    5. Returns comprehensive sector news with metadata
+
+    Args:
+        sector_identifier: Can be:
+            - S&P 500 ticker (e.g., ^SP500-45 - must be URL-encoded as %5ESP500-45)
+            - SPDR ETF ticker (e.g., XLK)
+            - Sector name (e.g., "Information Technology")
+            - yfinance sector key (e.g., "technology")
+        limit: Maximum number of unique articles to return (default: 100)
+        timeframe: Time range for news - "1D", "1W", "1M", etc. (default: "1W")
+
+    Returns:
+        {
+            "success": true,
+            "sector_key": "technology",
+            "sector_name": "Information Technology",
+            "tickers_queried": ["AAPL", "MSFT", "NVDA", ...],
+            "total_tickers": 25,
+            "total_articles_fetched": 487,
+            "unique_articles": 245,
+            "deduplication_rate": 49.69,
+            "articles": [...],
+            "timeframe": "1W",
+            "cached": true,
+            "metadata": {
+                "url_duplicates_removed": 132,
+                "title_duplicates_removed": 110,
+                "total_duplicates_removed": 242
+            }
+        }
+
+    Example:
+        /sectors/XLK/aggregated-news?limit=50&timeframe=1W
+        /sectors/%5ESP500-45/aggregated-news?limit=100
+    """
+    try:
+        # Resolve sector identifier to yfinance key
+        sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
+
+        # Fetch aggregated news
+        result = await news_service_instance.get_sector_news(
+            sector_key=sector_key,
+            limit=limit,
+            timeframe=timeframe
+        )
+
+        return {
+            "success": True,
+            **result
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"ERROR in get_sector_aggregated_news: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+
+@router.get("/sectors/{sector_identifier}/daily-sentiment")
+async def get_sector_daily_sentiment(
+    sector_identifier: str,
+    days: int = 30
+):
+    """
+    API endpoint to get daily sector-wide sentiment scores for charting.
+
+    This endpoint:
+    1. Resolves the sector identifier to a yfinance sector key
+    2. Fetches aggregated news for the sector
+    3. Groups articles by date and calculates daily sector sentiment
+    4. Returns daily sentiment data compatible with CombinedSentimentVolumeChart
+
+    Args:
+        sector_identifier: Can be:
+            - S&P 500 ticker (e.g., ^SP500-45)
+            - SPDR ETF ticker (e.g., XLK)
+            - Sector name (e.g., "Information Technology")
+            - yfinance sector key (e.g., "technology")
+        days: Number of days to include (default: 30)
+
+    Returns:
+        {
+            "success": true,
+            "sector_key": "technology",
+            "sector_name": "Information Technology",
+            "daily": {
+                "2025-10-25": {
+                    "score": 0.24,
+                    "count": 1234,
+                    "headlines": [...]
+                },
+                "2025-10-24": {...}
+            }
+        }
+
+    Example:
+        /sectors/technology/daily-sentiment?days=30
+        /sectors/XLK/daily-sentiment?days=7
+    """
+    try:
+        # Resolve sector identifier to yfinance key
+        sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
+
+        # Get sector metadata
+        sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
+
+        # Get sector tickers
+        tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
+
+        # Fetch aggregated news (we need a larger timeframe to get enough days)
+        # For 30 days, fetch 1M of news
+        timeframe_map = {7: "1W", 14: "2W", 30: "1M", 60: "2M", 90: "3M"}
+        timeframe = timeframe_map.get(days, "1M")
+
+        news_result = await news_service_instance.get_sector_news(
+            sector_key=sector_key,
+            limit=1000,  # Get more articles for daily aggregation
+            timeframe=timeframe
+        )
+
+        # Calculate daily sentiment
+        daily_sentiment = sector_sentiment_service.calculate_daily_sector_sentiment(
+            articles=news_result['articles'],
+            sector_tickers=tickers,
+            days=days
+        )
+
+        return {
+            "success": True,
+            "sector_key": sector_key,
+            "sector_name": sector_metadata['display_name'],
+            "daily": daily_sentiment
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"ERROR in get_sector_daily_sentiment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+
 @router.get("/stocks/{ticker}/significant-events")
 def get_significant_events_for_ticker(ticker: str):
     """
@@ -549,145 +708,199 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
     API endpoint to get rolling-window sentiment data for different timeframes.
     Supports: 1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y
     Uses progressive background fetching to pre-load future timeframes.
+
+    Supports both individual stock tickers (e.g., AAPL) and sector identifiers
+    (e.g., XLK, technology, ^SP500-45, Information Technology).
+
     Example: /api/rolling-sentiment?ticker=AAPL&timeframe=1W
+    Example: /api/rolling-sentiment?ticker=XLK&timeframe=1W
     """
     try:
         from datetime import datetime, timedelta, timezone
 
-        # Fetch news articles using timeframe-aware method with progressive fetching
-        news_articles = await news_service_instance.get_ticker_news_for_timeframe(
-            ticker,
-            timeframe=timeframe,
-            trigger_progressive=True
-        )
+        # Try to resolve as sector identifier first
+        is_sector = False
+        sector_key = None
 
-        # Add score definitions to response
-        score_defs = get_score_definitions()
+        try:
+            sector_key = sector_service_instance.resolve_sector_key(ticker)
+            is_sector = True
+            print(f"Resolved '{ticker}' as sector: {sector_key}")
+        except ValueError:
+            # Not a sector, treat as stock ticker
+            is_sector = False
+            print(f"Treating '{ticker}' as stock ticker")
 
-        if not news_articles:
-            return {
-                "ticker": ticker,
-                "timeframe": timeframe,
-                "data": [],
-                "message": "No news articles found",
-                **score_defs
-            }
-
-        # Analyze sentiment for all articles
-        sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
-        articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
-
-        # Determine granularity and time range based on timeframe
-        now = datetime.now(timezone.utc)
-        
         # Configure timeframe parameters for Rolling 24h Windows
-        # 1D: Hourly intervals, 24h rolling window
-        # 1W: 6-hourly intervals, 24h rolling window
-        # 1M: 12-hourly intervals, 24h rolling window
-        # 3M+: 24-hourly (daily) intervals, 24h rolling window
         timeframe_configs = {
-            '1D': {'hours': 24, 'interval_hours': 1, 'window_hours': 24},       # 24 points, hourly, 24h window
-            '1W': {'hours': 168, 'interval_hours': 6, 'window_hours': 24},      # 28 points, 6-hourly, 24h window
-            '1M': {'hours': 720, 'interval_hours': 12, 'window_hours': 24},     # 60 points, 12-hourly, 24h window
-            '3M': {'days': 90, 'interval_hours': 24, 'window_hours': 24},       # 90 points, daily, 24h window
-            '6M': {'days': 180, 'interval_hours': 24, 'window_hours': 24},      # 180 points, daily, 24h window
-            'YTD': {'days': (now - datetime(now.year, 1, 1, tzinfo=timezone.utc)).days, 'interval_hours': 24, 'window_hours': 24},
-            '1Y': {'days': 365, 'interval_hours': 24, 'window_hours': 24},      # 365 points, daily, 24h window
-            '5Y': {'days': 1825, 'interval_hours': 24, 'window_hours': 24}      # 1825 points, daily, 24h window
+            '1D': {'hours': 24, 'interval_hours': 1, 'window_hours': 24},
+            '1W': {'hours': 168, 'interval_hours': 6, 'window_hours': 24},
+            '1M': {'hours': 720, 'interval_hours': 12, 'window_hours': 24},
+            '3M': {'days': 90, 'interval_hours': 24, 'window_hours': 24},
+            '6M': {'days': 180, 'interval_hours': 24, 'window_hours': 24},
+            'YTD': {'days': (datetime.now(timezone.utc) - datetime(datetime.now(timezone.utc).year, 1, 1, tzinfo=timezone.utc)).days, 'interval_hours': 24, 'window_hours': 24},
+            '1Y': {'days': 365, 'interval_hours': 24, 'window_hours': 24},
+            '5Y': {'days': 1825, 'interval_hours': 24, 'window_hours': 24}
         }
-        
+
         config = timeframe_configs.get(timeframe, timeframe_configs['1W'])
-        data_points = []
 
-        # Calculate number of data points based on config
-        if 'days' in config:
-            num_points = config['days'] * (24 // config['interval_hours'])
+        if is_sector:
+            # SECTOR PATH: Fetch aggregated sector news and calculate rolling sentiment
+            print(f"Fetching sector rolling sentiment for: {sector_key} (timeframe: {timeframe})")
+
+            # Get sector tickers
+            tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
+
+            # Fetch aggregated sector news
+            news_result = await news_service_instance.get_sector_news(
+                sector_key=sector_key,
+                limit=1000,
+                timeframe=timeframe
+            )
+
+            articles = news_result.get('articles', [])
+
+            if not articles:
+                score_defs = get_score_definitions()
+                return {
+                    "ticker": ticker,
+                    "timeframe": timeframe,
+                    "data": [],
+                    "has_data": False,
+                    "message": "No news articles found for sector",
+                    **score_defs
+                }
+
+            # Calculate rolling sector sentiment
+            data_points = sector_sentiment_service.calculate_rolling_sector_sentiment(
+                articles=articles,
+                sector_tickers=tickers,
+                timeframe=timeframe,
+                interval_hours=config['interval_hours'],
+                window_hours=config['window_hours']
+            )
+
+            has_data = any(point["volume"] > 0 for point in data_points)
+            source_earliest_dates = None
+
         else:
-            num_points = config['hours'] // config['interval_hours']
-        
-        # Unified approach for all timeframes
-        for i in range(num_points):
-            point_time = now - timedelta(hours=i * config['interval_hours'])
-            window_start = point_time - timedelta(hours=config['window_hours'])
+            # STOCK PATH: Existing logic for individual stocks
+            print(f"Fetching stock rolling sentiment for: {ticker} (timeframe: {timeframe})")
 
-            # Find articles published within this window using exact timestamps
-            window_articles = []
-            for a in articles_with_sentiment:
-                pub_timestamp_str = a.get("publish_timestamp")
-                if pub_timestamp_str:
-                    try:
-                        pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
-                        # Ensure timezone-aware comparison
-                        if pub_timestamp.tzinfo is None:
-                            pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
-                        if window_start <= pub_timestamp <= point_time:
-                            window_articles.append(a)
-                    except Exception:
-                        # Fallback to date-based filtering if timestamp parsing fails
-                        publish_date = a.get("publish_date")
-                        if publish_date:
-                            window_start_date = window_start.date()
-                            window_end_date = point_time.date()
-                            if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
-                                window_articles.append(a)
+            # Fetch news articles using timeframe-aware method with progressive fetching
+            news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+                ticker,
+                timeframe=timeframe,
+                trigger_progressive=True
+            )
 
-            volume = len(window_articles)
-            avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
+            # Add score definitions to response
+            score_defs = get_score_definitions()
 
-            top_headlines = sorted(
-                window_articles,
-                key=lambda x: abs(x.get("sentiment_score_raw", 0)),
-                reverse=True
-            )[:10]
+            if not news_articles:
+                return {
+                    "ticker": ticker,
+                    "timeframe": timeframe,
+                    "data": [],
+                    "message": "No news articles found",
+                    **score_defs
+                }
 
-            # Format label based on timeframe and interval
-            if timeframe == '1D':
-                # Hourly: "3PM", "4PM", etc.
-                label = point_time.strftime("%-I%p")
-            elif timeframe == '1W':
-                # 6-hourly: "Mon 6PM", "Mon 12AM", etc.
-                label = point_time.strftime("%a %-I%p")
-            elif timeframe == '1M':
-                # 12-hourly: "Jan 15 12AM", "Jan 15 12PM", etc.
-                label = point_time.strftime("%b %-d %-I%p")
-            elif timeframe in ['3M', '6M']:
-                # Daily: "Jan 15", "Jan 16", etc.
-                label = point_time.strftime("%b %-d")
-            elif timeframe in ['YTD', '1Y']:
-                # Daily: "Jan 15", "Feb 1", etc.
-                label = point_time.strftime("%b %-d")
-            elif timeframe == '5Y':
-                # Daily: Show date, but could be sampled for display
-                label = point_time.strftime("%b %-d, %Y")
+            # Analyze sentiment for all articles
+            sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+            articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+            # Determine granularity and time range based on timeframe
+            now = datetime.now(timezone.utc)
+            data_points = []
+
+            # Calculate number of data points based on config
+            if 'days' in config:
+                num_points = config['days'] * (24 // config['interval_hours'])
             else:
-                label = point_time.strftime("%b %-d")
+                num_points = config['hours'] // config['interval_hours']
 
-            data_points.append({
-                "timestamp": point_time.isoformat(),
-                "label": label,
-                "volume": volume,
-                "sentiment": avg_sentiment,
-                "headlines": [{
-                    "title": h.get("title", ""),
-                    "provider": h.get("provider", "Unknown"),
-                    "sentiment_score": h.get("sentiment_score_raw", 0),
-                    "link": h.get("link", "")
-                } for h in top_headlines]
-            })
-        
-        # Reverse to show oldest to newest
-        data_points.reverse()
+            # Unified approach for all timeframes
+            for i in range(num_points):
+                point_time = now - timedelta(hours=i * config['interval_hours'])
+                window_start = point_time - timedelta(hours=config['window_hours'])
 
-        # Check if we have sufficient data
-        has_data = any(point["volume"] > 0 for point in data_points)
+                # Find articles published within this window using exact timestamps
+                window_articles = []
+                for a in articles_with_sentiment:
+                    pub_timestamp_str = a.get("publish_timestamp")
+                    if pub_timestamp_str:
+                        try:
+                            pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
+                            # Ensure timezone-aware comparison
+                            if pub_timestamp.tzinfo is None:
+                                pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
+                            if window_start <= pub_timestamp <= point_time:
+                                window_articles.append(a)
+                        except Exception:
+                            # Fallback to date-based filtering if timestamp parsing fails
+                            publish_date = a.get("publish_date")
+                            if publish_date:
+                                window_start_date = window_start.date()
+                                window_end_date = point_time.date()
+                                if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
+                                    window_articles.append(a)
 
-        # Extract source earliest dates metadata if available
-        source_earliest_dates = None
-        if articles_with_sentiment:
-            for article in articles_with_sentiment:
-                if '_source_earliest_dates' in article:
-                    source_earliest_dates = article['_source_earliest_dates']
-                    break
+                volume = len(window_articles)
+                avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
+
+                top_headlines = sorted(
+                    window_articles,
+                    key=lambda x: abs(x.get("sentiment_score_raw", 0)),
+                    reverse=True
+                )[:10]
+
+                # Format label based on timeframe and interval
+                if timeframe == '1D':
+                    label = point_time.strftime("%-I%p")
+                elif timeframe == '1W':
+                    label = point_time.strftime("%a %-I%p")
+                elif timeframe == '1M':
+                    label = point_time.strftime("%b %-d %-I%p")
+                elif timeframe in ['3M', '6M']:
+                    label = point_time.strftime("%b %-d")
+                elif timeframe in ['YTD', '1Y']:
+                    label = point_time.strftime("%b %-d")
+                elif timeframe == '5Y':
+                    label = point_time.strftime("%b %-d, %Y")
+                else:
+                    label = point_time.strftime("%b %-d")
+
+                data_points.append({
+                    "timestamp": point_time.isoformat(),
+                    "label": label,
+                    "volume": volume,
+                    "sentiment": avg_sentiment,
+                    "headlines": [{
+                        "title": h.get("title", ""),
+                        "provider": h.get("provider", "Unknown"),
+                        "sentiment_score": h.get("sentiment_score_raw", 0),
+                        "link": h.get("link", "")
+                    } for h in top_headlines]
+                })
+
+            # Reverse to show oldest to newest
+            data_points.reverse()
+
+            # Check if we have sufficient data
+            has_data = any(point["volume"] > 0 for point in data_points)
+
+            # Extract source earliest dates metadata if available
+            source_earliest_dates = None
+            if articles_with_sentiment:
+                for article in articles_with_sentiment:
+                    if '_source_earliest_dates' in article:
+                        source_earliest_dates = article['_source_earliest_dates']
+                        break
+
+        # Common return logic for both stocks and sectors
+        score_defs = get_score_definitions()
 
         response_data = {
             "ticker": ticker,

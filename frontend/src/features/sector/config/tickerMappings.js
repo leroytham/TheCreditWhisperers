@@ -40,6 +40,40 @@ export const newsTickerOverrides = {
 };
 
 /**
+ * Maps S&P 500 sector tickers to yfinance sector keys for news aggregation
+ */
+export const sectorToYfinance = {
+  '^SP500-45': 'technology',           // Information Technology
+  '^SP500-35': 'healthcare',            // Health Care
+  '^SP500-40': 'financial-services',    // Financials
+  '^SP500-20': 'industrials',           // Industrials
+  '^SP500-25': 'consumer-cyclical',     // Consumer Discretionary
+  '^SP500-30': 'consumer-defensive',    // Consumer Staples
+  '^GSPE': 'energy',                    // Energy
+  '^SP500-15': 'basic-materials',       // Materials
+  '^SP500-50': 'communication-services', // Communication Services
+  '^SP500-60': 'real-estate',           // Real Estate
+  '^SP500-55': 'utilities',             // Utilities
+};
+
+/**
+ * Maps SPDR ETF tickers to yfinance sector keys for news aggregation
+ */
+export const etfToYfinance = {
+  'XLK': 'technology',
+  'XLV': 'healthcare',
+  'XLF': 'financial-services',
+  'XLI': 'industrials',
+  'XLY': 'consumer-cyclical',
+  'XLP': 'consumer-defensive',
+  'XLE': 'energy',
+  'XLB': 'basic-materials',
+  'XLC': 'communication-services',
+  'XLRE': 'real-estate',
+  'XLU': 'utilities',
+};
+
+/**
  * Default country index tickers as fallback
  */
 export const countryDefaultTickers = {

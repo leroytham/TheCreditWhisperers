@@ -1,4 +1,4 @@
-import { sectorTickerOverrides, countryDefaultTickers, newsTickerOverrides } from '../config/tickerMappings';
+import { sectorTickerOverrides, countryDefaultTickers, newsTickerOverrides, sectorToYfinance, etfToYfinance } from '../config/tickerMappings';
 
 /**
  * Resolves the appropriate ticker for a given sector and country
@@ -43,4 +43,34 @@ export const resolveNewsTicker = (ticker) => {
  */
 export const isValidTicker = (ticker) => {
   return ticker !== null && ticker !== undefined && ticker.trim() !== '';
+};
+
+/**
+ * Resolves a yfinance sector key from a sector object or ticker
+ * @param {Object|string} sectorOrTicker - Sector object with yfinanceKey property, or ticker string
+ * @returns {string|null} yfinance sector key (e.g., 'technology', 'healthcare') or null if not found
+ */
+export const resolveYfinanceSectorKey = (sectorOrTicker) => {
+  // If it's a sector object with yfinanceKey property, use it directly
+  if (sectorOrTicker && typeof sectorOrTicker === 'object' && sectorOrTicker.yfinanceKey) {
+    return sectorOrTicker.yfinanceKey;
+  }
+
+  // If it's a string ticker, resolve from mappings
+  if (typeof sectorOrTicker === 'string') {
+    const ticker = sectorOrTicker.trim();
+
+    // Check S&P 500 sector ticker mapping
+    if (sectorToYfinance[ticker]) {
+      return sectorToYfinance[ticker];
+    }
+
+    // Check SPDR ETF ticker mapping
+    if (etfToYfinance[ticker]) {
+      return etfToYfinance[ticker];
+    }
+  }
+
+  // No yfinance key found
+  return null;
 };

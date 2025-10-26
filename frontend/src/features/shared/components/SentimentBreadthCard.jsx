@@ -17,6 +17,7 @@ import TooltipPortal from './TooltipPortal';
  * @param {string} props.breadthQuality - Quality indicator based on sample size
  * @param {number} props.avgScore - Overall weighted sentiment score (for comparison)
  * @param {string} props.className - Additional CSS classes
+ * @param {string} props.context - Context: 'entity' (default) or 'sector'
  */
 const SentimentBreadthCard = ({
   sentimentBreadthScore,
@@ -26,7 +27,8 @@ const SentimentBreadthCard = ({
   breadthInterpretation,
   breadthQuality,
   avgScore,
-  className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
+  className = 'bg-white border border-gray-200 rounded-lg shadow p-6',
+  context = 'entity'
 }) => {
   // Determine if data is insufficient
   const isInsufficientData = breadthQuality === 'insufficient_sample' || totalDirectionalArticles === 0;
@@ -103,25 +105,46 @@ const SentimentBreadthCard = ({
         {/* Tooltip explaining breadth */}
         <TooltipPortal>
           <p className="font-semibold mb-2">Sentiment Breadth</p>
-          <p className="mb-2">This metric measures the level of consensus among news articles by ignoring neutral opinions.</p>
-          <p className="mb-2">It answers the question: <em>"Of the articles that have a clear opinion, what percentage are 'Bullish' versus 'Bearish'?"</em></p>
-
-          <p className="font-semibold mb-1">How it's Calculated:</p>
-          <ul className="list-disc pl-4 mb-2 space-y-1">
-            <li>First, all "Neutral" articles (those with a sentiment score between -0.15 and +0.15) are filtered out.</li>
-            <li>It then counts the remaining "Bullish" articles and "Bearish" articles.</li>
-            <li>The final score is a ratio calculated as: <span className="font-mono text-[11px]">(Bullish - Bearish) / (Total Bullish + Bearish)</span></li>
-            <li>This gives a score from <strong>-100% (100% Bears)</strong> to <strong>+100% (100% Bulls)</strong>.</li>
-          </ul>
-
-          <p className="font-semibold mb-1">Why it's Important:</p>
-          <p className="mb-2">This is a powerful "second opinion" for the Overall Sentiment score. The Overall Sentiment is a weighted average, meaning one or two extremely negative articles can drag down the score, even if 20 other articles are only slightly positive.</p>
-          <p className="mb-1">Breadth checks for consensus:</p>
-          <ul className="list-disc pl-4 mb-2 space-y-1">
-            <li><strong>High Score (e.g., &gt; +80%):</strong> Confirms that positive sentiment is widespread and not just an outlier. This is a high-conviction signal.</li>
-            <li><strong>Low Score (e.g., near 0%):</strong> Signals a highly polarized debate (an equal number of bulls and bears).</li>
-            <li><strong>Divergence:</strong> If Overall Sentiment is positive but Breadth is negative, it warns you that the majority of articles are actually bearish, but the average is being skewed by a few very strong bullish outliers.</li>
-          </ul>
+          {context === 'entity' ? (
+            <>
+              <p className="mb-2">This metric measures the level of consensus among news articles by ignoring neutral opinions.</p>
+              <p className="mb-2">It answers the question: <em>"Of the articles that have a clear opinion, what percentage are 'Bullish' versus 'Bearish'?"</em></p>
+              <p className="font-semibold mb-1">How it's Calculated:</p>
+              <ul className="list-disc pl-4 mb-2 space-y-1">
+                <li>First, all "Neutral" articles (those with a sentiment score between -0.15 and +0.15) are filtered out.</li>
+                <li>It then counts the remaining "Bullish" articles and "Bearish" articles.</li>
+                <li>The final score is a ratio calculated as: <span className="font-mono text-[11px]">(Bullish - Bearish) / (Total Bullish + Bearish)</span></li>
+                <li>This gives a score from <strong>-100% (100% Bears)</strong> to <strong>+100% (100% Bulls)</strong>.</li>
+              </ul>
+              <p className="font-semibold mb-1">Why it's Important:</p>
+              <p className="mb-2">This is a powerful "second opinion" for the Overall Sentiment score. The Overall Sentiment is a weighted average, meaning one or two extremely negative articles can drag down the score, even if 20 other articles are only slightly positive.</p>
+              <p className="mb-1">Breadth checks for consensus:</p>
+              <ul className="list-disc pl-4 mb-2 space-y-1">
+                <li><strong>High Score (e.g., &gt; +80%):</strong> Confirms that positive sentiment is widespread and not just an outlier. This is a high-conviction signal.</li>
+                <li><strong>Low Score (e.g., near 0%):</strong> Signals a highly polarized debate (an equal number of bulls and bears).</li>
+                <li><strong>Divergence:</strong> If Overall Sentiment is positive but Breadth is negative, it warns you that the majority of articles are actually bearish, but the average is being skewed by a few very strong bullish outliers.</li>
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="mb-2">This metric measures consensus across all sector news by counting directional articles.</p>
+              <p className="mb-2">It answers: <em>"Across all companies in the sector, are more articles bullish or bearish?"</em></p>
+              <p className="font-semibold mb-1">How it's Calculated:</p>
+              <ul className="list-disc pl-4 mb-2 space-y-1">
+                <li>All neutral articles (sentiment between -0.15 and +0.15) are filtered out.</li>
+                <li>Counts remaining bullish and bearish articles across all sector companies.</li>
+                <li>The ratio is: <span className="font-mono text-[11px]">(Bullish - Bearish) / (Total Directional)</span></li>
+                <li>Ranges from <strong>-100% (All Bears)</strong> to <strong>+100% (All Bulls)</strong>.</li>
+              </ul>
+              <p className="font-semibold mb-1">Why it's Important for Sectors:</p>
+              <p className="mb-2">Sector breadth reveals whether sentiment is concentrated in a few companies or widespread across the sector.</p>
+              <ul className="list-disc pl-4 mb-2 space-y-1">
+                <li><strong>High Positive Breadth:</strong> Bullish sentiment is sector-wide, not isolated to one or two stocks.</li>
+                <li><strong>Low/Mixed Breadth:</strong> The sector is polarized—some companies face positive news while others face negative.</li>
+                <li><strong>Divergence:</strong> If weighted sentiment is positive but breadth is negative, it means a few large companies are driving sentiment while most have negative news.</li>
+              </ul>
+            </>
+          )}
         </TooltipPortal>
       </div>
 

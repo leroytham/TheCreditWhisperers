@@ -8,11 +8,19 @@ import aiohttp
 import random
 from bs4 import BeautifulSoup
 import yfinance as yf
+from typing import List, Dict, Tuple
 
 # Import your existing model classes
 from app.models import News, SentimentScore, RelevanceScore
 from app.core.cache import async_cache_result, cache_result
 from app.core.config import settings
+from app.services.sector_service import sector_service_instance
+from app.services.sector_sentiment_service import sector_sentiment_service
+from app.config.yfinance_sector_mapping import (
+    is_all_sectors_identifier,
+    get_all_yfinance_sectors,
+    get_sector_display_name
+)
 
 
 class NewsService:
@@ -67,7 +75,8 @@ class NewsService:
         ticker: str,
         time_from: str = None,
         time_to: str = None,
-        limit: int = 1000
+        limit: int = 1000,
+        preserve_all_tickers: bool = False
     ) -> list[dict]:
         """
         Fetches news from Alpha Vantage NEWS_SENTIMENT API with ticker sentiment scores.
@@ -78,6 +87,8 @@ class NewsService:
             time_from: Optional start time in format "YYYYMMDDTHHMM" (e.g., "20240101T0000")
             time_to: Optional end time in format "YYYYMMDDTHHMM" (e.g., "20240630T2359")
             limit: Maximum number of articles to return (default: 1000, max: 1000)
+            preserve_all_tickers: If True, preserves full ticker_sentiment array for multi-ticker processing.
+                                 If False, only includes sentiment for the queried ticker (default behavior).
 
         Returns:
             List of news article dictionaries with sentiment scores
@@ -130,54 +141,84 @@ class NewsService:
                     except ValueError:
                         continue
 
-                    # Extract ticker-specific sentiment score and relevance score
-                    ticker_sentiment_score = None
-                    ticker_sentiment_label = "Neutral"
-                    ticker_relevance_score = None
                     ticker_sentiments = article.get("ticker_sentiment", [])
-
-                    # Case-insensitive ticker matching
-                    for ts in ticker_sentiments:
-                        if ts.get("ticker", "").upper() == ticker.upper():
-                            # Convert string score to float
-                            score_str = ts.get("ticker_sentiment_score", "0")
-                            try:
-                                ticker_sentiment_score = float(score_str)
-                            except (ValueError, TypeError):
-                                ticker_sentiment_score = 0.0
-
-                            ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
-
-                            # Extract relevance score if available
-                            relevance_str = ts.get("relevance_score")
-                            if relevance_str is not None:
-                                try:
-                                    ticker_relevance_score = float(relevance_str)
-                                except (ValueError, TypeError):
-                                    ticker_relevance_score = None
-
-                            break
-
-                    # Skip articles without sentiment score for this ticker
-                    if ticker_sentiment_score is None:
-                        continue
 
                     # Use Alpha Vantage's summary instead of web scraping
                     body_content = article.get("summary", "")
 
-                    news_list.append({
-                        "title": article.get("title"),
-                        "link": article.get("url"),
-                        "provider": article.get("source"),
-                        "publish_date": pub_date,
-                        "publish_timestamp": pub_datetime.isoformat(),
-                        "body": body_content,
-                        "ticker_sentiment_score": ticker_sentiment_score,
-                        "ticker_sentiment_label": ticker_sentiment_label,
-                        "ticker_relevance_score": ticker_relevance_score,
-                        "image": article.get("banner_image"),
-                        "topics": article.get("topics", [])  # Extract topics array for source/topic analysis
-                    })
+                    if preserve_all_tickers:
+                        # SECTOR MODE: Preserve all ticker sentiments for multi-ticker processing
+                        # Convert all ticker sentiment scores to floats for easier processing
+                        processed_ticker_sentiments = []
+                        for ts in ticker_sentiments:
+                            try:
+                                processed_ts = {
+                                    "ticker": ts.get("ticker", ""),
+                                    "ticker_sentiment_score": float(ts.get("ticker_sentiment_score", "0")),
+                                    "ticker_sentiment_label": ts.get("ticker_sentiment_label", "Neutral"),
+                                    "relevance_score": float(ts.get("relevance_score", "0")) if ts.get("relevance_score") else 0.0
+                                }
+                                processed_ticker_sentiments.append(processed_ts)
+                            except (ValueError, TypeError):
+                                continue
+
+                        # Include article even if no ticker sentiments (will be filtered later)
+                        news_list.append({
+                            "title": article.get("title"),
+                            "link": article.get("url"),
+                            "provider": article.get("source"),
+                            "publish_date": pub_date,
+                            "publish_timestamp": pub_datetime.isoformat(),
+                            "body": body_content,
+                            "ticker_sentiment": processed_ticker_sentiments,  # Full array!
+                            "image": article.get("banner_image"),
+                            "topics": article.get("topics", [])
+                        })
+                    else:
+                        # SINGLE TICKER MODE: Extract sentiment for queried ticker only (original behavior)
+                        ticker_sentiment_score = None
+                        ticker_sentiment_label = "Neutral"
+                        ticker_relevance_score = None
+
+                        # Case-insensitive ticker matching
+                        for ts in ticker_sentiments:
+                            if ts.get("ticker", "").upper() == ticker.upper():
+                                # Convert string score to float
+                                score_str = ts.get("ticker_sentiment_score", "0")
+                                try:
+                                    ticker_sentiment_score = float(score_str)
+                                except (ValueError, TypeError):
+                                    ticker_sentiment_score = 0.0
+
+                                ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
+
+                                # Extract relevance score if available
+                                relevance_str = ts.get("relevance_score")
+                                if relevance_str is not None:
+                                    try:
+                                        ticker_relevance_score = float(relevance_str)
+                                    except (ValueError, TypeError):
+                                        ticker_relevance_score = None
+
+                                break
+
+                        # Skip articles without sentiment score for this ticker
+                        if ticker_sentiment_score is None:
+                            continue
+
+                        news_list.append({
+                            "title": article.get("title"),
+                            "link": article.get("url"),
+                            "provider": article.get("source"),
+                            "publish_date": pub_date,
+                            "publish_timestamp": pub_datetime.isoformat(),
+                            "body": body_content,
+                            "ticker_sentiment_score": ticker_sentiment_score,
+                            "ticker_sentiment_label": ticker_sentiment_label,
+                            "ticker_relevance_score": ticker_relevance_score,
+                            "image": article.get("banner_image"),
+                            "topics": article.get("topics", [])
+                        })
 
                 return news_list
 
@@ -925,6 +966,349 @@ class NewsService:
         except Exception as e:
             print(f"Error fetching news around date for {ticker}: {e}")
             return []
+
+    def _deduplicate_articles(self, articles: List[dict]) -> Tuple[List[dict], Dict[str, int]]:
+        """
+        Deduplicates articles using both URL and normalized title.
+
+        Deduplication strategy:
+        1. Primary: URL-based (exact match, case-insensitive)
+        2. Secondary: Title-based (normalized, case-insensitive, whitespace stripped)
+
+        Args:
+            articles: List of article dictionaries
+
+        Returns:
+            Tuple of (unique_articles, dedup_stats) where dedup_stats contains:
+            - url_duplicates_removed: Number of duplicates found by URL
+            - title_duplicates_removed: Number of duplicates found by title
+            - total_duplicates_removed: Total duplicates removed
+        """
+        seen_urls = set()
+        seen_titles = set()
+        unique_articles = []
+
+        url_dupes = 0
+        title_dupes = 0
+
+        for article in articles:
+            url = article.get('url', '').strip().lower()
+            title = article.get('title', '').strip().lower()
+
+            # Skip articles without both URL and title
+            if not url and not title:
+                continue
+
+            # Check URL first (primary deduplication)
+            if url and url in seen_urls:
+                url_dupes += 1
+                continue
+
+            # Check title if URL is new or missing (secondary deduplication)
+            if title and title in seen_titles:
+                title_dupes += 1
+                continue
+
+            # Article is unique - add to result and trackers
+            unique_articles.append(article)
+
+            if url:
+                seen_urls.add(url)
+            if title:
+                seen_titles.add(title)
+
+        stats = {
+            'url_duplicates_removed': url_dupes,
+            'title_duplicates_removed': title_dupes,
+            'total_duplicates_removed': url_dupes + title_dupes
+        }
+
+        return unique_articles, stats
+
+    @async_cache_result(ttl=3600)  # Cache for 60 minutes (sector news is expensive to fetch)
+    async def _get_all_sectors_news(
+        self,
+        limit: int = 100,
+        timeframe: str = "1W"
+    ) -> Dict[str, any]:
+        """
+        Aggregates news articles from ALL sectors to represent the entire market.
+
+        This method fetches news from all 11 yfinance sectors and deduplicates,
+        effectively creating a market-wide news view.
+
+        Args:
+            limit: Maximum number of unique articles to return (default: 100)
+            timeframe: Time range for news (e.g., '1D', '1W', '1M')
+
+        Returns:
+            Dictionary with same structure as get_sector_news but for all sectors
+        """
+        print(f"Fetching aggregated news for ALL SECTORS (timeframe: {timeframe})")
+
+        all_sector_keys = get_all_yfinance_sectors()
+        all_articles = []
+        all_tickers = []
+        total_articles_fetched = 0
+        sector_results = {}
+
+        # Fetch news from each sector
+        for sector_key in all_sector_keys:
+            try:
+                # Get tickers for this sector
+                tickers, _ = sector_service_instance.get_sector_tickers(sector_key, limit=10)  # Top 10 per sector
+                
+                if not tickers:
+                    print(f"WARNING: No tickers found for sector {sector_key}")
+                    continue
+
+                all_tickers.extend(tickers)
+                sector_name = get_sector_display_name(sector_key)
+                print(f"[All Sectors] Fetching {len(tickers)} tickers from {sector_name}...")
+
+                # Fetch news for these tickers
+                async with aiohttp.ClientSession() as session:
+                    await self._check_rate_limit()
+
+                    tasks = [
+                        self._fetch_alpha_vantage_news(
+                            session=session,
+                            ticker=ticker,
+                            limit=1000,
+                            preserve_all_tickers=True
+                        )
+                        for ticker in tickers
+                    ]
+
+                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    sector_article_count = 0
+                    for ticker, result in zip(tickers, batch_results):
+                        if isinstance(result, Exception):
+                            print(f"WARNING: Failed to fetch news for {ticker}: {result}")
+                            continue
+
+                        if result:
+                            all_articles.extend(result)
+                            sector_article_count += len(result)
+
+                    total_articles_fetched += sector_article_count
+                    sector_results[sector_name] = {
+                        'tickers': len(tickers),
+                        'articles': sector_article_count
+                    }
+                    print(f"[All Sectors] {sector_name}: {sector_article_count} articles")
+
+                    # Add delay between sectors
+                    await asyncio.sleep(0.3)
+
+            except Exception as e:
+                print(f"ERROR: Failed to fetch news for sector {sector_key}: {e}")
+                continue
+
+        # Deduplicate articles
+        print(f"Total articles fetched before deduplication: {len(all_articles)}")
+        unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
+        print(f"Unique articles after deduplication: {len(unique_articles)}")
+        print(f"Deduplication stats: {dedup_stats}")
+
+        # Limit articles
+        limited_articles = unique_articles[:limit]
+
+        # Calculate sector sentiment metrics (NEW)
+        print(f"Calculating market-wide sentiment metrics from {len(unique_articles)} unique articles...")
+        unique_tickers = list(set(all_tickers))
+        sentiment_metrics = sector_sentiment_service.calculate_sector_sentiment_metrics(
+            articles=unique_articles,
+            sector_tickers=unique_tickers
+        )
+        print(f"Sentiment calculation complete: slow_score={sentiment_metrics.get('slow_score'):.4f}, "
+              f"momentum={sentiment_metrics.get('sentiment_momentum'):.4f}, "
+              f"quality={sentiment_metrics.get('data_quality')}")
+
+        # Calculate rates
+        total_fetched = len(all_articles)
+        total_unique = len(unique_articles)
+        dedup_rate = ((total_fetched - total_unique) / total_fetched * 100) if total_fetched > 0 else 0.0
+
+        return {
+            'success': True,
+            'sector_key': 'all-sectors',
+            'sector_name': 'All Sectors (S&P 500)',
+            'tickers_queried': unique_tickers,
+            'total_tickers': len(unique_tickers),
+            'sectors_included': len(sector_results),
+            'sector_breakdown': sector_results,
+            'total_articles_fetched': total_fetched,
+            'unique_articles': total_unique,
+            'deduplication_rate': round(dedup_rate, 2),
+            'articles': limited_articles,
+            'timeframe': timeframe,
+            'cached': False,
+            'metadata': dedup_stats,
+            'sentiment_metrics': sentiment_metrics
+        }
+
+    async def get_sector_news(
+        self,
+        sector_key: str,
+        limit: int = 100,
+        timeframe: str = "1W"
+    ) -> Dict[str, any]:
+        """
+        Aggregates news articles for all companies in a sector.
+
+        This method:
+        1. Gets the list of constituent tickers from yfinance.Sector().top_companies
+        2. Fetches news for each ticker in parallel (batches of 10)
+        3. Deduplicates by both URL and normalized title
+        4. Returns comprehensive sector news with metadata
+
+        Args:
+            sector_key: yfinance sector key (e.g., 'technology', 'healthcare')
+            limit: Maximum number of unique articles to return (default: 100)
+            timeframe: Time range for news (e.g., '1D', '1W', '1M')
+
+        Returns:
+            Dictionary containing:
+            - sector_key: yfinance sector key
+            - sector_name: Display name of sector
+            - tickers_queried: List of tickers that were queried
+            - total_tickers: Number of tickers queried
+            - total_articles_fetched: Total articles before deduplication
+            - unique_articles: Number of unique articles after deduplication
+            - deduplication_rate: Percentage of duplicates removed
+            - articles: List of unique news articles (limited to 'limit')
+            - timeframe: Time range used
+            - cached: Whether result was from cache
+            - metadata: Deduplication statistics
+        """
+        print(f"Fetching aggregated news for sector: {sector_key} (timeframe: {timeframe})")
+
+        # Check if this is "All Sectors" request
+        if is_all_sectors_identifier(sector_key):
+            return await self._get_all_sectors_news(limit=limit, timeframe=timeframe)
+
+        try:
+            # Get sector tickers from sector service (now returns tuple)
+            tickers, market_weight_coverage = sector_service_instance.get_sector_tickers(sector_key)
+
+            if not tickers:
+                raise ValueError(f"No tickers found for sector: {sector_key}")
+
+            print(f"Found {len(tickers)} tickers for sector '{sector_key}': {tickers[:5]}...")
+            print(f"Market weight coverage: {market_weight_coverage:.2%}")
+
+            # Get sector metadata
+            sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
+
+            # Track successful and failed tickers
+            failed_tickers = []
+            successful_tickers = []
+
+            # Fetch news for all tickers in parallel (batches of 10 for rate limiting)
+            all_articles = []
+            batch_size = 10
+
+            async with aiohttp.ClientSession() as session:
+                for i in range(0, len(tickers), batch_size):
+                    batch = tickers[i:i + batch_size]
+                    print(f"Fetching batch {i//batch_size + 1}/{(len(tickers) + batch_size - 1)//batch_size}: {batch}")
+
+                    # Check rate limit before batch
+                    await self._check_rate_limit()
+
+                    # Fetch news for all tickers in batch concurrently
+                    tasks = [
+                        self._fetch_alpha_vantage_news(
+                            session=session,
+                            ticker=ticker,
+                            limit=1000,  # Get max articles per ticker
+                            preserve_all_tickers=True  # Preserve full ticker_sentiment array for multi-ticker processing
+                        )
+                        for ticker in batch
+                    ]
+
+                    batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    # Collect articles from successful fetches
+                    for ticker, result in zip(batch, batch_results):
+                        if isinstance(result, Exception):
+                            print(f"WARNING: Failed to fetch news for {ticker}: {result}")
+                            failed_tickers.append(ticker)
+                            continue
+
+                        if result:
+                            all_articles.extend(result)
+                            successful_tickers.append(ticker)
+                            print(f"  {ticker}: {len(result)} articles")
+                        else:
+                            # Empty result but no exception
+                            successful_tickers.append(ticker)
+                            print(f"  {ticker}: 0 articles")
+
+                    # Add delay between batches (200ms)
+                    if i + batch_size < len(tickers):
+                        await asyncio.sleep(0.2)
+
+            print(f"Total articles fetched before deduplication: {len(all_articles)}")
+
+            # Deduplicate articles
+            unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
+
+            print(f"Unique articles after deduplication: {len(unique_articles)}")
+            print(f"Deduplication stats: {dedup_stats}")
+
+            # Sort by date (newest first)
+            unique_articles.sort(
+                key=lambda x: x.get('publish_date', ''),
+                reverse=True
+            )
+
+            # Limit to requested count
+            limited_articles = unique_articles[:limit]
+
+            # Calculate deduplication rate
+            total_fetched = len(all_articles)
+            total_unique = len(unique_articles)
+            dedup_rate = (dedup_stats['total_duplicates_removed'] / total_fetched * 100) if total_fetched > 0 else 0
+
+            # Calculate success rate
+            success_rate = (len(successful_tickers) / len(tickers) * 100) if len(tickers) > 0 else 0
+
+            # Calculate sector-wide sentiment metrics from multi-ticker articles
+            print(f"Calculating sector sentiment metrics from {len(unique_articles)} unique articles...")
+            sentiment_metrics = sector_sentiment_service.analyze_sector_sentiment_with_momentum(
+                articles=unique_articles,
+                sector_tickers=tickers
+            )
+            print(f"Sentiment calculation complete: slow_score={sentiment_metrics.get('slow_score')}, "
+                  f"momentum={sentiment_metrics.get('sentiment_momentum')}, "
+                  f"quality={sentiment_metrics.get('data_quality')}")
+
+            return {
+                'sector_key': sector_key,
+                'sector_name': sector_metadata['display_name'],
+                'tickers_queried': tickers,
+                'total_tickers': len(tickers),
+                'successful_tickers': successful_tickers,
+                'failed_tickers': failed_tickers,
+                'success_rate': round(success_rate, 2),
+                'total_market_weight_coverage': round(market_weight_coverage, 4),
+                'total_articles_fetched': total_fetched,
+                'unique_articles': total_unique,
+                'deduplication_rate': round(dedup_rate, 2),
+                'articles': limited_articles,
+                'timeframe': timeframe,
+                'cached': False,  # Will be True if returned from cache
+                'metadata': dedup_stats,
+                # Sector sentiment metrics (NEW)
+                'sentiment_metrics': sentiment_metrics
+            }
+
+        except Exception as e:
+            print(f"ERROR: Failed to fetch sector news for '{sector_key}': {str(e)}")
+            raise ValueError(f"Failed to fetch sector news: {str(e)}")
 
 
 # Create a single, shared instance of the service that the whole app can use.

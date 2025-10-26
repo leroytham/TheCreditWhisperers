@@ -5,18 +5,18 @@
 
 export const industryData = {
   US: [
-    { name: 'All Sectors', index: 'S&P 500', ticker: '^GSPC', available: true },
-    { name: 'Communication Services', index: 'S&P 500 Communication Services', ticker: '^SP500-50', available: true },
-    { name: 'Consumer Discretionary', index: 'S&P 500 Consumer Discretionary', ticker: '^SP500-25', available: true },
-    { name: 'Consumer Staples', index: 'S&P 500 Consumer Staples', ticker: '^SP500-30', available: true },
-    { name: 'Energy', index: 'S&P 500 Energy', ticker: '^GSPE', available: true },
-    { name: 'Financials', index: 'S&P 500 Financials', ticker: '^SP500-40', available: true },
-    { name: 'Health Care', index: 'S&P 500 Health Care', ticker: '^SP500-35', available: true },
-    { name: 'Industrials', index: 'S&P 500 Industrials', ticker: '^SP500-20', available: true },
-    { name: 'Information Technology', index: 'S&P 500 Information Technology', ticker: '^SP500-45', available: true },
-    { name: 'Materials', index: 'S&P 500 Materials', ticker: '^SP500-15', available: true },
-    { name: 'Real Estate', index: 'S&P 500 Real Estate', ticker: '^SP500-60', available: true },
-    { name: 'Utilities', index: 'S&P 500 Utilities', ticker: '^SP500-55', available: true }
+    { name: 'All Sectors', index: 'S&P 500', ticker: '^GSPC', available: true, yfinanceKey: 'all-sectors' },
+    { name: 'Communication Services', index: 'S&P 500 Communication Services', ticker: '^SP500-50', available: true, yfinanceKey: 'communication-services' },
+    { name: 'Consumer Discretionary', index: 'S&P 500 Consumer Discretionary', ticker: '^SP500-25', available: true, yfinanceKey: 'consumer-cyclical' },
+    { name: 'Consumer Staples', index: 'S&P 500 Consumer Staples', ticker: '^SP500-30', available: true, yfinanceKey: 'consumer-defensive' },
+    { name: 'Energy', index: 'S&P 500 Energy', ticker: '^GSPE', available: true, yfinanceKey: 'energy' },
+    { name: 'Financials', index: 'S&P 500 Financials', ticker: '^SP500-40', available: true, yfinanceKey: 'financial-services' },
+    { name: 'Health Care', index: 'S&P 500 Health Care', ticker: '^SP500-35', available: true, yfinanceKey: 'healthcare' },
+    { name: 'Industrials', index: 'S&P 500 Industrials', ticker: '^SP500-20', available: true, yfinanceKey: 'industrials' },
+    { name: 'Information Technology', index: 'S&P 500 Information Technology', ticker: '^SP500-45', available: true, yfinanceKey: 'technology' },
+    { name: 'Materials', index: 'S&P 500 Materials', ticker: '^SP500-15', available: true, yfinanceKey: 'basic-materials' },
+    { name: 'Real Estate', index: 'S&P 500 Real Estate', ticker: '^SP500-60', available: true, yfinanceKey: 'real-estate' },
+    { name: 'Utilities', index: 'S&P 500 Utilities', ticker: '^SP500-55', available: true, yfinanceKey: 'utilities' }
   ],
   CHN: [
     { name: 'All Sectors', index: 'CSI 300', ticker: '000300.SS', available: true },
