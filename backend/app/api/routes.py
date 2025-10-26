@@ -16,6 +16,7 @@ from app.services.sentiment_service import sentiment_service
 from app.services.market_analysis_service import market_analysis_service
 from app.services.sector_service import sector_service_instance
 from app.services.sector_sentiment_service import sector_sentiment_service
+from app.services.earnings_service import earnings_service
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -108,6 +109,85 @@ async def get_stock_news_and_sentiment(ticker: str):
             **score_defs
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stocks/{ticker}/earnings-transcript")
+async def get_earnings_transcript(ticker: str, quarter: str):
+    """
+    API endpoint to get earnings call transcript for a given ticker and quarter.
+    
+    Args:
+        ticker: Stock ticker symbol (e.g., 'IBM', 'AAPL')
+        quarter: Fiscal quarter in YYYYQM format (e.g., '2024Q1', '2023Q4')
+    
+    Returns:
+        {
+            "symbol": "IBM",
+            "quarter": "2024Q1",
+            "transcript": [
+                {
+                    "speaker": "Arvind Krishna",
+                    "title": "CEO",
+                    "content": "...",
+                    "sentiment": 0.7,
+                    "word_count": 234
+                }
+            ],
+            "total_segments": 25,
+            "fetched_at": "2024-10-26T10:30:00"
+        }
+    
+    Example: /stocks/IBM/earnings-transcript?quarter=2024Q1
+    """
+    try:
+        result = await earnings_service.fetch_earnings_transcript(ticker, quarter)
+        
+        if "error" in result:
+            # Return 404 if no data available, 500 for other errors
+            if "not available" in result["error"].lower() or "invalid quarter" in result["error"].lower():
+                raise HTTPException(status_code=404, detail=result["error"])
+            else:
+                raise HTTPException(status_code=500, detail=result["error"])
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stocks/{ticker}/earnings-quarters")
+async def get_available_earnings_quarters(ticker: str, years_back: int = 5):
+    """
+    API endpoint to get a list of potential earnings quarters to query.
+    
+    Args:
+        ticker: Stock ticker symbol
+        years_back: Number of years to look back (default: 5, max: 15)
+    
+    Returns:
+        {
+            "ticker": "IBM",
+            "quarters": ["2024Q3", "2024Q2", "2024Q1", ...]
+        }
+    
+    Example: /stocks/IBM/earnings-quarters?years_back=3
+    """
+    try:
+        # Limit years_back to reasonable range
+        years_back = min(max(1, years_back), 15)
+        
+        quarters = await earnings_service.get_available_quarters(ticker, years_back)
+        
+        return {
+            "ticker": ticker.upper(),
+            "quarters": quarters,
+            "count": len(quarters)
+        }
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     

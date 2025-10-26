@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/layout/AppHeader';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
+import EarningsTranscript from '../features/entity/components/EarningsTranscript';
 import { SignificantEvents, RelatedNews } from '../features/shared/components';
 import { usePriceData } from '../features/entity/hooks/usePriceData';
 import { useNewsData } from '../features/entity/hooks/useNewsData';
@@ -80,6 +81,7 @@ const EntityPage = () => {
     { id: 'sentiment', label: 'Sentiment' },
     { id: 'news', label: 'News' },
     { id: 'events', label: 'Events' },
+    { id: 'earnings', label: 'Earnings' },
   ];
 
   // Fetch all data using custom hooks
@@ -160,25 +162,30 @@ const EntityPage = () => {
           </div>
         </section>
 
-        <PerformanceView
-          ticker={ticker}
-          companyName={companyName}
-          currency={currency}
-          exchange={exchange}
-          priceData1Y={priceData1Y}
-          priceData1D={priceData1D}
-          lastFetched={lastFetched}
-          dailySentiment={dailySentiment}
-          sentiment={sentiment}
-          news={news}
-          significantEvents={significantEvents}
-          prevClose={prevClose}
-          prevClose1D={prevClose1D}
-          activeTab={activeSubTab}
-          setActiveTab={setActiveSubTab}
-          sentimentTimeframe={sentimentTimeframe}
-          setSentimentTimeframe={setSentimentTimeframe}
-        />
+        {/* Conditional Content Based on Active Tab */}
+        {activeSubTab === 'earnings' ? (
+          <EarningsTranscript ticker={ticker} />
+        ) : (
+          <PerformanceView
+            ticker={ticker}
+            companyName={companyName}
+            currency={currency}
+            exchange={exchange}
+            priceData1Y={priceData1Y}
+            priceData1D={priceData1D}
+            lastFetched={lastFetched}
+            dailySentiment={dailySentiment}
+            sentiment={sentiment}
+            news={news}
+            significantEvents={significantEvents}
+            prevClose={prevClose}
+            prevClose1D={prevClose1D}
+            activeTab={activeSubTab}
+            setActiveTab={setActiveSubTab}
+            sentimentTimeframe={sentimentTimeframe}
+            setSentimentTimeframe={setSentimentTimeframe}
+          />
+        )}
       </main>
     </div>
   );
