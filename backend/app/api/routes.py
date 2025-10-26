@@ -463,15 +463,15 @@ async def get_sector_daily_sentiment(
 
 
 @router.get("/stocks/{ticker}/significant-events")
-def get_significant_events_for_ticker(ticker: str):
+def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
     """
     API endpoint to analyze historical data for a stock, identify the top 5
     most significant price moves, and find correlated news for those events.
-    Example: /stocks/NVDA/significant-events
+    Example: /stocks/NVDA/significant-events?timeframe=1M
     """
     try:
         # The API layer makes a single call to the service
-        events_with_news = market_analysis_service.analyze_significant_events(ticker)
+        events_with_news = market_analysis_service.analyze_significant_events(ticker, timeframe)
 
         if not events_with_news:
             return {"ticker": ticker, "message": "No significant events found matching the criteria."}

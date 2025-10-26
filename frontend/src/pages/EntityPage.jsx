@@ -38,6 +38,7 @@ const EntityPage = () => {
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
   const [activeSubTab, setActiveSubTab] = useState('overview');
   const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
+  const [priceTimeframe, setPriceTimeframe] = useState('1Y'); // Add price chart timeframe state
 
   // Session management
   useEffect(() => {
@@ -92,7 +93,7 @@ const EntityPage = () => {
 
   const { news, sentiment, apiMetadata } = useNewsData(ticker, '1Y');
   const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
-  const { significantEvents } = useSignificantEvents(ticker);
+  const { significantEvents } = useSignificantEvents(ticker, priceTimeframe); // Pass priceTimeframe
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -185,6 +186,8 @@ const EntityPage = () => {
             setActiveTab={setActiveSubTab}
             sentimentTimeframe={sentimentTimeframe}
             setSentimentTimeframe={setSentimentTimeframe}
+            priceTimeframe={priceTimeframe}
+            setPriceTimeframe={setPriceTimeframe}
           />
         )}
       </main>

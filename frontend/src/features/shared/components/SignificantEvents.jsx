@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MAX_EVENTS_DISPLAY } from '../utils/constants';
 import { TrendingUp, TrendingDown, CalendarDays, Newspaper, ChevronDown } from 'lucide-react';
 import SentimentBadge from './SentimentBadge';
+import NewsDetailModal from './NewsDetailModal';
 
 /**
  * Shared SignificantEvents Component
@@ -15,17 +16,42 @@ import SentimentBadge from './SentimentBadge';
  * @param {string} props.sectorName - Sector name for display context
  * @param {string} props.className - Additional CSS classes for wrapper
  * @param {number} props.maxEvents - Maximum number of events to display (default from constants)
+ * @param {string} props.selectedEventDate - Date of event to auto-expand (format: YYYY-MM-DD)
  */
 const SignificantEvents = ({
   events,
   ticker,
   sectorName,
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6 flex flex-col h-full',
-  maxEvents = MAX_EVENTS_DISPLAY
+  maxEvents = MAX_EVENTS_DISPLAY,
+  selectedEventDate
 }) => {
   const displayName = sectorName || ticker;
   const [expandedEvent, setExpandedEvent] = useState(0); // Default first event to be open
   const [visibleNewsCount, setVisibleNewsCount] = useState({});
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Auto-expand event when selectedEventDate changes
+  useEffect(() => {
+    if (selectedEventDate && events) {
+      const eventIndex = events.findIndex(event => event.start_date === selectedEventDate);
+      if (eventIndex !== -1) {
+        setExpandedEvent(eventIndex);
+      }
+    }
+  }, [selectedEventDate, events]);
+
+  const handleArticleClick = (article, e) => {
+    e.preventDefault();
+    setSelectedArticle(article);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedArticle(null);
+  };
 
   const handleToggleNews = (eventIndex, totalNews) => {
     const currentCount = visibleNewsCount[eventIndex] || 2;
@@ -107,21 +133,26 @@ const SignificantEvents = ({
                     <ul className="space-y-2">
                         {event.news.slice(0, newsCount).map((n, i) => (
                             <li key={i} className="group">
-                                <a
-                                  href={n.link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="block p-2 rounded-md bg-white hover:bg-gray-50 transition-colors"
+                                <button
+                                  onClick={(e) => handleArticleClick(n, e)}
+                                  className="block w-full text-left p-2 rounded-md bg-white hover:bg-gray-50 transition-colors cursor-pointer"
                                 >
                                     <p className="text-sm font-medium text-gray-800 group-hover:text-blue-600 line-clamp-2">
                                         {n.title}
                                     </p>
-                                    {n.sentiment_score !== null && n.sentiment_score !== undefined && (
-                                        <div className="mt-2">
-                                            <SentimentBadge score={n.sentiment_score} />
+                                    {(n.sentiment_score !== null && n.sentiment_score !== undefined) || (n.relevance_score !== undefined && n.relevance_score !== null && n.relevance_score > 0) ? (
+                                        <div className="mt-2 flex items-center gap-2">
+                                            {n.sentiment_score !== null && n.sentiment_score !== undefined && (
+                                                <SentimentBadge score={n.sentiment_score} />
+                                            )}
+                                            {n.relevance_score !== undefined && n.relevance_score !== null && n.relevance_score > 0 && (
+                                                <span className="font-semibold px-2 py-0.5 rounded whitespace-nowrap bg-blue-100 text-blue-800 text-xs">
+                                                    Relevance: {n.relevance_score.toFixed(2)}
+                                                </span>
+                                            )}
                                         </div>
-                                    )}
-                                </a>
+                                    ) : null}
+                                </button>
                             </li>
                         ))}
                     </ul>
@@ -139,6 +170,14 @@ const SignificantEvents = ({
           );
         })}
       </div>
+
+      {/* News Detail Modal */}
+      <NewsDetailModal
+        article={selectedArticle}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        mode="modal"
+      />
     </div>
   );
 };

@@ -182,12 +182,15 @@ class NewsService:
                             "link": article.get("url"),  # Keep for backwards compatibility
                             "source": article.get("source"),  # Normalized from 'provider' to 'source'
                             "provider": article.get("source"),  # Keep for backwards compatibility
+                            "source_domain": article.get("source_domain"),  # Add for modal
                             "time_published": time_published,  # Add for CompactNewsCard
                             "publish_date": pub_date,
                             "publish_timestamp": pub_datetime.isoformat(),
                             "summary": body_content,  # Normalized from 'body' to 'summary'
                             "body": body_content,  # Keep for backwards compatibility
                             "banner_image": article.get("banner_image"),
+                            "category_within_source": article.get("category_within_source"),  # Add for modal
+                            "authors": article.get("authors", []),  # Add for modal
                             "ticker_sentiment": processed_ticker_sentiments,  # Full array!
                             "overall_sentiment_score": overall_sentiment_score,  # Add for CompactNewsCard
                             "overall_sentiment_label": overall_sentiment_label,  # Add for CompactNewsCard

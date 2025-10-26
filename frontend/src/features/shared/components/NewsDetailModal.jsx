@@ -140,7 +140,7 @@ const NewsDetailModal = ({
         )}
 
         {/* Overall Sentiment */}
-        {article.overall_sentiment_score !== undefined && (
+        {article.overall_sentiment_score !== undefined && article.overall_sentiment_score !== null && (
           <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
             <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5" />
@@ -165,17 +165,26 @@ const NewsDetailModal = ({
               Topics & Relevance
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {article.topics.map((topic, idx) => (
-                <div
-                  key={idx}
-                  className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200"
-                >
-                  <span className="text-xs font-medium text-gray-700">{topic.topic}</span>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getRelevanceColor(parseFloat(topic.relevance_score))}`}>
-                    {(parseFloat(topic.relevance_score) * 100).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
+              {article.topics.map((topic, idx) => {
+                const relevance = parseFloat(topic.relevance_score);
+                const hasValidRelevance = !isNaN(relevance) && relevance !== null;
+                
+                return (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200"
+                  >
+                    <span className="text-xs font-medium text-gray-700">{topic.topic}</span>
+                    {hasValidRelevance ? (
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getRelevanceColor(relevance)}`}>
+                        {(relevance * 100).toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">N/A</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -198,22 +207,39 @@ const NewsDetailModal = ({
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {article.ticker_sentiment.map((ts, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-900">{ts.ticker}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getRelevanceColor(parseFloat(ts.relevance_score))}`}>
-                          {(parseFloat(ts.relevance_score) * 100).toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-gray-700 font-mono">{parseFloat(ts.ticker_sentiment_score).toFixed(3)}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getSentimentColor(parseFloat(ts.ticker_sentiment_score))}`}>
-                          {ts.ticker_sentiment_label}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {article.ticker_sentiment.map((ts, idx) => {
+                    const relevance = parseFloat(ts.relevance_score);
+                    const sentiment = parseFloat(ts.ticker_sentiment_score);
+                    const hasValidRelevance = !isNaN(relevance) && relevance !== null;
+                    const hasValidSentiment = !isNaN(sentiment) && sentiment !== null;
+                    
+                    return (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900">{ts.ticker}</td>
+                        <td className="px-3 py-2">
+                          {hasValidRelevance ? (
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getRelevanceColor(relevance)}`}>
+                              {(relevance * 100).toFixed(1)}%
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 font-mono">
+                          {hasValidSentiment ? sentiment.toFixed(3) : 'N/A'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {hasValidSentiment && ts.ticker_sentiment_label ? (
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getSentimentColor(sentiment)}`}>
+                              {ts.ticker_sentiment_label}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">N/A</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

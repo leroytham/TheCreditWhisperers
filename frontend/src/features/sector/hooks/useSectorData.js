@@ -96,7 +96,7 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
       : fetch(`/api/daily-sentiment?ticker=${encodeURIComponent(newsTicker)}`)
           .then(r => r.json());
 
-    const fetchAnalysis = fetch(`/api/stocks/${encodeURIComponent(newsTicker)}/significant-events`)
+    const fetchAnalysis = fetch(`/api/stocks/${encodeURIComponent(newsTicker)}/significant-events?timeframe=${timeframe}`)
       .then(r => r.json());
 
     Promise.allSettled([fetchPrice, fetchNews, fetchConstituents, fetchDailySentiment, fetchAnalysis])

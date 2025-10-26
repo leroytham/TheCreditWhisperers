@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 
-export const useSignificantEvents = (ticker) => {
+export const useSignificantEvents = (ticker, timeframe = '1Y') => {
   const [significantEvents, setSignificantEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -17,7 +17,7 @@ export const useSignificantEvents = (ticker) => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/stocks/${ticker}/significant-events`);
+        const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${timeframe}`);
         const data = await response.json();
 
         const rawEvents = data.events || [];
@@ -45,7 +45,7 @@ export const useSignificantEvents = (ticker) => {
     if (ticker) {
       fetchSignificantEvents();
     }
-  }, [ticker]);
+  }, [ticker, timeframe]);
 
   return {
     significantEvents,

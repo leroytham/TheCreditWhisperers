@@ -656,10 +656,18 @@ export const generateDailySentimentBars = (dailySentiment, daysToShow = 7) => {
  */
 export const findEventPosition = (event, chartData, chartWidth = 660, paddingLeft = 60) => {
   const eventDate = new Date(event.start_date);
-  const pricePoint = chartData.find(p => {
+  
+  // Find the index of the actual event date
+  const eventIndex = chartData.findIndex(p => {
     const pointDate = new Date(p.date);
     return pointDate.toDateString() === eventDate.toDateString();
   });
+
+  if (eventIndex === -1) return null;
+
+  // Use the previous data point (1 interval before) if available, otherwise use the event date itself
+  const displayIndex = eventIndex > 0 ? eventIndex - 1 : eventIndex;
+  const pricePoint = chartData[displayIndex];
 
   if (!pricePoint || pricePoint.index === undefined) return null;
 

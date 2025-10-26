@@ -15,6 +15,7 @@ import {
   getChartLineColor
 } from '../utils/formatters';
 import { SECTOR_CHART_CONFIG } from '../utils/constants';
+import NewsDetailModal from './NewsDetailModal';
 
 /**
  * Shared PriceChart Component
@@ -38,6 +39,7 @@ import { SECTOR_CHART_CONFIG } from '../utils/constants';
  * @param {string} props.timeframe - Current timeframe (1D, 5D, 1M, 6M, YTD, 1Y, 5Y)
  * @param {number} props.prevClose - Previous close price (for 1D view)
  * @param {string} props.exchange - Exchange code (for market hours calculation)
+ * @param {Function} props.onEventClick - Callback when an event icon is clicked (receives event object)
  */
 const PriceChart = ({
   priceData,
@@ -54,15 +56,30 @@ const PriceChart = ({
   mode,
   timeframe = '1Y',
   prevClose = null,
-  exchange = ''
+  exchange = '',
+  onEventClick
 }) => {
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [hoveredEvent, setHoveredEvent] = useState(null);
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const chartContainerRef = useRef(null);
   const [dynamicChartWidth, setDynamicChartWidth] = useState(SECTOR_CHART_CONFIG.DEFAULT_WIDTH);
 
   // Auto-detect mode if not specified
   const detectedMode = mode || (priceData ? 'entity' : 'sector');
+
+  const handleArticleClick = (article, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedArticle(article);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedArticle(null);
+  };
 
   // Close tooltip when clicking outside
   useEffect(() => {
@@ -438,8 +455,11 @@ const PriceChart = ({
           significantEvents.forEach((event, i) => {
             const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
             if (eventPos) {
-              // Find the data point Y position for this event
-              const dataPoint = chartData.find(d => d.date === event.start_date);
+              // Find the data point Y position for this event (1 interval before the actual jump)
+              const eventIndex = chartData.findIndex(d => d.date === event.start_date);
+              const displayIndex = eventIndex > 0 ? eventIndex - 1 : eventIndex;
+              const dataPoint = displayIndex >= 0 ? chartData[displayIndex] : null;
+              
               const dataY = dataPoint
                 ? (paddingTop + chartHeight) - ((dataPoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
                 : paddingTop;
@@ -505,6 +525,10 @@ const PriceChart = ({
                     setHoveredEvent(null);
                   } else {
                     setHoveredEvent({ ...event, xPos, iconY, chartWidth: chartWidth, paddingLeft });
+                    // Notify parent component that an event was clicked
+                    if (onEventClick) {
+                      onEventClick(event);
+                    }
                   }
                 }}
               >
@@ -870,16 +894,13 @@ const PriceChart = ({
                       {new Date(article.publish_date || article.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   )}
-                  {/* Article title link */}
-                  <a
-                    href={article.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-xs text-blue-600 hover:underline hover:text-blue-800 leading-snug"
-                    onClick={(e) => e.stopPropagation()}
+                  {/* Article title button */}
+                  <button
+                    onClick={(e) => handleArticleClick(article, e)}
+                    className="block w-full text-left text-xs text-blue-600 hover:underline hover:text-blue-800 leading-snug cursor-pointer"
                   >
                     {article.title || 'View Article'}
-                  </a>
+                  </button>
                   {/* Divider line (not for last article) */}
                   {i < hoveredEvent.news.length - 1 && (
                     <div className="border-t border-gray-200 my-3"></div>
@@ -924,6 +945,14 @@ const PriceChart = ({
           </div>
         </div>
       )}
+
+      {/* News Detail Modal */}
+      <NewsDetailModal
+        article={selectedArticle}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        mode="modal"
+      />
     </div>
   );
 };

@@ -53,12 +53,21 @@ const PerformanceView = ({
   setActiveTab,
   sentimentTimeframe,
   setSentimentTimeframe,
+  priceTimeframe,
+  setPriceTimeframe,
 }) => {
-  const [timeframe, setTimeframe] = useState('1Y');
+  const timeframe = priceTimeframe; // Use prop instead of local state
+  const setTimeframe = setPriceTimeframe; // Use prop setter instead of local state
   const [viewMode, setViewMode] = useState('rolling');
   const [priceData, setPriceData] = useState([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [showSignificantEvents, setShowSignificantEvents] = useState(true);
+  const [selectedEventDate, setSelectedEventDate] = useState(null);
+
+  // Handle event click from PriceChart
+  const handleEventClick = (event) => {
+    setSelectedEventDate(event.start_date);
+  };
 
   // Auto-switch view mode based on timeframe
   useEffect(() => {
@@ -206,6 +215,7 @@ const PerformanceView = ({
                   events={significantEvents}
                   ticker={ticker}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full flex flex-col"
+                  selectedEventDate={selectedEventDate}
                 />
               </div>
 
@@ -260,6 +270,7 @@ const PerformanceView = ({
                   timeframe={timeframe}
                   prevClose={activePrevClose}
                   responsive={true}
+                  onEventClick={handleEventClick}
                 />
               </div>
             </div>
@@ -329,6 +340,7 @@ const PerformanceView = ({
               significantEvents={showSignificantEvents ? significantEvents : []}
               timeframe={timeframe}
               prevClose={activePrevClose}
+              onEventClick={handleEventClick}
             />
           </div>
         );
