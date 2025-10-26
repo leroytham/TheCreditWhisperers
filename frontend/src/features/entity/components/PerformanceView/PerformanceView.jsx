@@ -192,7 +192,7 @@ const PerformanceView = ({
               </div>
 
               {/* Price Chart - Row 2, Spans 2 columns */}
-              <div className="lg:col-start-1 lg:col-span-2 lg:row-start-2 bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
+              <div className="lg:col-start-1 lg:col-span-2 lg:row-start-2 bg-white rounded-lg shadow overflow-hidden p-6">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
@@ -263,9 +263,9 @@ const PerformanceView = ({
       case 'performance':
         return (
           <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-6">
               <h3 className="text-lg font-semibold text-gray-900">Detailed Performance Analysis</h3>
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
                 {/* Events Toggle Switch - Bloomberg style */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-700">Events</span>
@@ -286,7 +286,7 @@ const PerformanceView = ({
                 </div>
 
                 {/* Timeframe Buttons */}
-                <div className="flex space-x-1">
+                <div className="flex flex-wrap gap-1">
                   {TIMEFRAMES.map((tf) => (
                     <button
                       key={tf}
