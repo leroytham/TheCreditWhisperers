@@ -190,6 +190,46 @@ async def get_available_earnings_quarters(ticker: str, years_back: int = 5):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stocks/{ticker}/company-overview")
+async def get_company_overview(ticker: str):
+    """
+    API endpoint to get comprehensive company overview data from Alpha Vantage.
+    
+    This returns detailed company information including:
+    - Basic info (name, description, sector, industry, etc.)
+    - Financial ratios (P/E, P/B, EPS, etc.)
+    - Analyst ratings and target price
+    - Key metrics (market cap, revenue, profit margin, etc.)
+    
+    Args:
+        ticker: Stock ticker symbol (e.g., 'IBM', 'AAPL')
+    
+    Returns:
+        Complete company overview data from Alpha Vantage API
+    
+    Example: /stocks/IBM/company-overview
+    """
+    try:
+        overview = await stock_data_service.get_company_overview(ticker)
+        
+        if not overview:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Company overview data not available for ticker {ticker}"
+            )
+        
+        return {
+            "ticker": ticker.upper(),
+            "data": overview
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     
 @router.get("/sectors/{sector_ticker}/top-constituents")
 def get_top_constituents_for_sector(sector_ticker: str):

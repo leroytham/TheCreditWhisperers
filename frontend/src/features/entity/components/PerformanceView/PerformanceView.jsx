@@ -19,6 +19,7 @@ import {
   NewsCoverageCard,
   SentimentConfidenceCard
 } from '../../../shared/components';
+import CompanyOverview from '../CompanyOverview';
 import { useRollingSentiment } from '../../hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
@@ -243,41 +244,47 @@ const PerformanceView = ({
 
       case 'performance':
         return (
-          <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <h3 className="text-lg font-semibold text-gray-900">Detailed Performance Analysis</h3>
-                <EventsToggle
-                  showEvents={showEvents}
-                  onToggle={setShowEvents}
-                />
+          <div className="space-y-6">
+            {/* Company Overview Section */}
+            <CompanyOverview ticker={ticker} />
+            
+            {/* Price Performance Chart */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
+                  <EventsToggle
+                    showEvents={showEvents}
+                    onToggle={setShowEvents}
+                  />
+                </div>
+                <div className="flex space-x-2">
+                  {TIMEFRAMES.map((tf) => (
+                    <button
+                      key={tf}
+                      onClick={() => setTimeframe(tf)}
+                      className={`px-4 py-1.5 text-xs font-semibold transition-all ${
+                        timeframe === tf
+                          ? 'bg-gray-900 text-white rounded-md'
+                          : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex space-x-2">
-                {TIMEFRAMES.map((tf) => (
-                  <button
-                    key={tf}
-                    onClick={() => setTimeframe(tf)}
-                    className={`px-4 py-1.5 text-xs font-semibold transition-all ${
-                      timeframe === tf
-                        ? 'bg-gray-900 text-white rounded-md'
-                        : 'text-gray-600 hover:text-gray-900 bg-transparent'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
+              <PriceChart
+                priceData={priceData}
+                ticker={ticker}
+                currency={currency}
+                exchange={exchange}
+                significantEvents={significantEvents}
+                showSignificantEvents={showEvents}
+                timeframe={timeframe}
+                prevClose={activePrevClose}
+              />
             </div>
-            <PriceChart
-              priceData={priceData}
-              ticker={ticker}
-              currency={currency}
-              exchange={exchange}
-              significantEvents={significantEvents}
-              showSignificantEvents={showEvents}
-              timeframe={timeframe}
-              prevClose={activePrevClose}
-            />
           </div>
         );
 

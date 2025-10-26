@@ -4,9 +4,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 import yfinance as yf
 from yahooquery import Ticker as YQTicker
+import aiohttp
+import os
+from dotenv import load_dotenv
 
-from app.core.cache import cache_result
+from app.core.cache import cache_result, async_cache_result
 from app.core.config import settings
+
+load_dotenv()
 
 
 class StockDataService:
@@ -31,6 +36,11 @@ class StockDataService:
             '^SP500-20': 'XLI',   # Industrials
             '^GSPE': 'XLE',       # Energy
         }
+        
+        # Load Alpha Vantage API key for company overview
+        self.alpha_vantage_api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+        if not self.alpha_vantage_api_key:
+            print("WARNING: ALPHA_VANTAGE_API_KEY not found. Company overview service will be disabled.")
 
     @cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="stock_data")
     def get_stock_data(self, ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame | None:
@@ -216,6 +226,48 @@ class StockDataService:
             }
         except Exception as e:
             print(f"Error fetching company info for {ticker}: {e}")
+            return None
+
+    @async_cache_result(ttl=86400, key_prefix="company_overview")  # Cache for 24 hours
+    async def get_company_overview(self, ticker: str) -> dict | None:
+        """
+        Fetch comprehensive company overview from Alpha Vantage API.
+        Results are cached in Redis for 24 hours.
+
+        Args:
+            ticker: Stock ticker symbol
+
+        Returns:
+            Dictionary with comprehensive company data including financial ratios,
+            analyst ratings, and key metrics, or None if error
+        """
+        if not self.alpha_vantage_api_key:
+            print(f"Cannot fetch company overview for {ticker}: Alpha Vantage API key not configured")
+            return None
+
+        try:
+            url = (
+                f"https://www.alphavantage.co/query?"
+                f"function=OVERVIEW&symbol={ticker}&apikey={self.alpha_vantage_api_key}"
+            )
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        print(f"Error fetching company overview for {ticker}: HTTP {response.status}")
+                        return None
+
+                    data = await response.json()
+
+                    # Check if we got valid data (Alpha Vantage returns empty dict or error message for invalid tickers)
+                    if not data or "Symbol" not in data:
+                        print(f"No company overview data available for {ticker}")
+                        return None
+
+                    return data
+
+        except Exception as e:
+            print(f"Error fetching company overview for {ticker}: {e}")
             return None
 
 
