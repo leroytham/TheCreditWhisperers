@@ -784,16 +784,19 @@ class SectorSentimentService:
                     # Calculate average sentiment and relevance score for this article from ticker mentions
                     article_sentiment = 0.0
                     article_relevance = 0.0
+                    weighted_relevance = 0.0
                     if mentions:
                         article_sentiment = sum(m["sentiment_score"] for m in mentions) / len(mentions)
                         article_relevance = sum(m["relevance_score"] for m in mentions) / len(mentions)
+                        # For sectors: weighted relevance = sum of (sentiment_score × relevance_score)
+                        weighted_relevance = sum(m["sentiment_score"] * m["relevance_score"] for m in mentions)
 
                     headlines.append({
                         "title": article.get("title", ""),
                         "url": article.get("url", ""),
                         "provider": article.get("provider", ""),
                         "sentiment_score": round(article_sentiment, 4),
-                        "relevance_score": round(article_relevance, 4),
+                        "relevance_score": round(weighted_relevance, 4),  # Use weighted relevance for sectors
                         "link": article.get("url", "")  # Add link field for frontend compatibility
                     })
 
@@ -937,11 +940,17 @@ class SectorSentimentService:
                     # Calculate sentiment and relevance if article has ticker mentions
                     article_sentiment = 0.0
                     article_relevance = 0.0
+                    article_sentiment = 0.0
+                    article_relevance = 0.0
+                    weighted_relevance = 0.0
+                    
                     if mentions:
                         window_ticker_mentions.extend(mentions)
                         # Calculate average sentiment and relevance for this article from ticker mentions
                         article_sentiment = sum(m["sentiment_score"] for m in mentions) / len(mentions)
                         article_relevance = sum(m["relevance_score"] for m in mentions) / len(mentions)
+                        # For sectors: weighted relevance = sum of (sentiment_score × relevance_score)
+                        weighted_relevance = sum(m["sentiment_score"] * m["relevance_score"] for m in mentions)
 
                     # Always add to headlines if in time window (regardless of ticker mentions)
                     article_url = article.get("url", "")
@@ -952,7 +961,7 @@ class SectorSentimentService:
                             "link": article_url,
                             "provider": article.get("provider", ""),
                             "sentiment_score": round(article_sentiment, 4),
-                            "relevance_score": round(article_relevance, 4),
+                            "relevance_score": round(weighted_relevance, 4),  # Use weighted relevance for sectors
                             "publish_date": pub_datetime.strftime("%Y-%m-%d")  # For sorting by recency
                         }
 

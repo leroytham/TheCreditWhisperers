@@ -162,16 +162,35 @@ class NewsService:
                             except (ValueError, TypeError):
                                 continue
 
-                        # Include article even if no ticker sentiments (will be filtered later)
+                        # Get overall sentiment from article
+                        overall_sentiment_score = article.get("overall_sentiment_score")
+                        overall_sentiment_label = article.get("overall_sentiment_label", "Neutral")
+                        
+                        # Convert overall_sentiment_score to float if it exists
+                        if overall_sentiment_score is not None:
+                            try:
+                                overall_sentiment_score = float(overall_sentiment_score)
+                            except (ValueError, TypeError):
+                                overall_sentiment_score = 0.0
+                        else:
+                            overall_sentiment_score = 0.0
+
+                        # Include article with normalized field names for frontend compatibility
                         news_list.append({
                             "title": article.get("title"),
-                            "link": article.get("url"),
-                            "provider": article.get("source"),
+                            "url": article.get("url"),  # Normalized from 'link' to 'url'
+                            "link": article.get("url"),  # Keep for backwards compatibility
+                            "source": article.get("source"),  # Normalized from 'provider' to 'source'
+                            "provider": article.get("source"),  # Keep for backwards compatibility
+                            "time_published": time_published,  # Add for CompactNewsCard
                             "publish_date": pub_date,
                             "publish_timestamp": pub_datetime.isoformat(),
-                            "body": body_content,
+                            "summary": body_content,  # Normalized from 'body' to 'summary'
+                            "body": body_content,  # Keep for backwards compatibility
+                            "banner_image": article.get("banner_image"),
                             "ticker_sentiment": processed_ticker_sentiments,  # Full array!
-                            "image": article.get("banner_image"),
+                            "overall_sentiment_score": overall_sentiment_score,  # Add for CompactNewsCard
+                            "overall_sentiment_label": overall_sentiment_label,  # Add for CompactNewsCard
                             "topics": article.get("topics", [])
                         })
                     else:

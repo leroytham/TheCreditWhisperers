@@ -1,6 +1,6 @@
 // frontend/src/features/shared/components/DetailedRelatedNews.jsx
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import CompactNewsCard from './CompactNewsCard';
 import NewsDetailModal from './NewsDetailModal';
 import NewsSkeleton from './NewsSkeleton';
@@ -31,6 +31,43 @@ const DetailedRelatedNews = ({
   const [columnLayout, setColumnLayout] = useState(3); // 3 or 5 columns
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Determine if this is a sector view based on apiMetadata
+  const isSector = useMemo(() => {
+    return !!(apiMetadata?.sector_name || apiMetadata?.tickers_queried);
+  }, [apiMetadata]);
+
+  // Get sector tickers if available
+  const sectorTickers = useMemo(() => {
+    if (!isSector || !apiMetadata?.tickers_queried) return new Set();
+    return new Set(apiMetadata.tickers_queried.map(t => t.toUpperCase()));
+  }, [isSector, apiMetadata]);
+
+  // Calculate relevance score based on sector vs entity context
+  const calculateRelevanceScore = useCallback((article) => {
+    if (!article.ticker_sentiment || article.ticker_sentiment.length === 0) {
+      return 0;
+    }
+    
+    if (isSector) {
+      // For sectors: weighted score = sum of (sentiment_score × relevance_score)
+      let weightedScore = 0;
+      article.ticker_sentiment.forEach(ts => {
+        if (sectorTickers.has(ts.ticker?.toUpperCase())) {
+          const sentimentScore = parseFloat(ts.ticker_sentiment_score) || 0;
+          const relevanceScore = parseFloat(ts.relevance_score) || 0;
+          weightedScore += sentimentScore * relevanceScore;
+        }
+      });
+      return weightedScore;
+    } else {
+      // For entities: single ticker's relevance score
+      const tickerSent = article.ticker_sentiment.find(
+        ts => ts.ticker?.toUpperCase() === ticker?.toUpperCase()
+      );
+      return tickerSent ? parseFloat(tickerSent.relevance_score) || 0 : 0;
+    }
+  }, [isSector, sectorTickers, ticker]);
 
   // Extract unique topics and sentiment labels
   const { allTopics, sentimentLabels } = useMemo(() => {
@@ -83,17 +120,10 @@ const DetailedRelatedNews = ({
     }
 
     // Filter by ticker relevance
-    if (minRelevance > 0 && ticker) {
+    if (minRelevance > 0) {
       filtered = filtered.filter(article => {
-        if (!article.ticker_sentiment || article.ticker_sentiment.length === 0) {
-          return false;
-        }
-        // Find the ticker sentiment for the current ticker
-        const tickerSent = article.ticker_sentiment.find(
-          ts => ts.ticker?.toUpperCase() === ticker.toUpperCase()
-        );
-        // Only include if relevance score meets minimum threshold
-        return tickerSent && parseFloat(tickerSent.relevance_score) >= minRelevance;
+        const relevanceScore = calculateRelevanceScore(article);
+        return relevanceScore >= minRelevance;
       });
     }
 
@@ -109,31 +139,17 @@ const DetailedRelatedNews = ({
         case 'sentiment-asc':
           return (a.overall_sentiment_score || Infinity) - (b.overall_sentiment_score || Infinity);
         case 'relevance-desc':
-          // Sort by ticker relevance for the current ticker
-          if (ticker) {
-            const aTickerSent = a.ticker_sentiment?.find(ts => ts.ticker?.toUpperCase() === ticker.toUpperCase());
-            const bTickerSent = b.ticker_sentiment?.find(ts => ts.ticker?.toUpperCase() === ticker.toUpperCase());
-            const aRelevance = aTickerSent ? parseFloat(aTickerSent.relevance_score) : 0;
-            const bRelevance = bTickerSent ? parseFloat(bTickerSent.relevance_score) : 0;
-            return bRelevance - aRelevance;
-          }
-          return 0;
+          // Sort by relevance (weighted for sectors, single ticker for entities)
+          return calculateRelevanceScore(b) - calculateRelevanceScore(a);
         case 'relevance-asc':
-          if (ticker) {
-            const aTickerSent = a.ticker_sentiment?.find(ts => ts.ticker?.toUpperCase() === ticker.toUpperCase());
-            const bTickerSent = b.ticker_sentiment?.find(ts => ts.ticker?.toUpperCase() === ticker.toUpperCase());
-            const aRelevance = aTickerSent ? parseFloat(aTickerSent.relevance_score) : 0;
-            const bRelevance = bTickerSent ? parseFloat(bTickerSent.relevance_score) : 0;
-            return aRelevance - bRelevance;
-          }
-          return 0;
+          return calculateRelevanceScore(a) - calculateRelevanceScore(b);
         default:
           return 0;
       }
     });
 
     return filtered;
-  }, [news, filter, selectedTopic, selectedSentiment, sortOption, minRelevance, ticker]);
+  }, [news, filter, selectedTopic, selectedSentiment, sortOption, minRelevance, ticker, calculateRelevanceScore]);
 
   const handleArticleClick = (article) => {
     setSelectedArticle(article);

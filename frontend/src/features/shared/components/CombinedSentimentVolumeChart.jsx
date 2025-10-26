@@ -900,17 +900,17 @@ const CombinedSentimentVolumeChart = ({
                 );
               })}
 
-              {/* Hover indicator line */}
-              {hoveredIndex !== null && (
+              {/* Hover/Pinned indicator line */}
+              {(hoveredIndex !== null || pinnedIndex !== null) && (
                 <line
-                  x1={leftPadding + (hoveredIndex * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2)}
+                  x1={leftPadding + ((pinnedIndex !== null ? pinnedIndex : hoveredIndex) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2)}
                   y1={topPadding}
-                  x2={leftPadding + (hoveredIndex * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2)}
+                  x2={leftPadding + ((pinnedIndex !== null ? pinnedIndex : hoveredIndex) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2)}
                   y2={topPadding + chartHeight}
                   stroke="#1d4ed8"
                   strokeWidth="2"
                   strokeDasharray="3,3"
-                  opacity="0.7"
+                  opacity={pinnedIndex !== null ? "0.9" : "0.7"}
                   className="pointer-events-none"
                 />
               )}
