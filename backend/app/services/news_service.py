@@ -636,7 +636,7 @@ class NewsService:
         """
         Convert timeframe string to number of months for data fetching.
         
-        Strategy for ENTITIES (stocks): Always fetch 1Y (12 months) worth of data for all timeframes except 5Y.
+        Strategy for ENTITIES (stocks): Always fetch 1Y (12 months) worth of data for all timeframes.
         This ensures consistent data availability and better caching efficiency.
         The filtering to the actual timeframe is done in the API layer.
         
@@ -649,20 +649,17 @@ class NewsService:
             timeframe: Timeframe string ('1D', '1W', '1M', etc.)
             is_sector: If True, fetch 2M of data for better historical coverage
         """
-        # For 5Y, fetch 5 years of data (both entities and sectors)
-        if timeframe == '5Y':
-            return 60
-        
         # SECTOR MODE: Fetch 2M of data to ensure full 1M coverage with gaps
         # This provides better historical coverage while respecting exponential decay limits
         if is_sector:
             return 2  # Fetch 2 months for sectors to ensure complete 1M coverage
         
-        # ENTITY MODE: For all other timeframes (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 10Y, MAX), fetch 1Y
+        # ENTITY MODE: For all timeframes (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y, 10Y, MAX), fetch 1Y
         # This provides:
         # - Consistent data availability across all timeframes
         # - Better cache reuse (same data for multiple timeframes)
         # - Minimal API calls (1Y is optimal batch size)
+        # - Fast response times even for 5Y+ timeframes
         return 12
 
     def _get_cache_ttl_for_timeframe(self, timeframe: str) -> int:

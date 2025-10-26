@@ -38,7 +38,7 @@ const EntityPage = () => {
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
   const [activeSubTab, setActiveSubTab] = useState('overview');
   const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
-  const [priceTimeframe, setPriceTimeframe] = useState('1Y'); // Add price chart timeframe state
+  const [priceTimeframe, setPriceTimeframe] = useState('1D'); // Add price chart timeframe state
 
   // Session management
   useEffect(() => {

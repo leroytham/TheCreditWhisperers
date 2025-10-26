@@ -1,5 +1,5 @@
 # app/api/routes.py
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 import yfinance as yf
 from datetime import datetime
 from pymongo import MongoClient
@@ -480,6 +480,34 @@ def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+@router.post("/stocks/{ticker}/prefetch-events")
+async def prefetch_significant_events(ticker: str, background_tasks: BackgroundTasks):
+    """
+    Trigger background prefetching of significant events for all timeframes.
+    This allows instant display when users switch between timeframes.
+    Example: POST /stocks/AAPL/prefetch-events
+    """
+    try:
+        # Define all timeframes to prefetch
+        timeframes = ['1D', '1M', '6M', 'YTD', '1Y', '5Y']
+        
+        # Add background tasks for each timeframe
+        for tf in timeframes:
+            background_tasks.add_task(
+                market_analysis_service.analyze_significant_events,
+                ticker,
+                tf
+            )
+        
+        return {
+            "ticker": ticker,
+            "message": f"Background prefetch initiated for {len(timeframes)} timeframes",
+            "timeframes": timeframes
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initiate prefetch: {str(e)}")
 
 @router.get("/price")
 def get_price_data(ticker: str, timeframe: str = "1Y"):

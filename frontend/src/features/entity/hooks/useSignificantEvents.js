@@ -1,15 +1,16 @@
 /**
  * useSignificantEvents Hook
  *
- * Custom hook for fetching significant events data
+ * Custom hook for fetching significant events data with background prefetching
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-export const useSignificantEvents = (ticker, timeframe = '1Y') => {
+export const useSignificantEvents = (ticker, timeframe = '1D') => {
   const [significantEvents, setSignificantEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const prefetchInitiated = useRef(new Set());
 
   useEffect(() => {
     const fetchSignificantEvents = async () => {
@@ -42,8 +43,25 @@ export const useSignificantEvents = (ticker, timeframe = '1Y') => {
       }
     };
 
+    // Background prefetch for all timeframes (only once per ticker)
+    const prefetchAllTimeframes = async () => {
+      if (!prefetchInitiated.current.has(ticker)) {
+        prefetchInitiated.current.add(ticker);
+        
+        try {
+          console.log(`[PREFETCH] Initiating background fetch for all timeframes: ${ticker}`);
+          await fetch(`/api/stocks/${ticker}/prefetch-events`, {
+            method: 'POST'
+          });
+        } catch (err) {
+          console.error('Error initiating prefetch:', err);
+        }
+      }
+    };
+
     if (ticker) {
       fetchSignificantEvents();
+      prefetchAllTimeframes();
     }
   }, [ticker, timeframe]);
 

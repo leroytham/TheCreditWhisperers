@@ -112,96 +112,90 @@ class MarketAnalysisService:
 
         # 2. Calculate Metrics
         df['pct_change'] = df['Close'].pct_change()
-        daily_return_std = df['pct_change'].std()
+        df['direction'] = np.sign(df['pct_change'])
 
-        # 3. Find events with adaptive threshold to ensure we get the required count of non-overlapping events
-        # For non-1D timeframes, we ensure we always get 5 non-overlapping events
-        current_threshold = std_threshold
-        selected_events = []
+        # 3. Find ALL streaks of consecutive price movements in the same direction
+        # A streak breaks when the direction changes
+        direction_changes = (df['direction'] != df['direction'].shift())
+        df['streak_id'] = direction_changes.cumsum()
+
+        # Group all streaks and calculate total move for each
+        all_streaks = df.groupby('streak_id').agg(
+            start_date=('Date', 'min'),
+            end_date=('Date', 'max'),
+            total_move_pct=('pct_change', 'sum'),
+            num_days=('Date', 'count')
+        ).reset_index()
         
-        # Try progressively lower thresholds until we get enough non-overlapping events
-        while current_threshold > 0.5 and len(selected_events) < event_count:
-            df['is_big_move'] = df['pct_change'].abs() > (current_threshold * daily_return_std)
-            df['direction'] = np.sign(df['pct_change'])
-
-            # Find and Group Events (Streaks)
-            # A streak breaks when either the big_move status changes or direction changes
-            streaks_broken = (df['is_big_move'] != df['is_big_move'].shift()) | \
-                             (df['direction'] != df['direction'].shift())
-            df['streak_id'] = streaks_broken.cumsum()
-
-            # Filter to only big move streaks
-            big_move_streaks = df[df['is_big_move'] == True]
+        # Filter out single-day movements and very small movements
+        all_streaks = all_streaks[
+            (all_streaks['num_days'] >= 1) &  # At least 1 day
+            (all_streaks['total_move_pct'].abs() > 0.001)  # At least 0.1% movement
+        ]
+        
+        if all_streaks.empty:
+            return []
+        
+        # Rank by absolute magnitude of price movement (biggest moves first)
+        all_streaks['importance'] = all_streaks['total_move_pct'].abs()
+        sorted_streaks = all_streaks.sort_values(by='importance', ascending=False)
+        
+        # 4. Determine threshold: ensure at least event_count events, but allow more if above threshold
+        # Calculate threshold as a percentage of the maximum move
+        if len(sorted_streaks) >= event_count:
+            # Use the event_count-th largest move as threshold (e.g., 5th largest)
+            threshold_move = sorted_streaks.iloc[event_count - 1]['importance']
+        else:
+            # If we have fewer events than event_count, use a very low threshold
+            threshold_move = 0.001
+        
+        # 5. Select ALL non-overlapping events above the threshold
+        selected_events = []
+        used_date_ranges = []
+        
+        for _, event in sorted_streaks.iterrows():
+            event_start = event['start_date']
+            event_end = event['end_date']
             
-            if not big_move_streaks.empty:
-                # Group by streak and calculate total move
-                grouped_streaks = big_move_streaks.groupby('streak_id').agg(
-                    start_date=('Date', 'min'),
-                    end_date=('Date', 'max'),
-                    total_move_pct=('pct_change', 'sum')
-                ).reset_index()
-                
-                # Rank by importance
-                grouped_streaks['importance'] = grouped_streaks['total_move_pct'].abs()
-                sorted_streaks = grouped_streaks.sort_values(by='importance', ascending=False)
-                
-                # Select non-overlapping events
-                selected_events = []
-                used_date_ranges = []
-                
-                for _, event in sorted_streaks.iterrows():
-                    event_start = event['start_date']
-                    event_end = event['end_date']
-                    
-                    # Check if this event overlaps with any already selected event
-                    is_overlapping = False
-                    for used_start, used_end in used_date_ranges:
-                        # Check for any overlap
-                        if not (event_end < used_start or event_start > used_end):
-                            is_overlapping = True
-                            break
-                    
-                    # If no overlap, add this event
-                    if not is_overlapping:
-                        selected_events.append(event)
-                        used_date_ranges.append((event_start, event_end))
-                        
-                        # Stop if we have enough events
-                        if len(selected_events) >= event_count:
-                            break
-                
-                # Check if we have enough non-overlapping events
-                if len(selected_events) >= event_count:
+            # Skip if below threshold
+            if event['importance'] < threshold_move:
+                break  # Since sorted, all remaining are smaller
+            
+            # Check if this event overlaps with any already selected event
+            is_overlapping = False
+            for used_start, used_end in used_date_ranges:
+                # Check for any overlap
+                if not (event_end < used_start or event_start > used_end):
+                    is_overlapping = True
                     break
             
-            # Lower threshold and try again
-            current_threshold -= 0.25
+            # If no overlap and above threshold, add this event
+            if not is_overlapping:
+                selected_events.append(event)
+                used_date_ranges.append((event_start, event_end))
         
-        # If still no events found, return empty
+        # If no events found, return empty
         if not selected_events:
             return []
         
         # Convert to dataframe for consistency
         top_events = pd.DataFrame(selected_events)
 
-        # 5. For each event, find the earliest date with consistent movement direction
+        # 5. For each event, use the start and end dates from the streak detection
         final_results = []
         for event in top_events.itertuples():
-            # Determine the movement direction
-            movement_direction = 1 if event.total_move_pct > 0 else -1
+            # Convert dates to datetime if they're Timestamps
+            start_date = pd.to_datetime(event.start_date)
+            end_date = pd.to_datetime(event.end_date)
             
-            # Find the earliest consecutive date with the same direction
-            earliest_date = self._find_earliest_consistent_date(
-                df, 
-                event.start_date, 
-                movement_direction
-            )
+            print(f"DEBUG Event: start={start_date}, end={end_date}, days={event.num_days}, move={event.total_move_pct:.2f}%")
             
-            # Fetch news for the earliest date (±1 day window)
-            news = self.fetch_alpha_vantage_news(ticker, earliest_date)
+            # Fetch news for the start date (±1 day window)
+            news = self.fetch_alpha_vantage_news(ticker, start_date)
             
             final_results.append({
-                "start_date": earliest_date.strftime('%Y-%m-%d'),
+                "start_date": start_date.strftime('%Y-%m-%d'),
+                "end_date": end_date.strftime('%Y-%m-%d'),
                 "total_move_pct": event.total_move_pct,
                 "news": news,
                 "trend": "Upward" if event.total_move_pct > 0 else "Downward"

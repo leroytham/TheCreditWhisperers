@@ -112,7 +112,7 @@ const SignificantEvents = ({
                         </h4>
                         <div className="flex items-center text-xs text-gray-500 mt-1">
                             <CalendarDays className="h-4 w-4 mr-1.5" />
-                            {event.start_date}
+                            {event.start_date} {event.end_date && event.end_date !== event.start_date && `- ${event.end_date}`}
                         </div>
                     </div>
                 </div>

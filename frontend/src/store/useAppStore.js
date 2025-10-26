@@ -24,7 +24,7 @@ const useAppStore = create(
 
         // ===== SELECTED TICKER =====
         selectedTicker: null,
-        selectedTimeframe: '1Y',
+        selectedTimeframe: '1D',
 
         setSelectedTicker: (ticker) => set({ selectedTicker: ticker }),
         setSelectedTimeframe: (timeframe) => set({ selectedTimeframe: timeframe }),

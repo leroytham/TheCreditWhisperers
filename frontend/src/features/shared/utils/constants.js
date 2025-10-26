@@ -10,7 +10,7 @@
 export const TIMEFRAMES = ['1D', '1M', '6M', 'YTD', '1Y', '5Y'];
 
 // Default timeframe
-export const DEFAULT_TIMEFRAME = '1Y';
+export const DEFAULT_TIMEFRAME = '1D';
 
 // Chart configuration
 export const NUM_X_AXIS_POINTS = 6;
