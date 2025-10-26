@@ -529,6 +529,8 @@ async def get_news_data(ticker: str):
     Example: /api/news?ticker=AAPL
     
     Returns comprehensive sentiment data including:
+    - feed: Raw Alpha Vantage feed data with all details
+    - news: Formatted/simplified news articles for backward compatibility
     - avg_score: Overall weighted sentiment score (slow/24h trend)
     - fast_score: Current intraday sentiment (7h half-life)
     - slow_score: Daily trend sentiment (24h half-life)
@@ -540,10 +542,38 @@ async def get_news_data(ticker: str):
     try:
         # Fetch news articles using the news service
         news_articles = await news_service_instance.get_ticker_news(ticker)
+        
+        # Also fetch raw Alpha Vantage data if available
+        raw_feed = []
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                raw_av_data = await news_service_instance._fetch_alpha_vantage_news(
+                    session, ticker, limit=1000, preserve_all_tickers=True
+                )
+                # Extract the raw feed items from Alpha Vantage
+                if raw_av_data:
+                    # The _fetch_alpha_vantage_news returns processed articles
+                    # We need to fetch raw data directly
+                    alpha_vantage_api_key = news_service_instance.alpha_vantage_api_key
+                    if alpha_vantage_api_key:
+                        url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&limit=1000&tickers={ticker}&apikey={alpha_vantage_api_key}"
+                        async with session.get(url, timeout=30) as response:
+                            data = await response.json()
+                            raw_feed = data.get("feed", [])
+        except Exception as e:
+            print(f"Error fetching raw Alpha Vantage feed: {e}")
 
         if not news_articles:
             score_defs = get_score_definitions()
-            return {"ticker": ticker, "news": [], "avg_score": 0, **score_defs}
+            return {
+                "ticker": ticker, 
+                "news": [], 
+                "feed": raw_feed,
+                "items": str(len(raw_feed)),
+                "avg_score": 0, 
+                **score_defs
+            }
 
         # Analyze sentiment WITH MOMENTUM - this includes fast/slow scores and momentum calculation
         sentiment_results = sentiment_service.analyze_sentiment_with_momentum(news_articles)
@@ -575,6 +605,8 @@ async def get_news_data(ticker: str):
         return {
             "ticker": ticker,
             "news": formatted_news,
+            "feed": raw_feed,  # Add raw Alpha Vantage feed
+            "items": str(len(raw_feed)),  # Number of feed items
             "avg_score": sentiment_results.get("overall_weighted_score", 0),
             # Add momentum fields to response
             "sentiment_momentum": sentiment_results.get("sentiment_momentum"),

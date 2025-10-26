@@ -11,6 +11,7 @@ import {
   SentimentScoreCard,
   SignificantEvents,
   RelatedNews,
+  DetailedRelatedNews,
   MomentumCard,
   SentimentBreadthCard,
   SentimentShockCard,
@@ -43,6 +44,7 @@ const PerformanceView = ({
   dailySentiment,
   sentiment,
   news,
+  apiMetadata,
   significantEvents,
   prevClose: prevCloseFromParent,
   prevClose1D,
@@ -394,12 +396,13 @@ const PerformanceView = ({
       case 'news':
         return (
           <div className="">
-            <RelatedNews
+            <DetailedRelatedNews
                 news={news}
                 displayName={companyName}
+                ticker={ticker}
                 loading={!news}
                 error={null}
-                isOverview={false}
+                apiMetadata={apiMetadata}
             />
           </div>
         );

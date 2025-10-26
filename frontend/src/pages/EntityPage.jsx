@@ -90,7 +90,7 @@ const EntityPage = () => {
   // Fetch real-time 1D data for current price display
   const { priceData1Y: priceData1D, prevClose: prevClose1D } = usePriceData(ticker, '1D');
 
-  const { news, sentiment } = useNewsData(ticker);
+  const { news, sentiment, apiMetadata } = useNewsData(ticker);
   const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
   const { significantEvents } = useSignificantEvents(ticker);
 
@@ -177,6 +177,7 @@ const EntityPage = () => {
             dailySentiment={dailySentiment}
             sentiment={sentiment}
             news={news}
+            apiMetadata={apiMetadata}
             significantEvents={significantEvents}
             prevClose={prevClose}
             prevClose1D={prevClose1D}

@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 export const useNewsData = (ticker) => {
   const [news, setNews] = useState([]);
   const [sentiment, setSentiment] = useState({});
+  const [apiMetadata, setApiMetadata] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -21,7 +22,15 @@ export const useNewsData = (ticker) => {
         const response = await fetch(`/api/news?ticker=${ticker}`);
         const data = await response.json();
 
-        setNews(data.news || []);
+        // Store full feed data from Alpha Vantage
+        setNews(data.feed || data.news || []);
+        
+        // Store API metadata
+        setApiMetadata({
+          items: data.items,
+          sentiment_score_definition: data.sentiment_score_definition,
+          relevance_score_definition: data.relevance_score_definition,
+        });
         
         // Extract sentiment data with momentum fields
         setSentiment({ 
@@ -85,6 +94,7 @@ export const useNewsData = (ticker) => {
   return {
     news,
     sentiment,
+    apiMetadata,
     loading,
     error
   };

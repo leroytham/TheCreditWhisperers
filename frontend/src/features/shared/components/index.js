@@ -17,6 +17,10 @@ export { default as SignificantEvents } from './SignificantEvents';
 
 // Newly added components for the news feed redesign
 export { default as NewsCard } from './NewsCard';
+export { default as DetailedNewsCard } from './DetailedNewsCard';
+export { default as CompactNewsCard } from './CompactNewsCard';
+export { default as NewsDetailModal } from './NewsDetailModal';
+export { default as DetailedRelatedNews } from './DetailedRelatedNews';
 export { default as NewsSkeleton } from './NewsSkeleton';
 export { default as NewsEmpty } from './NewsEmpty';
 export { default as NewsError } from './NewsError';
