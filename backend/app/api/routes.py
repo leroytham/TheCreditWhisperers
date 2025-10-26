@@ -435,9 +435,9 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
     Example: /api/price?ticker=AAPL&timeframe=1Y
     """
     try:
-        # For 1D intraday data, fetch with 15-minute interval
+        # For 1D intraday data, fetch with 1-minute interval
         if timeframe == "1D":
-            stock_data = stock_data_service.get_stock_data(ticker, period="1d", interval="15m")
+            stock_data = stock_data_service.get_stock_data(ticker, period="1d", interval="1m")
         elif timeframe == "5Y":
             stock_data = stock_data_service.get_stock_data(ticker, period="5y", interval="1d")
         else:

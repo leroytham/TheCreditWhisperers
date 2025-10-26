@@ -165,7 +165,7 @@ export const getMarketOpenClose = (exchange) => {
   // US Markets
   if (exchangeUpper.includes('NMS') || exchangeUpper.includes('NYQ') ||
       exchangeUpper.includes('NASDAQ') || exchangeUpper.includes('NYSE') || exchangeUpper === '') {
-    return { marketOpen: '09:30', marketClose: '16:00' };
+    return { marketOpen: '09:30', marketClose: '16:30' };
   }
   // London
   if (exchangeUpper.includes('LSE') || exchangeUpper.includes('LON')) {
@@ -193,7 +193,7 @@ export const getMarketOpenClose = (exchange) => {
   }
 
   // Default to US hours
-  return { marketOpen: '09:30', marketClose: '16:00' };
+  return { marketOpen: '09:30', marketClose: '16:30' };
 };
 
 /**
@@ -261,7 +261,7 @@ export const getMarketHours = (exchange) => {
       exchangeUpper.includes('NASDAQ') ||
       exchangeUpper.includes('NYSE') ||
       exchangeUpper === '') { // Default to US market hours
-    return ['09:30', '11:00', '12:30', '14:00', '16:00'];
+    return ['10:30', '12:00', '13:30', '15:00', '16:30'];
   }
 
   // London Stock Exchange
@@ -295,7 +295,7 @@ export const getMarketHours = (exchange) => {
   }
 
   // Default to US market hours for unknown exchanges
-  return ['09:30', '11:00', '12:30', '14:00', '16:00'];
+  return ['10:30', '12:00', '13:30', '15:00', '16:30'];
 };
 
 /**
@@ -384,19 +384,37 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
     const years = Array.from(yearMap.keys()).sort();
 
     if (years.length >= 1) {
-      // Create evenly spaced X positions for years
-      return years.map((year, yearIndex) => {
-        // Calculate evenly spaced position
-        // Handle single year case
-        const xPosition = years.length === 1
-          ? paddingLeft + (effectiveWidth / 2)
-          : paddingLeft + (yearIndex * (effectiveWidth / (years.length - 1)));
+      // Position year labels at actual year boundaries (first data point of each year)
+      const yearLabels = years.map((year) => {
+        // Get first data point for this year from yearMap
+        const yearDataPoints = yearMap.get(year);
+        const firstPointIndex = yearDataPoints[0].index;
 
-        // Use the year as label
-        const label = year.toString();
+        // Calculate x position based on actual data point index
+        const xPosition = paddingLeft + (firstPointIndex * (effectiveWidth / Math.max(1, chartData.length - 1)));
 
-        return { label, x: xPosition };
+        return { label: year.toString(), x: xPosition };
       });
+
+      // Filter out overlapping labels (keep later year if labels are < 80px apart)
+      const filteredLabels = [];
+      for (let i = 0; i < yearLabels.length; i++) {
+        if (i === 0) {
+          filteredLabels.push(yearLabels[i]);
+        } else {
+          const prevLabel = filteredLabels[filteredLabels.length - 1];
+          const currentLabel = yearLabels[i];
+          // If labels are more than 80px apart, keep both; otherwise replace with current (keep later year)
+          if (currentLabel.x - prevLabel.x >= 80) {
+            filteredLabels.push(currentLabel);
+          } else {
+            // Replace previous with current (keep the later year to avoid overlap)
+            filteredLabels[filteredLabels.length - 1] = currentLabel;
+          }
+        }
+      }
+
+      return filteredLabels;
     }
   }
 
@@ -404,22 +422,74 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
   if (timeframe === '1D') {
     // Get market hours for the specific exchange
     const targetTimes = getMarketHours(exchange);
+    const { marketOpen, marketClose } = getMarketOpenClose(exchange);
     const timelinePoints = [];
 
+    // Parse market open/close times into minutes since midnight
+    const [openHours, openMinutes] = marketOpen.split(':').map(Number);
+    const openMinutesSinceMidnight = openHours * 60 + openMinutes;
+
+    const [closeHours, closeMinutes] = marketClose.split(':').map(Number);
+    const closeMinutesSinceMidnight = closeHours * 60 + closeMinutes;
+
+    const totalTradingMinutes = closeMinutesSinceMidnight - openMinutesSinceMidnight;
+
     targetTimes.forEach((targetTime, index) => {
-      // Calculate evenly spaced position based on target time index
-      const xPosition = paddingLeft + (index * (effectiveWidth / (targetTimes.length - 1)));
+      // Parse target time into minutes since midnight
+      const [hours, minutes] = targetTime.split(':').map(Number);
+      const targetMinutes = hours * 60 + minutes;
 
-      // Use 24-hour format directly (e.g., "09:30", "16:00")
-      const label = targetTime;
+      // Calculate how many minutes into the trading day this label is
+      const minutesIntoTradingDay = targetMinutes - openMinutesSinceMidnight;
 
-      timelinePoints.push({ label, x: xPosition });
+      // Calculate position as percentage of trading day
+      const percentageIntoDay = minutesIntoTradingDay / totalTradingMinutes;
+      const xPosition = paddingLeft + (percentageIntoDay * effectiveWidth);
+
+      timelinePoints.push({ label: targetTime, x: xPosition });
     });
 
     return timelinePoints;
   }
 
-  // Default behavior for other timeframes
+  // For 1M, 6M, YTD, 1Y: Skip first ~10% of data for first label (like 1D skips 09:30-10:30)
+  // Data still plots from the beginning, but first X-axis label appears later
+  if (timeframe === '1M' || timeframe === '6M' || timeframe === 'YTD' || timeframe === '1Y') {
+    // Use smaller offset for 1M to maintain better proportions
+    const offsetPercent = timeframe === '1M' ? 0.05 : 0.1;
+    const startOffset = Math.floor(chartData.length * offsetPercent);
+    const remainingLength = chartData.length - startOffset - 1; // -1 to account for last index
+
+    // Distribute numPoints evenly from startOffset to end
+    const selectedIndices = [];
+    for (let i = 0; i < numPoints; i++) {
+      const index = startOffset + Math.floor((i * remainingLength) / (numPoints - 1));
+      selectedIndices.push(Math.min(index, chartData.length - 1));
+    }
+
+    // Remove duplicate if last two indices are the same
+    if (selectedIndices.length > 1 && selectedIndices[selectedIndices.length - 1] === selectedIndices[selectedIndices.length - 2]) {
+      selectedIndices.pop();
+    }
+
+    const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
+
+    return selectedPoints.map((point, i) => {
+      const dataIndex = chartData.indexOf(point);
+      const xPosition = paddingLeft + (dataIndex * (effectiveWidth / Math.max(1, chartData.length - 1)));
+
+      let label = '';
+      if (point.date) {
+        label = formatXAxisLabel(point.date, timeframe, point.time);
+      } else {
+        label = `Point ${i + 1}`;
+      }
+
+      return { label, x: xPosition, dataIndex: chartData.indexOf(point) };
+    });
+  }
+
+  // Default behavior for other timeframes (not used currently, but kept for safety)
   const step = Math.max(1, Math.floor((chartData.length - 1) / (numPoints - 1)));
   const selectedIndices = [];
 
