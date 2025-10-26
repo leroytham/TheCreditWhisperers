@@ -14,13 +14,13 @@ import {
   formatPrice,
   getChartLineColor
 } from '../utils/formatters';
-import { CHART_CONFIG, SECTOR_CHART_CONFIG } from '../utils/constants';
+import { SECTOR_CHART_CONFIG } from '../utils/constants';
 
 /**
  * Shared PriceChart Component
  *
  * Interactive price chart with timeline and event markers
- * Supports both static (entity) and responsive (sector) layouts
+ * Fully responsive - automatically fills container width while maintaining aspect ratio
  *
  * @param {Object} props
  * @param {Array} props.priceData - Raw price data (entity mode)
@@ -34,10 +34,10 @@ import { CHART_CONFIG, SECTOR_CHART_CONFIG } from '../utils/constants';
  * @param {Array} props.topEvents - Events for sector mode
  * @param {boolean} props.showEvents - Whether to show event markers (sector mode)
  * @param {boolean} props.showSignificantEvents - Whether to show significant events with news icons (entity mode)
- * @param {boolean} props.responsive - Enable responsive width calculation (default: false)
  * @param {string} props.mode - 'entity' or 'sector' (auto-detected if not specified)
  * @param {string} props.timeframe - Current timeframe (1D, 5D, 1M, 6M, YTD, 1Y, 5Y)
  * @param {number} props.prevClose - Previous close price (for 1D view)
+ * @param {string} props.exchange - Exchange code (for market hours calculation)
  */
 const PriceChart = ({
   priceData,
@@ -51,7 +51,6 @@ const PriceChart = ({
   topEvents = [],
   showEvents = true,
   showSignificantEvents = true,
-  responsive = false,
   mode,
   timeframe = '1Y',
   prevClose = null,
@@ -64,7 +63,6 @@ const PriceChart = ({
 
   // Auto-detect mode if not specified
   const detectedMode = mode || (priceData ? 'entity' : 'sector');
-  const isResponsive = responsive || detectedMode === 'sector';
 
   // Close tooltip when clicking outside
   useEffect(() => {
@@ -100,20 +98,22 @@ const PriceChart = ({
     };
   }, [hoveredEvent]);
 
-  // Responsive width calculation (sector mode)
+  // Responsive width calculation for both entity and sector
   useLayoutEffect(() => {
-    if (!isResponsive) return;
-
     const measure = () => {
       const el = chartContainerRef.current;
       if (!el) return;
-      const w = Math.max(SECTOR_CHART_CONFIG.MIN_WIDTH, el.clientWidth - 120);
-      setDynamicChartWidth(Math.min(SECTOR_CHART_CONFIG.MAX_WIDTH, w));
+      // Use container width minus padding for labels
+      const containerWidth = el.clientWidth;
+      const availableWidth = containerWidth - 90; // Space for y-axis labels
+      // Cap at max width for very large screens, min width for small screens
+      const w = Math.min(1200, Math.max(300, availableWidth));
+      setDynamicChartWidth(w);
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [isResponsive]);
+  }, []);
 
   // Calculate chart data based on mode
   const chartData = preProcessedChartData || generateChartData(priceData);
@@ -136,7 +136,7 @@ const PriceChart = ({
       : calculatePriceChange(chartData);
 
   // Chart dimensions
-  const fullChartWidth = isResponsive ? dynamicChartWidth : CHART_CONFIG.width;
+  const fullChartWidth = dynamicChartWidth;
   const chartHeight = 250; // Consistent chart height for both modes
   const containerHeight = 384; // h-96 in pixels
   const paddingLeft = 40;
@@ -166,9 +166,7 @@ const PriceChart = ({
     return 8;
   };
 
-  const numXAxisPoints = isResponsive
-    ? getNumXAxisPoints(chartWidth)
-    : getNumXAxisPoints(CHART_CONFIG.width);
+  const numXAxisPoints = getNumXAxisPoints(chartWidth);
 
   // Generate timeline points with responsive count and timeframe-aware formatting
   // For 1D, use fullChartWidth so labels span entire trading day range
@@ -226,7 +224,7 @@ const PriceChart = ({
   })() : null;
 
   return (
-    <div ref={chartContainerRef} className="relative h-96 border border-gray-200 rounded-lg shadow-md" style={{ backgroundColor: '#fafaf8' }}>
+    <div ref={chartContainerRef} className="relative h-96" style={{ backgroundColor: 'white' }}>
       <svg
         className="w-full h-full"
         viewBox={`0 0 ${paddingLeft + fullChartWidth + paddingRight} ${containerHeight}`}
@@ -263,13 +261,11 @@ const PriceChart = ({
           {[...Array(5)].map((_, i) => {
             const yPos = paddingTop + (i * ((chartHeight - 40) / 4));
             const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 4);
-            // For 1D, extend lines to full width to show entire trading day range
-            const lineEndX = timeframe === '1D' ? paddingLeft + fullChartWidth : paddingLeft + chartWidth;
             const labelX = timeframe === '1D' ? paddingLeft + fullChartWidth + 10 : paddingLeft + chartWidth + 10;
-            // Grid line end should match baseline extension logic
-            const gridLineEndX = timelinePoints.length > 0 && timeframe !== '5Y'
-              ? timelinePoints[timelinePoints.length - 1].x + 60
-              : lineEndX + 60;
+            // End grid lines at the last timeline point
+            const gridLineEndX = timelinePoints.length > 0
+              ? timelinePoints[timelinePoints.length - 1].x
+              : paddingLeft + chartWidth;
             return (
               <g key={i}>
                 <line
@@ -299,11 +295,15 @@ const PriceChart = ({
         {/* Previous Close Line (for 1D view) - just the dashed line */}
         {timeframe === '1D' && prevClose && (() => {
           const prevCloseY = paddingTop + chartHeight - ((prevClose - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+          // End at the last timeline point, same as grid lines
+          const lineEndX = timelinePoints.length > 0
+            ? timelinePoints[timelinePoints.length - 1].x
+            : paddingLeft + fullChartWidth;
           return (
             <line
               x1={paddingLeft}
               y1={prevCloseY}
-              x2={paddingLeft + fullChartWidth}
+              x2={lineEndX}
               y2={prevCloseY}
               stroke="#6b7280"
               strokeWidth="1"
