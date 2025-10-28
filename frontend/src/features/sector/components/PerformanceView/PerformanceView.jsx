@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { resolveSectorTicker } from '../../utils/tickerResolver';
 import { useSectorData } from '../../hooks/useSectorData';
 import { usePriceData } from '../../hooks/usePriceData';
+import { usePriceData as useEntityPriceData } from '../../../entity/hooks/usePriceData';
 import { useRollingSentiment } from '../../../entity/hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import {
@@ -95,6 +96,23 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     priceChangePercent,
     currentPrice
   } = usePriceData(priceData1Y, timeframe);
+
+  // Also fetch true intraday data using the entity hook so we can render 1D correctly
+  const {
+    priceData1Y: intradayPricesFromApi,
+    prevClose: intradayPrevClose,
+    exchange: intradayExchange
+  } = useEntityPriceData(ticker, '1D');
+
+  // Dev logging to inspect chartData vs events for 1M (helps debug markers not lining up)
+  useEffect(() => {
+    if (timeframe === '1M' && chartData && chartData.length > 0 && topEvents && topEvents.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('DEV: sector 1M chartData (last 3)', chartData.slice(-3));
+      // eslint-disable-next-line no-console
+      console.log('DEV: sector 1M topEvents (last 3)', topEvents.slice(-3));
+    }
+  }, [timeframe, chartData, topEvents]);
 
   // Render content based on active tab
   const renderContent = () => {
@@ -212,13 +230,14 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                 </div>
                 {timeframe === '1D' ? (
                   <PriceChart
-                    priceData={priceData}
+                    priceData={intradayPricesFromApi && intradayPricesFromApi.length > 0 ? intradayPricesFromApi : priceData}
                     ticker={ticker}
                     companyName={companyName}
                     currency={currency}
+                    exchange={intradayExchange || undefined}
                     significantEvents={showEvents ? topEvents : []}
                     timeframe={timeframe}
-                    prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                    prevClose={intradayPrevClose ?? (chartData.length > 1 ? chartData[chartData.length - 2]?.y : null)}
                     showSignificantEvents={showEvents}
                   />
                 ) : (
@@ -295,13 +314,14 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             </div>
             {timeframe === '1D' ? (
               <PriceChart
-                priceData={priceData}
+                priceData={intradayPricesFromApi && intradayPricesFromApi.length > 0 ? intradayPricesFromApi : priceData}
                 ticker={ticker}
                 companyName={companyName}
                 currency={currency}
+                exchange={intradayExchange || undefined}
                 significantEvents={showEvents ? topEvents : []}
                 timeframe={timeframe}
-                prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                prevClose={intradayPrevClose ?? (chartData.length > 1 ? chartData[chartData.length - 2]?.y : null)}
                 showSignificantEvents={showEvents}
               />
             ) : (
@@ -481,6 +501,8 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     <div className="space-y-8">
       {/* Tab Content */}
       {renderContent()}
+      {/* Dev: log event / chart alignment for 1M to help debug marker placement (remove in prod) */}
+      {/* dev logging handled via useEffect (see above) */}
     </div>
   );
 };

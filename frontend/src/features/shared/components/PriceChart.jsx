@@ -455,10 +455,14 @@ const PriceChart = ({
           significantEvents.forEach((event, i) => {
             const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
             if (eventPos) {
-              // Find the data point Y position for this event (1 interval before the actual jump)
-              const eventIndex = chartData.findIndex(d => d.date === event.start_date);
-              const displayIndex = eventIndex > 0 ? eventIndex - 1 : eventIndex;
-              const dataPoint = displayIndex >= 0 ? chartData[displayIndex] : null;
+              // Use the matched pricePoint/index from findEventPosition when available
+              let dataPoint = eventPos.pricePoint || null;
+              if ((!dataPoint || dataPoint.index === undefined) && chartData && chartData.length) {
+                // Fallback: find by YYYY-MM-DD comparison
+                const matchedIndex = chartData.findIndex(d => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
+                const displayIndex = matchedIndex > 0 ? matchedIndex - 1 : matchedIndex;
+                dataPoint = displayIndex >= 0 ? chartData[displayIndex] : null;
+              }
               
               const dataY = dataPoint
                 ? (paddingTop + chartHeight) - ((dataPoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
@@ -632,7 +636,13 @@ const PriceChart = ({
           topEvents.forEach((event, i) => {
             const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
             if (eventPos) {
-              const dataPoint = chartData.find(d => d.date === event.start_date);
+              // Prefer the matched pricePoint/index from findEventPosition
+              let dataPoint = eventPos.pricePoint || null;
+              if ((!dataPoint || dataPoint.index === undefined) && chartData && chartData.length) {
+                const matchedIndex = chartData.findIndex(d => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
+                dataPoint = matchedIndex >= 0 ? chartData[matchedIndex] : null;
+              }
+
               const dataY = dataPoint
                 ? (paddingTop + chartHeight) - ((dataPoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
                 : paddingTop;

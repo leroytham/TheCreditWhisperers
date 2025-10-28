@@ -76,9 +76,6 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
     const newsTicker = resolveNewsTicker(ticker);
     const yfinanceKey = sector ? resolveYfinanceSectorKey(sector) : null;
 
-    const fetchPrice = fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`)
-      .then(r => r.json());
-
     const fetchConstituents = fetch(`/api/sectors/${encodeURIComponent(ticker)}/top-constituents`)
       .then(r => r.json());
 
@@ -99,23 +96,14 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
     const fetchAnalysis = fetch(`/api/stocks/${encodeURIComponent(newsTicker)}/significant-events?timeframe=${timeframe}`)
       .then(r => r.json());
 
-    Promise.allSettled([fetchPrice, fetchNews, fetchConstituents, fetchDailySentiment, fetchAnalysis])
-      .then(([priceRes, newsRes, constRes, dailySentimentRes, analysisRes]) => {
+    Promise.allSettled([fetchNews, fetchConstituents, fetchDailySentiment, fetchAnalysis])
+      .then(([newsRes, constRes, dailySentimentRes, analysisRes]) => {
         if (!mounted) return;
 
         const newData = { ...data };
-
-        // Process price data
-        if (priceRes.status === 'fulfilled' && priceRes.value) {
-          const p = priceRes.value;
-          newData.priceData1Y = p.prices || [];
-          newData.companyName = p.company_name || '';
-          newData.currency = p.currency || 'USD';
-          newData.lastFetched = p.last_fetched || null;
-        } else {
-          console.error('Price fetch failed', priceRes.reason || priceRes.value);
-          setError(prev => prev ? prev + ' | price failed' : 'price failed');
-        }
+        // Note: price fetching is handled in a separate effect (below) which
+        // depends on `timeframe`. This prevents re-fetching heavy news/analysis
+        // when the user toggles the chart timeframe (eg. 1Y -> 5Y).
 
         // Process news data
         if (newsRes.status === 'fulfilled' && newsRes.value) {
@@ -299,13 +287,15 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, sector?.yfinanceKey]);
 
-  // Poll only price data every 5 seconds
+  // Fetch and poll only price data. This effect depends on the selected timeframe
+  // so a switch to '5Y' will fetch the longer history without re-fetching news
+  // or analysis payloads.
   useEffect(() => {
     if (!ticker) return;
 
     const pollPriceData = async () => {
       try {
-        const response = await fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=1Y`);
+        const response = await fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=${encodeURIComponent(timeframe)}`);
         const priceData = await response.json();
 
         // Update only price-related data, preserve everything else
@@ -321,10 +311,12 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
       }
     };
 
+    // Initial fetch immediately, then poll every 5s
+    pollPriceData();
     const intervalId = setInterval(pollPriceData, 5000);
 
     return () => clearInterval(intervalId);
-  }, [ticker]);
+  }, [ticker, timeframe]);
 
   return {
     ...data,
