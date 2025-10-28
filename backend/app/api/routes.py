@@ -17,6 +17,8 @@ from app.services.market_analysis_service import market_analysis_service
 from app.services.sector_service import sector_service_instance
 from app.services.sector_sentiment_service import sector_sentiment_service
 from app.services.earnings_service import earnings_service
+from app.core.cache import redis_cache
+from app.core.config import settings
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -516,13 +518,23 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
     Example: /api/price?ticker=AAPL&timeframe=1Y
     """
     try:
-        # For 1D intraday data, fetch with 1-minute interval
+        # Use Redis cache for assembled price responses per ticker+timeframe
+        cache_key = f"price:{ticker.upper()}:{timeframe}"
+        try:
+            cached_response = redis_cache.get(cache_key)
+            if cached_response is not None:
+                print(f"[CACHE HIT] {cache_key}")
+                return cached_response
+        except Exception:
+            # If cache backend unavailable, continue without failing
+            pass
+
+        # For 1D intraday data, fetch with 1-minute interval (do not rely on 5y series)
         if timeframe == "1D":
             stock_data = stock_data_service.get_stock_data(ticker, period="1d", interval="1m")
-        elif timeframe == "5Y":
-            stock_data = stock_data_service.get_stock_data(ticker, period="5y", interval="1d")
         else:
-            stock_data = stock_data_service.get_stock_data(ticker, period="1y", interval="1d")
+            # For all non-1D requests, fetch a full 5-year daily series and slice server-side
+            stock_data = stock_data_service.get_stock_data(ticker, period="5y", interval="1d")
 
         if stock_data is None or stock_data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
@@ -595,6 +607,14 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         # Add prev_close for 1D timeframe
         if prev_close is not None:
             response["prev_close"] = prev_close
+
+        # Cache the assembled response in Redis for non-1D timeframes (and short TTL for 1D)
+        try:
+            ttl = settings.PRICE_CACHE_TTL if timeframe != "1D" else max(30, int(settings.PRICE_CACHE_TTL / 10))
+            redis_cache.set(cache_key, response, ttl=ttl)
+            print(f"[CACHE SET] {cache_key} (ttl={ttl}s)")
+        except Exception as e:
+            print(f"[CACHE ERROR] Failed to set cache for {cache_key}: {e}")
 
         return response
 

@@ -76,10 +76,23 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
     case '5Y':
     default:
       // For 5Y, exclude today's data - only show completed trading days
-      filtered = priceData1Y.filter(pt => {
-        // Explicitly exclude today by comparing date strings
-        return pt.date !== todayString;
-      });
+        filtered = priceData1Y.filter(pt => {
+          // Explicitly exclude today by comparing date strings
+          return pt.date !== todayString;
+        });
+
+        // Downsample 5Y data client-side to avoid rendering thousands of SVG elements
+        // Keep a reasonable upper bound of points for smooth rendering
+        const MAX_5Y_POINTS = 800;
+        if (filtered.length > MAX_5Y_POINTS) {
+          const step = Math.ceil(filtered.length / MAX_5Y_POINTS);
+          const sampled = filtered.filter((_, idx) => (idx % step === 0));
+          // Ensure last point is included
+          if (sampled[sampled.length - 1] !== filtered[filtered.length - 1]) {
+            sampled.push(filtered[filtered.length - 1]);
+          }
+          filtered = sampled;
+        }
       break;
   }
 
@@ -659,8 +672,10 @@ export const findEventPosition = (event, chartData, chartWidth = 660, paddingLef
   
   // Find the index of the actual event date
   const eventIndex = chartData.findIndex(p => {
-    const pointDate = new Date(p.date);
-    return pointDate.toDateString() === eventDate.toDateString();
+    // Compare YYYY-MM-DD to avoid timezone-related discrepancies
+    const pointDateStr = (new Date(p.date)).toISOString().slice(0,10);
+    const eventDateStr = (new Date(event.start_date)).toISOString().slice(0,10);
+    return pointDateStr === eventDateStr;
   });
 
   if (eventIndex === -1) return null;
@@ -706,7 +721,11 @@ export const computeEventMarkers = (
 
   return events.map((event) => {
     const eventDate = new Date(event.start_date);
-    const index = chartData.findIndex(pt => new Date(pt.date).toDateString() === eventDate.toDateString());
+    const index = chartData.findIndex(pt => {
+      const ptDateStr = (new Date(pt.date)).toISOString().slice(0,10);
+      const evDateStr = (new Date(event.start_date)).toISOString().slice(0,10);
+      return ptDateStr === evDateStr;
+    });
 
     if (index === -1) return null;
 
