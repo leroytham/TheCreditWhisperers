@@ -28,7 +28,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
   };
 
   const addHolding = () => {
-    setHoldings([...holdings, { symbol: '', quantity: '', purchasePrice: '' }]);
+    setHoldings([...holdings, { symbol: '', quantity: '', purchasePrice: '', purchaseDate: '' }]);
   };
 
   const removeHolding = (index) => {
@@ -235,7 +235,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
                     <th className="py-2 font-medium">Symbol</th>
                     <th className="py-2 font-medium">Quantity</th>
                     <th className="py-2 font-medium">Purchase Price ($)</th>
-                    <th className="py-2 font-medium"></th>
+                    <th className="py-2 font-medium">Purchase Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -269,6 +269,14 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
                           onChange={(e) => updateHolding(index, 'purchasePrice', e.target.value)}
                           min="0"
                           step="0.01"
+                          className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="py-2 px-2">
+                        <input
+                          type="date"
+                          value={holding.purchaseDate}
+                          onChange={(e) => updateHolding(index, 'purchaseDate', e.target.value)}
                           className="w-full border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </td>
