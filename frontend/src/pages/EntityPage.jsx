@@ -130,37 +130,44 @@ const EntityPage = () => {
       <main className="p-4 sm:p-6 lg:p-8">
         {/* Page Header */}
         <section className="py-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {companyName || `${ticker} - Company Name Not Available`}
-            </h1>
-            <div className="mt-1 flex items-center space-x-2 text-sm text-gray-500">
-              <span className="font-semibold text-gray-700">{ticker}</span>
-              {exchange && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>{exchange}</span>
-                </>
-              )}
-              {marketState && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                    marketState === 'REGULAR' 
-                      ? 'bg-green-100 text-green-800' 
-                      : marketState === 'CLOSED'
-                      ? 'bg-gray-100 text-gray-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {marketState === 'REGULAR' ? 'Market Open' : 
-                     marketState === 'CLOSED' ? 'Market Closed' :
-                     marketState === 'PRE' || marketState === 'PREPRE' ? 'Pre-Market' :
-                     marketState === 'POST' || marketState === 'POSTPOST' ? 'After Hours' : marketState}
-                  </span>
-                </>
-              )}
+          {companyName ? (
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {companyName}
+              </h1>
+              <div className="mt-1 flex items-center space-x-2 text-sm text-gray-500">
+                <span className="font-semibold text-gray-700">{ticker}</span>
+                {exchange && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{exchange}</span>
+                  </>
+                )}
+                {marketState && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      marketState === 'REGULAR'
+                        ? 'bg-green-100 text-green-800'
+                        : marketState === 'CLOSED'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {marketState === 'REGULAR' ? 'Market Open' :
+                       marketState === 'CLOSED' ? 'Market Closed' :
+                       marketState === 'PRE' || marketState === 'PREPRE' ? 'Pre-Market' :
+                       marketState === 'POST' || marketState === 'POSTPOST' ? 'After Hours' : marketState}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="animate-pulse">
+              <div className="h-9 bg-gray-200 rounded w-64 mb-2"></div>
+              <div className="h-5 bg-gray-200 rounded w-40"></div>
+            </div>
+          )}
         </section>
 
         {/* Conditional Content Based on Active Tab */}
