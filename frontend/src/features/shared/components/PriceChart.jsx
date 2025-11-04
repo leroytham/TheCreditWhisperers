@@ -846,8 +846,8 @@ const PriceChart = ({
         </div>
       )}
 
-      {/* Entity mode: Event click tooltip - Bloomberg style with article list */}
-      {detectedMode === 'entity' && hoveredEvent && (
+      {/* Event click tooltip - Bloomberg style with article list (works for both entity and sector modes) */}
+      {hoveredEvent && (
         <div
           className="absolute bg-white border border-gray-300 rounded shadow-lg"
           style={{
@@ -936,7 +936,7 @@ const PriceChart = ({
       )}
 
       {/* Sector mode: Hover tooltip - Bloomberg style */}
-      {detectedMode === 'sector' && hoveredPoint && (
+      {detectedMode === 'sector' && hoveredPoint && !hoveredEvent && (
         <div
           className="absolute bg-white border border-gray-300 rounded pointer-events-none"
           style={{

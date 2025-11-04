@@ -114,6 +114,16 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     }
   }, [timeframe, chartData, topEvents]);
 
+  // Debug logging for topEvents to verify news data
+  useEffect(() => {
+    if (topEvents && topEvents.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[PerformanceView] Sector topEvents:', topEvents);
+      // eslint-disable-next-line no-console
+      console.log('[PerformanceView] First event has news?', topEvents[0].news ? `Yes (${topEvents[0].news.length} articles)` : 'No');
+    }
+  }, [topEvents]);
+
   // Render content based on active tab
   const renderContent = () => {
     if (loading) {
@@ -191,41 +201,44 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
 
               {/* Price Chart - Row 2, Spans 2 columns */}
               <div className="lg:col-start-1 lg:col-span-2 lg:row-start-2 bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-4">
-                      <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-700">Events</span>
-                        <button
-                          onClick={() => setShowEvents(!showEvents)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 ${
-                            showEvents ? 'bg-gray-900' : 'bg-gray-300'
-                          }`}
-                          role="switch"
-                          aria-checked={showEvents}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              showEvents ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  <div className="flex space-x-2">
-                    {TIMEFRAMES.map(tf => (
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+                    {/* Events Toggle Switch - Bloomberg style */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700">Events</span>
                       <button
-                        key={tf}
-                        onClick={() => setTimeframe(tf)}
-                        className={`px-3 py-1 rounded text-sm ${
-                          timeframe === tf
-                            ? 'bg-gray-900 text-white'
-                            : 'text-gray-600 hover:bg-gray-100'
+                        onClick={() => setShowEvents(!showEvents)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 ${
+                          showEvents ? 'bg-gray-900' : 'bg-gray-300'
                         }`}
+                        role="switch"
+                        aria-checked={showEvents}
                       >
-                        {tf}
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            showEvents ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
                       </button>
-                    ))}
+                    </div>
+
+                    {/* Timeframe Buttons */}
+                    <div className="flex flex-wrap gap-1">
+                      {TIMEFRAMES.map(tf => (
+                        <button
+                          key={tf}
+                          onClick={() => setTimeframe(tf)}
+                          className={`px-3 py-1 rounded text-sm ${
+                            timeframe === tf
+                              ? 'bg-gray-900 text-white'
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {tf}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 {timeframe === '1D' ? (
@@ -275,9 +288,10 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
       case 'performance':
         return (
           <div className="bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <h3 className="text-lg font-semibold text-gray-900">Detailed Performance</h3>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Detailed Performance Analysis</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+                {/* Events Toggle Switch - Bloomberg style */}
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-gray-700">Events</span>
                   <button
@@ -295,21 +309,23 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                     />
                   </button>
                 </div>
-              </div>
-              <div className="flex space-x-2">
-                {TIMEFRAMES.map(tf => (
-                  <button
-                    key={tf}
-                    onClick={() => setTimeframe(tf)}
-                    className={`px-3 py-1 rounded text-sm ${
-                      timeframe === tf
-                        ? 'bg-gray-900 text-white'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
+
+                {/* Timeframe Buttons */}
+                <div className="flex flex-wrap gap-1">
+                  {TIMEFRAMES.map(tf => (
+                    <button
+                      key={tf}
+                      onClick={() => setTimeframe(tf)}
+                      className={`px-3 py-1 rounded text-sm ${
+                        timeframe === tf
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             {timeframe === '1D' ? (
