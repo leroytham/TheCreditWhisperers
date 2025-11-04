@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import AppHeader from "../components/layout/AppHeader";
 import SectorSelector from "../features/sector/components/SectorSelector/SectorSelector";
 import PerformanceView from "../features/sector/components/PerformanceView/PerformanceView";
+import { resolveDisplayTicker } from "../features/sector/utils/tickerResolver";
 
 /**
  * SectorPage - Main sector analysis page
@@ -82,6 +83,10 @@ const SectorPage = () => {
     }
 
     if (view === 'performance' && performanceContext) {
+      const displayTicker = performanceContext.sector?.ticker
+        ? resolveDisplayTicker(performanceContext.sector.ticker)
+        : performanceContext.sector?.name;
+
       return (
         <div>
           <button
@@ -91,7 +96,7 @@ const SectorPage = () => {
             <span className="mr-1">←</span> Back to Selection
           </button>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {performanceContext.sector?.ticker || performanceContext.sector?.name} ({performanceContext.countryName} - {performanceContext.sector?.name})
+            {displayTicker} ({performanceContext.countryName} - {performanceContext.sector?.name})
           </h1>
           <p className="text-sm text-gray-600 mt-1">{performanceContext.sector?.index}</p>
         </div>

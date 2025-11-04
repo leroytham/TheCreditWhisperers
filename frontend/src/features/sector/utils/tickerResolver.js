@@ -37,6 +37,16 @@ export const resolveNewsTicker = (ticker) => {
 };
 
 /**
+ * Resolves the ETF ticker for display from an index ticker
+ * Maps S&P sector indices to SPDR ETF tickers for UI display
+ * @param {string} ticker - Index ticker symbol (e.g., '^SP500-45')
+ * @returns {string} ETF ticker for display (e.g., 'XLK') or original ticker if no mapping exists
+ */
+export const resolveDisplayTicker = (ticker) => {
+  return newsTickerOverrides[ticker] || ticker;
+};
+
+/**
  * Determines if a ticker is valid (non-null and non-empty)
  * @param {string|null} ticker - Ticker to validate
  * @returns {boolean} True if ticker is valid
