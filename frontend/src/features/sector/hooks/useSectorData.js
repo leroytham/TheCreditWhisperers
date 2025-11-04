@@ -266,6 +266,12 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
             };
           });
           newData.topEvents = transformedEvents;
+
+          // Debug logging to verify news data structure
+          console.log('[useSectorData] Sector topEvents with news:', transformedEvents);
+          if (transformedEvents.length > 0) {
+            console.log('[useSectorData] First event news array:', transformedEvents[0].news);
+          }
         } else {
           console.error('Analysis fetch failed', analysisRes.reason || analysisRes.value);
         }

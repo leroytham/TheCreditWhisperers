@@ -24,6 +24,11 @@ class MarketAnalysisService:
         # Initialize NewsService for Alpha Vantage news fetching
         self.news_service = NewsService()
 
+        # SPDR ETF tickers that represent S&P 500 sectors
+        self.sector_etf_tickers = {
+            'XLY', 'XLP', 'XLV', 'XLF', 'XLK', 'XLC', 'XLU', 'XLRE', 'XLB', 'XLI', 'XLE'
+        }
+
     def detect_large_moves(self, df: pd.DataFrame, top_n: int = 5, threshold_std: float = 2.0) -> list[dict]:
         """
         Detects the largest price movements in a DataFrame.
@@ -188,9 +193,14 @@ class MarketAnalysisService:
             end_date = pd.to_datetime(event.end_date)
             
             print(f"DEBUG Event: start={start_date}, end={end_date}, days={event.num_days}, move={event.total_move_pct:.2f}%")
-            
+
             # Fetch news for the start date (±1 day window)
-            news = self.fetch_alpha_vantage_news(ticker, start_date)
+            # Use sector-aware fetching if ticker is a known sector ETF
+            if ticker.upper() in self.sector_etf_tickers:
+                print(f"DEBUG: Detected sector ETF {ticker}, fetching aggregated constituent news")
+                news = self.fetch_sector_aggregated_news(ticker, start_date)
+            else:
+                news = self.fetch_alpha_vantage_news(ticker, start_date)
             
             final_results.append({
                 "start_date": start_date.strftime('%Y-%m-%d'),
@@ -244,6 +254,174 @@ class MarketAnalysisService:
                 break
         
         return df.loc[earliest_idx, 'Date']
+
+    def fetch_sector_aggregated_news(
+        self,
+        ticker: str,
+        target_date: datetime
+    ) -> list[dict]:
+        """
+        Fetches aggregated news for a sector by querying top constituents.
+        Used when the ticker is a sector ETF (e.g., XLK for Technology).
+
+        Args:
+            ticker: Sector ETF ticker symbol (e.g., XLK, XLF)
+            target_date: Date to center the search around
+
+        Returns:
+            List of news articles aggregated from top constituents
+        """
+        try:
+            # Import here to avoid circular dependency
+            from .stock_data_service import stock_data_service
+
+            # Get top constituents for this sector
+            # Map ETF ticker to sector index ticker for constituent lookup
+            etf_to_sector_map = {
+                'XLK': '^SP500-45',  # Information Technology
+                'XLV': '^SP500-35',  # Health Care
+                'XLF': '^SP500-40',  # Financials
+                'XLI': '^SP500-20',  # Industrials
+                'XLY': '^SP500-25',  # Consumer Discretionary
+                'XLP': '^SP500-30',  # Consumer Staples
+                'XLE': '^GSPE',      # Energy
+                'XLB': '^SP500-15',  # Materials
+                'XLC': '^SP500-50',  # Communication Services
+                'XLRE': '^SP500-60', # Real Estate
+                'XLU': '^SP500-55',  # Utilities
+            }
+
+            sector_ticker = etf_to_sector_map.get(ticker.upper())
+            if not sector_ticker:
+                # Not a recognized sector ETF, fall back to regular news fetch
+                return self.fetch_alpha_vantage_news(ticker, target_date)
+
+            # Get top 5 constituents
+            constituents = stock_data_service.get_sector_top_constituents(sector_ticker)
+            if not constituents:
+                print(f"No constituents found for sector {sector_ticker}, falling back to ETF news")
+                return self.fetch_alpha_vantage_news(ticker, target_date)
+
+            # Limit to top 5 constituents to avoid too many API calls
+            top_tickers = [c['symbol'] for c in constituents[:5]]
+
+            # Calculate ±1 day window
+            start_date = target_date - timedelta(days=1)
+            end_date = target_date + timedelta(days=1)
+            time_from = start_date.strftime('%Y%m%dT0000')
+            time_to = end_date.strftime('%Y%m%dT2359')
+
+            # Fetch news for each constituent and aggregate
+            all_articles = []
+
+            async def fetch_all_constituent_news():
+                async with aiohttp.ClientSession() as session:
+                    tasks = []
+                    for constituent_ticker in top_tickers:
+                        task = self.news_service._fetch_alpha_vantage_news(
+                            session=session,
+                            ticker=constituent_ticker,
+                            time_from=time_from,
+                            time_to=time_to,
+                            limit=10,  # Fetch fewer per constituent
+                            preserve_all_tickers=True
+                        )
+                        tasks.append(task)
+
+                    # Fetch all in parallel
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    # Flatten results
+                    for result in results:
+                        if isinstance(result, list):
+                            all_articles.extend(result)
+
+                    return all_articles
+
+            # Run the async function
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            articles = loop.run_until_complete(fetch_all_constituent_news())
+            loop.close()
+
+            if not articles:
+                return []
+
+            # Deduplicate by URL
+            seen_urls = set()
+            unique_articles = []
+            for article in articles:
+                url = article.get("url") or article.get("link")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    unique_articles.append(article)
+
+            # Score articles by average polarization across all constituents mentioned
+            scored_articles = []
+            for article in unique_articles:
+                ticker_sentiments = article.get("ticker_sentiment", [])
+
+                # Calculate average polarization for top constituents mentioned in this article
+                polarizations = []
+                for ts in ticker_sentiments:
+                    ts_ticker = ts.get("ticker", "").upper()
+                    if ts_ticker in [t.upper() for t in top_tickers]:
+                        sentiment = ts.get("ticker_sentiment_score")
+                        relevance = ts.get("relevance_score")
+                        if sentiment is not None and relevance is not None:
+                            polarizations.append(abs(sentiment * relevance))
+
+                # Skip if no relevant tickers found
+                if not polarizations:
+                    continue
+
+                avg_polarization = sum(polarizations) / len(polarizations)
+                avg_sentiment = sum([ts.get("ticker_sentiment_score", 0) for ts in ticker_sentiments if ts.get("ticker", "").upper() in [t.upper() for t in top_tickers]]) / len(polarizations)
+                avg_relevance = sum([ts.get("relevance_score", 0) for ts in ticker_sentiments if ts.get("ticker", "").upper() in [t.upper() for t in top_tickers]]) / len(polarizations)
+
+                scored_articles.append({
+                    "article": article,
+                    "polarization": avg_polarization,
+                    "sentiment_score": avg_sentiment,
+                    "relevance_score": avg_relevance
+                })
+
+            # Sort by polarization
+            scored_articles.sort(key=lambda x: x["polarization"], reverse=True)
+
+            # Format top 5 articles
+            formatted_news = []
+            for item in scored_articles[:5]:
+                article = item["article"]
+                formatted_article = {
+                    "date": article.get("publish_date") or article.get("time_published"),
+                    "title": article.get("title"),
+                    "link": article.get("link") or article.get("url"),
+                    "publisher": article.get("provider") or article.get("source"),
+                    "sentiment_score": item["sentiment_score"],
+                    "relevance_score": item["relevance_score"],
+                    "polarization_score": item["polarization"],
+                    "url": article.get("url") or article.get("link"),
+                    "time_published": article.get("time_published") or article.get("publish_date"),
+                    "source": article.get("source") or article.get("provider"),
+                    "source_domain": article.get("source_domain"),
+                    "summary": article.get("summary"),
+                    "banner_image": article.get("banner_image"),
+                    "category_within_source": article.get("category_within_source"),
+                    "authors": article.get("authors", []),
+                    "overall_sentiment_score": article.get("overall_sentiment_score"),
+                    "overall_sentiment_label": article.get("overall_sentiment_label"),
+                    "topics": article.get("topics", []),
+                    "ticker_sentiment": article.get("ticker_sentiment", [])
+                }
+                formatted_news.append(formatted_article)
+
+            return formatted_news
+
+        except Exception as e:
+            print(f"Error fetching sector aggregated news for {ticker}: {e}")
+            # Fall back to regular news fetch
+            return self.fetch_alpha_vantage_news(ticker, target_date)
 
     def fetch_alpha_vantage_news(
         self,
