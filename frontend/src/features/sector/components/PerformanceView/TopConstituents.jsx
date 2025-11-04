@@ -144,16 +144,13 @@ const TopConstituents = ({ constituents, sectorName }) => {
                 >
                   % of Assets <SortIcon columnKey="percentOfAssets" />
                 </th>
-                <th 
+                <th
                   className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('volume')}
                 >
                   Volume <SortIcon columnKey="volume" />
                 </th>
-                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  52W Range
-                </th>
-                <th 
+                <th
                   className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('sentimentScore')}
                 >
@@ -170,11 +167,6 @@ const TopConstituents = ({ constituents, sectorName }) => {
             <tbody className="divide-y divide-gray-100">
               {sortedConstituents.map((c, idx) => {
                 const percentOfAssets = c.percentOfAssets ?? c.percent_of_assets;
-                const fiftyTwoWeekHigh = c.fiftyTwoWeekHigh ?? c.fifty_two_week_high;
-                const fiftyTwoWeekLow = c.fiftyTwoWeekLow ?? c.fifty_two_week_low;
-                const fiftyTwoWeekRange = fiftyTwoWeekLow && fiftyTwoWeekHigh
-                  ? ((c.price - fiftyTwoWeekLow) / (fiftyTwoWeekHigh - fiftyTwoWeekLow)) * 100
-                  : null;
                 const sentimentScore = c.sentimentScore ?? c.sentiment_score;
                 const sentimentMomentum = c.sentimentMomentum ?? c.sentiment_momentum;
 
@@ -220,26 +212,6 @@ const TopConstituents = ({ constituents, sectorName }) => {
                       {c.volume
                         ? `${(c.volume / 1e6).toFixed(2)}M`
                         : '--'}
-                    </td>
-                    <td className="py-4 px-6">
-                      {fiftyTwoWeekRange !== null ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 relative">
-                            <div
-                              className={`absolute top-0 left-0 h-2 rounded-full ${
-                                fiftyTwoWeekRange > 70 ? 'bg-green-500' :
-                                fiftyTwoWeekRange > 30 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${fiftyTwoWeekRange}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-gray-600 whitespace-nowrap">
-                            {fiftyTwoWeekRange.toFixed(0)}%
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">--</span>
-                      )}
                     </td>
                     <td className="py-4 px-6 text-right">
                       {sentimentScore !== null && sentimentScore !== undefined ? (

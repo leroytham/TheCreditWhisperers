@@ -190,12 +190,15 @@ class StockDataService:
                 sentiment_score = None
                 sentiment_momentum = None
                 try:
-                    news_articles = news_service.get_news_for_ticker(
-                        ticker=symbol,
-                        timeframe="1M",
-                        limit=200  # Get enough articles for 1 month
+                    # Use async method to fetch news
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    news_articles = loop.run_until_complete(
+                        news_service.get_ticker_news(ticker=symbol, count=200)
                     )
-                    
+                    loop.close()
+
                     if news_articles:
                         sentiment_analysis = sentiment_service.analyze_sentiment_with_momentum(news_articles)
                         sentiment_score = sentiment_analysis.get("slow_score")  # Use slow score as overall sentiment
