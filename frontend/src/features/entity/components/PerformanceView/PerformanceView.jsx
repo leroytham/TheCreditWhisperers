@@ -21,6 +21,7 @@ import {
   SentimentConfidenceCard
 } from '../../../shared/components';
 import CompanyOverview from '../CompanyOverview';
+import EarningsCalendar from '../EarningsCalendar/EarningsCalendar';
 import { useRollingSentiment } from '../../hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
@@ -472,6 +473,14 @@ const PerformanceView = ({
                 error={null}
                 apiMetadata={apiMetadata}
             />
+          </div>
+        );
+
+      case 'events':
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <SignificantEvents events={significantEvents} ticker={ticker} />
+            <EarningsCalendar ticker={ticker} />
           </div>
         );
 

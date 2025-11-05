@@ -91,7 +91,7 @@ const SectorPage = () => {
             <span className="mr-1">←</span> Back to Selection
           </button>
           <h1 className="text-2xl font-semibold text-gray-900">
-            {performanceContext.sector?.ticker || performanceContext.sector?.name} ({performanceContext.countryName} - {performanceContext.sector?.name})
+            {performanceContext.countryName} - {performanceContext.sector?.name}
           </h1>
           <p className="text-sm text-gray-600 mt-1">{performanceContext.sector?.index}</p>
         </div>
