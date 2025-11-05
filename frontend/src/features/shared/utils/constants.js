@@ -7,7 +7,7 @@
  */
 
 // Available timeframe options
-export const TIMEFRAMES = ['1D', '1M', '6M', 'YTD', '1Y'];
+export const TIMEFRAMES = ['1D', '1M', '3M', '6M', 'YTD', '1Y'];
 
 // Default timeframe
 export const DEFAULT_TIMEFRAME = '1D';

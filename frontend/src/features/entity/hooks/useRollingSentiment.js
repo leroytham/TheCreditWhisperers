@@ -19,7 +19,12 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/rolling-sentiment?ticker=${ticker}&timeframe=${timeframe}`);
+        const params = new URLSearchParams({
+          ticker: ticker || '',
+          timeframe: timeframe || ''
+        });
+
+        const response = await fetch(`/api/rolling-sentiment?${params.toString()}`);
 
         if (!response.ok) {
           const errorText = await response.text();

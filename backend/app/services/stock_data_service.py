@@ -75,7 +75,7 @@ class StockDataService:
 
         Args:
             df: DataFrame with datetime index
-            timeframe: One of "1D", "1M", "6M", "1Y", "YTD"
+            timeframe: One of "1D", "1M", "3M", "6M", "1Y", "YTD"
 
         Returns:
             Filtered DataFrame or original if timeframe not recognized
@@ -113,6 +113,7 @@ class StockDataService:
 
         time_deltas = {
             "1M": 29,
+            "3M": 89,
             "6M": 179,
             "1Y": 364,
         }

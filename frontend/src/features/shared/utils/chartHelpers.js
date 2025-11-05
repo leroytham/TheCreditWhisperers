@@ -30,10 +30,17 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
   const now = etDate; // Use ET date for all date calculations
 
   switch (timeframe) {
-    case '1D':
-      // For 1D, return all intraday data (already filtered by backend)
-      filtered = priceData1Y;
+    case '1D': {
+      // Constrain 1D view to the most recent trading session
+      const lastPoint = priceData1Y[priceData1Y.length - 1];
+      if (lastPoint && lastPoint.date) {
+        const latestDate = lastPoint.date;
+        filtered = priceData1Y.filter(pt => pt.date === latestDate);
+      } else {
+        filtered = priceData1Y;
+      }
       break;
+    }
     case '1M': {
       const oneMonthAgo = new Date(now);
       oneMonthAgo.setMonth(now.getMonth() - 1);
@@ -42,6 +49,15 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
         const ptDate = new Date(pt.date);
         // Explicitly exclude today by comparing date strings
         return ptDate >= oneMonthAgo && pt.date !== todayString;
+      });
+      break;
+    }
+    case '3M': {
+      const threeMonthsAgo = new Date(now);
+      threeMonthsAgo.setMonth(now.getMonth() - 3);
+      filtered = priceData1Y.filter(pt => {
+        const ptDate = new Date(pt.date);
+        return ptDate >= threeMonthsAgo && pt.date !== todayString;
       });
       break;
     }
