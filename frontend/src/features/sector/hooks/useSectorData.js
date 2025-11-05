@@ -93,11 +93,8 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
       : fetch(`/api/daily-sentiment?ticker=${encodeURIComponent(newsTicker)}`)
           .then(r => r.json());
 
-    const fetchAnalysis = fetch(`/api/stocks/${encodeURIComponent(newsTicker)}/significant-events?timeframe=${timeframe}`)
-      .then(r => r.json());
-
-    Promise.allSettled([fetchNews, fetchConstituents, fetchDailySentiment, fetchAnalysis])
-      .then(([newsRes, constRes, dailySentimentRes, analysisRes]) => {
+    Promise.allSettled([fetchNews, fetchConstituents, fetchDailySentiment])
+      .then(([newsRes, constRes, dailySentimentRes]) => {
         if (!mounted) return;
 
         const newData = { ...data };
@@ -252,30 +249,6 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
           console.error('Daily sentiment fetch failed', dailySentimentRes.reason || dailySentimentRes.value);
         }
 
-        // Process significant events
-        if (analysisRes.status === 'fulfilled' && analysisRes.value) {
-          const rawEvents = analysisRes.value.events || [];
-          const transformedEvents = rawEvents.map(event => {
-            const movePct = event.total_move_pct * 100;
-            return {
-              ...event,
-              trend: movePct >= 0 ? 'Upward' : 'Downward',
-              total_move_pct: movePct,
-              end_date: event.start_date,
-              days: 1
-            };
-          });
-          newData.topEvents = transformedEvents;
-
-          // Debug logging to verify news data structure
-          console.log('[useSectorData] Sector topEvents with news:', transformedEvents);
-          if (transformedEvents.length > 0) {
-            console.log('[useSectorData] First event news array:', transformedEvents[0].news);
-          }
-        } else {
-          console.error('Analysis fetch failed', analysisRes.reason || analysisRes.value);
-        }
-
         setData(newData);
         setLoading(false);
       })
@@ -292,6 +265,55 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, sector?.yfinanceKey]);
+
+  // Fetch significant events whenever the timeframe changes
+  useEffect(() => {
+    if (!ticker) return;
+
+    let cancelled = false;
+
+    const fetchSignificantEvents = async () => {
+      try {
+        const newsTicker = resolveNewsTicker(ticker);
+        const response = await fetch(`/api/stocks/${encodeURIComponent(newsTicker)}/significant-events?timeframe=${encodeURIComponent(timeframe)}`);
+        const analysis = await response.json();
+
+        if (cancelled) return;
+
+        const rawEvents = analysis?.events || [];
+        const transformedEvents = rawEvents.map(event => {
+          const movePct = event.total_move_pct * 100;
+          return {
+            ...event,
+            trend: movePct >= 0 ? 'Upward' : 'Downward',
+            total_move_pct: movePct,
+            end_date: event.start_date,
+            days: 1
+          };
+        });
+
+        setData(prev => ({
+          ...prev,
+          topEvents: transformedEvents
+        }));
+
+        if (transformedEvents.length > 0) {
+          console.log('[useSectorData] Sector topEvents with news:', transformedEvents);
+          console.log('[useSectorData] First event news array:', transformedEvents[0].news);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Analysis fetch failed', err);
+        }
+      }
+    };
+
+    fetchSignificantEvents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker, timeframe]);
 
   // Fetch and poll only price data. This effect depends on the selected timeframe
   // so a switch to '5Y' will fetch the longer history without re-fetching news
