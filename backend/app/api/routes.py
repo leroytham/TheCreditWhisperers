@@ -697,6 +697,7 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
                 "sentiment_label": article.get("sentiment_label", "Neutral"),  # Bullish/Bearish format
                 "link": article.get("link", ""),
                 "publish_date": article.get("publish_date", ""),
+                "publish_timestamp": article.get("publish_timestamp", ""),  # Add full timestamp
                 "image": article.get("image", "")
             }
 
@@ -1510,6 +1511,7 @@ async def save_portfolio(data: dict):
             symbol = h["symbol"].upper().strip()
             quantity = float(h["quantity"])
             purchase_price = float(h["purchasePrice"])
+            purchase_date = h["purchaseDate"]
 
             existing_holding = holdings_col.find_one({
                 "username": username,
@@ -1535,6 +1537,7 @@ async def save_portfolio(data: dict):
                     {"$set": {
                         "quantity": new_qty,
                         "purchase_price": round(new_price, 2),
+                        "purchase_date": purchase_date,
                         "updated_at": datetime.utcnow()
                     }}
                 )
@@ -1547,6 +1550,7 @@ async def save_portfolio(data: dict):
                     "symbol": symbol,
                     "quantity": quantity,
                     "purchase_price": purchase_price,
+                    "purchase_date": purchase_date,
                     "created_at": datetime.utcnow()
                 }
                 holdings_col.insert_one(holding_record)
@@ -1681,6 +1685,7 @@ async def update_portfolio(data: dict):
                 "symbol": h["symbol"].upper(),
                 "quantity": float(h["quantity"]) if h["quantity"] else 0,
                 "purchase_price": float(h["purchasePrice"]) if h["purchasePrice"] else 0,
+                "purchase_date": h["purchaseDate"],
                 "updated_at": datetime.utcnow()
             })
 
@@ -1777,7 +1782,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
                 "gainLossPercent": float(pl_percent) if pl_percent is not None else None,
                 "isPositive": bool(is_positive) if is_positive is not None else None,
                 "newsVolume": news_volume,  #  Now an integer (count of articles)
-                "sentiment": avg_score,
+                "sentiment": f"{float(avg_score):,.2f}",
                 "position": f"{float(market_price) * round(float(total_qty), 2):,.1f}"
             })
 
@@ -1786,6 +1791,244 @@ async def get_portfolio_holdings(username: str, account_name: str):
     except Exception as e:
         print(" Error fetching holdings:", e)
         raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
+
+
+@router.get("/portfolio/performance/{username}/{account_name}")
+async def get_portfolio_performance(username: str, account_name: str):
+    """
+    Calculate portfolio performance vs S&P 500 for different time periods.
+
+    HYBRID LOGIC - SMART PERFORMANCE CALCULATION:
+    Uses COST BASIS for recent purchases, MARKET PRICE for older holdings.
+
+    For each holding, determine start price:
+    - IF purchase_date >= period_start → Use YOUR purchase_price (cost basis)
+    - IF purchase_date < period_start → Use market_price on period_start
+
+    Then calculate:
+    Portfolio Return = (Current Value - Start Value) / Start Value × 100
+    Where:
+    - Current Value = Σ(current_price × quantity)
+    - Start Value = Σ(start_price × quantity)
+
+    Example (MTD = Dec 1, 2024 → Today):
+
+    Holding 1: AAPL bought Feb 1, 2024 @ $150
+    - Purchase date (Feb 1) < MTD start (Dec 1)
+    - Use market price on Dec 1: $180
+    - Return: (current $195 - start $180) / $180 = +8.3%
+
+    Holding 2: MSFT bought Dec 15, 2024 @ $370
+    - Purchase date (Dec 15) >= MTD start (Dec 1)
+    - Use YOUR cost basis: $370
+    - Return: (current $385 - cost $370) / $370 = +4.05%
+
+    This shows:
+    - Real gains for recent purchases (YOUR money at risk)
+    - Fair performance for older holdings (comparable to benchmarks)
+
+    S&P 500 uses the same period start dates for fair comparison.
+
+    Returns MTD, QTD, YTD, and ITD (Inception-to-Date) performance metrics.
+    """
+    try:
+        from datetime import datetime, timedelta
+        import pandas as pd
+
+        # Fetch ALL current holdings
+        holdings_cursor = holdings_col.find({
+            "username": username,
+            "client_account_name": account_name
+        })
+        holdings_list = list(holdings_cursor)
+
+        if not holdings_list:
+            return {"error": "No holdings found"}
+
+        print(f"\n=== PORTFOLIO PERFORMANCE CALCULATION ===")
+        print(f"Account: {account_name}")
+        print(f"Total Holdings: {len(holdings_list)}")
+
+        # Get current date
+        today = datetime.now()
+
+        # Define time periods - START dates for each period
+        first_day_of_month = today.replace(day=1)
+        first_day_of_year = today.replace(month=1, day=1)
+
+        # Calculate quarter start (approximate - use 3 months back)
+        quarter_start = today - timedelta(days=90)
+
+        periods = {
+            "MTD": first_day_of_month,      # Month-to-Date
+            "QTD": quarter_start,            # Quarter-to-Date (approx 3 months)
+            "YTD": first_day_of_year,       # Year-to-Date
+            "ITD": None,                     # Will calculate based on holdings
+        }
+
+        print(f"\nTime Periods:")
+        for period_name, start_date in periods.items():
+            if start_date:
+                print(f"  {period_name}: {start_date.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}")
+            else:
+                print(f"  {period_name}: From purchase dates to {today.strftime('%Y-%m-%d')}")
+
+        # Calculate portfolio value at each period
+        results = []
+
+        for period_name, start_date in periods.items():
+            print(f"\n--- Calculating {period_name} Performance ---")
+
+            # For ITD, calculate earliest purchase date
+            if period_name == "ITD":
+                earliest_purchase = min(
+                    datetime.strptime(h.get("purchase_date", today.strftime("%Y-%m-%d")), "%Y-%m-%d")
+                    for h in holdings_list
+                )
+                start_date = earliest_purchase
+                print(f"  ITD Start Date (earliest purchase): {start_date.strftime('%Y-%m-%d')}")
+
+            # These will store the TOTAL portfolio value at start and now
+            total_value_at_period_start = 0
+            total_value_now = 0
+
+            holdings_details = []  # For debugging
+
+            # Loop through EACH holding in the current portfolio
+            for holding in holdings_list:
+                symbol = holding.get("symbol", "").upper()
+                quantity = float(holding.get("quantity", 0))
+                purchase_price = float(holding.get("purchase_price", 0))
+                purchase_date_str = holding.get("purchase_date", today.strftime("%Y-%m-%d"))
+                purchase_date = datetime.strptime(purchase_date_str, "%Y-%m-%d")
+
+                print(f"\n  Processing {symbol} (Qty: {quantity}, Purchased: {purchase_date_str} @ ${purchase_price})")
+
+                try:
+                    ticker = yf.Ticker(symbol)
+
+                    # HYBRID LOGIC: Determine which price to use for period start
+                    # If purchased WITHIN period → use purchase_price
+                    # If purchased BEFORE period → use market price at period start
+
+                    if purchase_date >= start_date:
+                        # Stock was bought WITHIN this period - use YOUR cost basis
+                        period_start_price = purchase_price
+                        price_source = "Purchase Price (bought in period)"
+                    else:
+                        # Stock was bought BEFORE this period - use market price at period start
+                        hist_period = ticker.history(
+                            start=(start_date - timedelta(days=5)).strftime("%Y-%m-%d"),
+                            end=(start_date + timedelta(days=5)).strftime("%Y-%m-%d")
+                        )
+
+                        if not hist_period.empty:
+                            period_start_price = float(hist_period['Close'].iloc[0])
+                            price_source = f"Market Price on {start_date.strftime('%Y-%m-%d')}"
+                        else:
+                            print(f"    WARNING: No market data for {symbol} at period start, using purchase price")
+                            period_start_price = purchase_price
+                            price_source = "Purchase Price (fallback)"
+
+                    # Step 2: Get the CURRENT stock price (today)
+                    current_hist = ticker.history(period="1d")
+                    if not current_hist.empty:
+                        current_price = float(current_hist['Close'].iloc[-1])
+                    else:
+                        print(f"    WARNING: No current price for {symbol}")
+                        current_price = None
+
+                    # Step 3: Calculate position values
+                    if period_start_price and current_price:
+                        value_at_start = quantity * period_start_price
+                        value_now = quantity * current_price
+
+                        total_value_at_period_start += value_at_start
+                        total_value_now += value_now
+
+                        holding_return = ((current_price - period_start_price) / period_start_price) * 100
+
+                        print(f"    Start Price: ${period_start_price:.2f} ({price_source})")
+                        print(f"    Current Price: ${current_price:.2f}")
+                        print(f"    Position Start Value: ${value_at_start:.2f} | Now: ${value_now:.2f}")
+                        print(f"    Holding Return: {holding_return:+.2f}%")
+
+                        holdings_details.append({
+                            "symbol": symbol,
+                            "quantity": quantity,
+                            "start_price": period_start_price,
+                            "current_price": current_price,
+                            "return": holding_return,
+                            "price_source": price_source
+                        })
+
+                except Exception as e:
+                    print(f"    ERROR fetching data for {symbol}: {e}")
+                    continue
+
+            # Step 4: Calculate TOTAL portfolio return for this period
+            if total_value_at_period_start > 0:
+                portfolio_return = ((total_value_now - total_value_at_period_start) / total_value_at_period_start) * 100
+            else:
+                portfolio_return = 0
+
+            print(f"\n  PORTFOLIO SUMMARY:")
+            print(f"    Total Value at {period_name} Start: ${total_value_at_period_start:,.2f}")
+            print(f"    Total Value Now: ${total_value_now:,.2f}")
+            print(f"    Portfolio {period_name} Return: {portfolio_return:+.2f}%")
+
+            # Step 5: Fetch S&P 500 performance for the SAME period
+            try:
+                sp500 = yf.Ticker("^GSPC")
+                sp500_hist = sp500.history(
+                    start=(start_date - timedelta(days=5)).strftime("%Y-%m-%d"),
+                    end=today.strftime("%Y-%m-%d")
+                )
+
+                if len(sp500_hist) >= 2:
+                    sp500_start = float(sp500_hist['Close'].iloc[0])
+                    sp500_end = float(sp500_hist['Close'].iloc[-1])
+                    sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
+
+                    print(f"    S&P 500 at Start: ${sp500_start:.2f} | Now: ${sp500_end:.2f}")
+                    print(f"    S&P 500 {period_name} Return: {sp500_return:+.2f}%")
+                else:
+                    sp500_return = 0
+                    print(f"    WARNING: Insufficient S&P 500 data")
+
+            except Exception as e:
+                print(f"    ERROR fetching S&P 500 data: {e}")
+                sp500_return = 0
+
+            # Step 6: Calculate outperformance
+            outperformance = portfolio_return - sp500_return
+            print(f"    Outperformance vs S&P 500: {outperformance:+.2f}%")
+
+            results.append({
+                "period": period_name,
+                "return": round(portfolio_return, 2),
+                "sp500": round(sp500_return, 2),
+                "isPositive": portfolio_return >= 0,
+                "outperformance": round(outperformance, 2),
+                "portfolio_value_start": round(total_value_at_period_start, 2),
+                "portfolio_value_current": round(total_value_now, 2),
+                "holdings_count": len(holdings_details)
+            })
+
+        print(f"\n=== CALCULATION COMPLETE ===\n")
+
+        return {
+            "username": username,
+            "account_name": account_name,
+            "performance": results,
+            "calculation_date": today.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+    except Exception as e:
+        import traceback
+        print(f"ERROR calculating portfolio performance: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to calculate performance: {str(e)}")
 
 
 
