@@ -44,6 +44,8 @@ const PerformanceView = ({
   dailySentiment,
   sentiment,
   news,
+  newsLoading,
+  newsError,
   apiMetadata,
   significantEvents,
   prevClose: prevCloseFromParent,
@@ -275,8 +277,8 @@ const PerformanceView = ({
               <RelatedNews
                 news={news}
                 displayName={companyName}
-                loading={!news}
-                error={null}
+                loading={newsLoading}
+                error={newsError}
                 isOverview={true}
                 onViewMore={() => setActiveTab('news')}
               />
@@ -468,8 +470,8 @@ const PerformanceView = ({
                 news={news}
                 displayName={companyName}
                 ticker={ticker}
-                loading={!news}
-                error={null}
+                loading={newsLoading}
+                error={newsError}
                 apiMetadata={apiMetadata}
             />
           </div>
