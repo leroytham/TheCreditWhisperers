@@ -2,11 +2,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { useEarningsTranscript } from '../../hooks/useEarningsTranscript';
-import { 
-  ChevronDown, 
-  ChevronUp, 
-  TrendingUp, 
-  TrendingDown, 
+import EarningsCalendar from '../EarningsCalendar/EarningsCalendar';
+import {
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
+  TrendingDown,
   Minus,
   Users,
   FileText,
@@ -187,6 +188,9 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
 
   return (
     <div className={`${className} space-y-6`}>
+      {/* Upcoming Earnings Calendar */}
+      <EarningsCalendar ticker={ticker} />
+
       {/* Header with Quarter Selector */}
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

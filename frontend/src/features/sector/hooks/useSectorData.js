@@ -76,8 +76,8 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
     const newsTicker = resolveNewsTicker(ticker);
     const yfinanceKey = sector ? resolveYfinanceSectorKey(sector) : null;
 
-    const fetchConstituents = fetch(`/api/sectors/${encodeURIComponent(ticker)}/top-constituents`)
-      .then(r => r.json());
+    const fetchConstituents = apiService.getSectorConstituents(ticker)
+      .then(r => r.data);
 
     // Use aggregated news if yfinanceKey is available, otherwise use single ticker news
     const fetchNews = yfinanceKey

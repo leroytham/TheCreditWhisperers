@@ -76,7 +76,14 @@ const SectorList = ({ selectedCountry, selectedSector, onSectorSelect }) => {
                       </span>
                     )}
                   </div>
-                  <span className="text-sm text-gray-600 mt-1">{sector.index}</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-sm text-gray-600">{sector.index}</span>
+                    {sector.ticker && (
+                      <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        {sector.ticker}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))
             ) : (

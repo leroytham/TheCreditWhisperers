@@ -5,7 +5,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/layout/AppHeader';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
 import EarningsTranscript from '../features/entity/components/EarningsTranscript';
-import { SignificantEvents, RelatedNews } from '../features/shared/components';
 import { usePriceData } from '../features/entity/hooks/usePriceData';
 import { useNewsData } from '../features/entity/hooks/useNewsData';
 import { useDailySentiment } from '../features/entity/hooks/useDailySentiment';
@@ -81,7 +80,6 @@ const EntityPage = () => {
     { id: 'performance', label: 'Performance' },
     { id: 'sentiment', label: 'Sentiment' },
     { id: 'news', label: 'News' },
-    { id: 'events', label: 'Events' },
     { id: 'earnings', label: 'Earnings' },
   ];
 
@@ -93,7 +91,7 @@ const EntityPage = () => {
 
   const { news, sentiment, apiMetadata } = useNewsData(ticker, '1Y');
   const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
-  const { significantEvents } = useSignificantEvents(ticker, priceTimeframe); // Pass priceTimeframe
+  const { significantEvents } = useSignificantEvents(ticker, priceTimeframe);
 
   return (
     <div className="min-h-screen bg-gray-50">
