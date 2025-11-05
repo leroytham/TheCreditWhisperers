@@ -1,7 +1,7 @@
 # tests/services/test_stock_data_service.py
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import pandas as pd
 from datetime import datetime
 
@@ -78,11 +78,13 @@ class TestStockDataService(unittest.TestCase):
         result = self.service.filter_data_by_timeframe(df, "INVALID")
         pd.testing.assert_frame_equal(result, df)
 
+    @patch('app.services.stock_data_service.SentimentService.analyze_sentiment_with_momentum')
+    @patch('app.services.stock_data_service.NewsService.get_ticker_news_for_timeframe', new_callable=AsyncMock)
     @patch('app.services.stock_data_service.YQTicker')
-    def test_get_sector_top_constituents_success(self, MockYQTicker):
+    def test_get_sector_top_constituents_success(self, MockYQTicker, mock_get_news, mock_analyze_sentiment):
         """Test fetching sector constituents."""
         # Arrange
-        mock_etf = MockYQTicker.return_value
+        mock_etf = MagicMock()
         mock_etf.fund_holding_info = {
             "XLK": {
                 "holdings": [
@@ -92,12 +94,37 @@ class TestStockDataService(unittest.TestCase):
         }
 
         # Mock price data
-        MockYQTicker.return_value.price = {
+        mock_batch = MagicMock()
+        mock_batch.price = {
             "AAPL": {
                 "shortName": "Apple Inc.",
                 "regularMarketPrice": 150.0,
-                "regularMarketChangePercent": 2.5
+                "regularMarketChangePercent": 2.5,
+                "marketCap": 3_000_000_000_000,
+                "fiftyTwoWeekHigh": 200.0,
+                "fiftyTwoWeekLow": 100.0
             }
+        }
+        mock_batch.summary_detail = {
+            "AAPL": {
+                "fiftyTwoWeekHigh": 200.0,
+                "fiftyTwoWeekLow": 100.0
+            }
+        }
+
+        MockYQTicker.side_effect = [mock_etf, mock_batch]
+
+        mock_get_news.return_value = [
+            {
+                "publish_date": "2025-10-01",
+                "ticker_sentiment_score": 0.25,
+                "ticker_relevance_score": 1.0
+            }
+        ]
+
+        mock_analyze_sentiment.return_value = {
+            "slow_score": 0.2,
+            "sentiment_momentum": 0.05
         }
 
         # Act
@@ -106,6 +133,10 @@ class TestStockDataService(unittest.TestCase):
         # Assert
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["symbol"], "AAPL")
+        self.assertAlmostEqual(result[0]["sentimentScore"], 0.2)
+        self.assertAlmostEqual(result[0]["sentimentMomentum"], 0.05)
+        self.assertEqual(result[0]["fiftyTwoWeekHigh"], 200.0)
+        self.assertEqual(result[0]["fiftyTwoWeekLow"], 100.0)
 
     def test_get_sector_top_constituents_invalid_sector(self):
         """Test invalid sector ticker raises ValueError."""

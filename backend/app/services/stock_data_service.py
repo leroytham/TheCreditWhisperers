@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import yfinance as yf
 from yahooquery import Ticker as YQTicker
 import aiohttp
+import asyncio
 import os
 from dotenv import load_dotenv
 
@@ -153,7 +154,7 @@ class StockDataService:
         """
         from app.services.news_service import NewsService
         from app.services.sentiment_service import SentimentService
-        
+
         news_service = NewsService()
         sentiment_service = SentimentService()
         
@@ -174,63 +175,144 @@ class StockDataService:
             if not all_symbols:
                 return []
 
-            # Batch request for faster price lookup
-            price_data = YQTicker(all_symbols).price
+            # Batch request for faster price lookup and summary stats
+            batch_client = YQTicker(all_symbols)
+            price_data = batch_client.price or {}
+            summary_detail = getattr(batch_client, "summary_detail", {}) or {}
 
-            all_constituents = []
+            # Build base constituent dataset before fetching sentiment
+            constituents_base: list[dict] = []
             for h in holdings:
                 symbol = h.get("symbol")
-                if not symbol or symbol not in price_data:
+                if not symbol:
                     continue
 
-                p = price_data.get(symbol, {})
-                
-                # Fetch 1M news and calculate sentiment for this ticker
-                sentiment_score = None
-                sentiment_momentum = None
-                try:
-                    news_articles = news_service.get_news_for_ticker(
-                        ticker=symbol,
-                        timeframe="1M",
-                        limit=200  # Get enough articles for 1 month
-                    )
-                    
-                    if news_articles:
-                        sentiment_analysis = sentiment_service.analyze_sentiment_with_momentum(news_articles)
-                        sentiment_score = sentiment_analysis.get("slow_score")  # Use slow score as overall sentiment
-                        sentiment_momentum = sentiment_analysis.get("sentiment_momentum")
-                except Exception as e:
-                    print(f"Error fetching sentiment for {symbol}: {e}")
-                
-                all_constituents.append({
+                price_entry = price_data.get(symbol)
+                if not price_entry:
+                    continue
+
+                summary_entry = summary_detail.get(symbol, {})
+
+                fifty_two_week_high = price_entry.get("fiftyTwoWeekHigh") or summary_entry.get("fiftyTwoWeekHigh")
+                fifty_two_week_low = price_entry.get("fiftyTwoWeekLow") or summary_entry.get("fiftyTwoWeekLow")
+
+                constituents_base.append({
                     "symbol": symbol,
-                    "name": p.get("shortName") or h.get("holdingName"),
-                    "price": p.get("regularMarketPrice"),
-                    "percentChange": p.get("regularMarketChangePercent"),
+                    "name": price_entry.get("shortName") or h.get("holdingName"),
+                    "price": price_entry.get("regularMarketPrice"),
+                    "percentChange": price_entry.get("regularMarketChangePercent"),
                     "percentOfAssets": h.get("holdingPercent"),
-                    "marketCap": p.get("marketCap"),
-                    "volume": p.get("regularMarketVolume"),
-                    "avgVolume": p.get("averageVolume"),
-                    "dayHigh": p.get("regularMarketDayHigh"),
-                    "dayLow": p.get("regularMarketDayLow"),
-                    "fiftyTwoWeekHigh": p.get("fiftyTwoWeekHigh"),
-                    "fiftyTwoWeekLow": p.get("fiftyTwoWeekLow"),
-                    "peRatio": p.get("trailingPE"),
-                    "dividendYield": p.get("dividendYield"),
-                    "sector": p.get("sector"),
-                    "industry": p.get("industry"),
-                    "sentimentScore": sentiment_score,
-                    "sentimentMomentum": sentiment_momentum,
+                    "marketCap": price_entry.get("marketCap"),
+                    "volume": price_entry.get("regularMarketVolume"),
+                    "avgVolume": price_entry.get("averageVolume"),
+                    "dayHigh": price_entry.get("regularMarketDayHigh"),
+                    "dayLow": price_entry.get("regularMarketDayLow"),
+                    "fiftyTwoWeekHigh": fifty_two_week_high,
+                    "fiftyTwoWeekLow": fifty_two_week_low,
+                    "peRatio": price_entry.get("trailingPE"),
+                    "dividendYield": price_entry.get("dividendYield"),
+                    "sector": price_entry.get("sector"),
+                    "industry": price_entry.get("industry"),
                 })
 
-            # Sort by market cap and return top N (default 30)
-            sorted_constituents = sorted(
-                all_constituents,
-                key=lambda x: x.get("marketCap") or 0,
-                reverse=True
-            )
-            
-            return sorted_constituents[:limit]
+            if not constituents_base:
+                return []
+
+            # Determine top holdings by market cap (fallback to percent of assets)
+            def _sort_key(entry: dict) -> float:
+                market_cap = entry.get("marketCap")
+                if market_cap:
+                    return float(market_cap)
+                percent_assets = entry.get("percentOfAssets")
+                return float(percent_assets) if percent_assets else 0.0
+
+            constituents_base.sort(key=_sort_key, reverse=True)
+            top_constituents = constituents_base[:limit]
+
+            # Fetch news in parallel for sentiment calculations
+            symbols_for_sentiment = [c["symbol"] for c in top_constituents]
+            news_by_symbol: dict[str, list] = {}
+
+            async def _fetch_news_for_symbols(symbols: list[str]) -> dict[str, list]:
+                tasks = [
+                    news_service.get_ticker_news_for_timeframe(
+                        ticker=s,
+                        timeframe="1M",
+                        trigger_progressive=False,
+                        preserve_all_tickers=False,
+                        is_sector=True
+                    )
+                    for s in symbols
+                ]
+
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                mapping: dict[str, list] = {}
+                for sym, result in zip(symbols, results):
+                    if isinstance(result, Exception):
+                        print(f"Error fetching news for {sym}: {result}")
+                        mapping[sym] = []
+                    else:
+                        mapping[sym] = result or []
+                return mapping
+
+            if symbols_for_sentiment:
+                try:
+                    news_by_symbol = asyncio.run(_fetch_news_for_symbols(symbols_for_sentiment))
+                except RuntimeError as exc:
+                    message = str(exc).lower()
+                    if "running event loop" in message:
+                        loop = asyncio.new_event_loop()
+                        try:
+                            news_by_symbol = loop.run_until_complete(_fetch_news_for_symbols(symbols_for_sentiment))
+                        finally:
+                            loop.close()
+                    else:
+                        print(f"Error running asyncio loop for news fetch: {exc}")
+                        news_by_symbol = {}
+                except Exception as exc:
+                    print(f"Error fetching sector news asynchronously: {exc}")
+                    news_by_symbol = {}
+
+            enriched_constituents: list[dict] = []
+            for entry in top_constituents:
+                symbol = entry["symbol"]
+                sentiment_score = None
+                sentiment_momentum = None
+
+                news_articles = news_by_symbol.get(symbol, [])
+                if news_articles:
+                    try:
+                        # Ensure ticker sentiment metadata exists for weighting
+                        prepared_articles = []
+                        for article in news_articles[:200]:
+                            article_copy = dict(article)
+                            if "ticker_sentiment_score" not in article_copy:
+                                ticker_sentiments = article_copy.get("ticker_sentiment", [])
+                                match = next((ts for ts in ticker_sentiments if ts.get("ticker") == symbol), None)
+                                if match:
+                                    try:
+                                        article_copy["ticker_sentiment_score"] = float(match.get("ticker_sentiment_score", 0.0))
+                                    except (TypeError, ValueError):
+                                        article_copy["ticker_sentiment_score"] = 0.0
+                                    try:
+                                        article_copy["ticker_relevance_score"] = float(match.get("relevance_score", match.get("ticker_sentiment_relevance_score", 1.0)))
+                                    except (TypeError, ValueError):
+                                        article_copy["ticker_relevance_score"] = 1.0
+                            prepared_articles.append(article_copy)
+
+                        sentiment_analysis = sentiment_service.analyze_sentiment_with_momentum(prepared_articles)
+                        sentiment_score = sentiment_analysis.get("slow_score")
+                        sentiment_momentum = sentiment_analysis.get("sentiment_momentum")
+                    except Exception as e:
+                        print(f"Error calculating sentiment for {symbol}: {e}")
+
+                # Default to neutral if sentiment couldn't be derived
+                entry["sentimentScore"] = float(sentiment_score) if sentiment_score is not None else 0.0
+                entry["sentimentMomentum"] = float(sentiment_momentum) if sentiment_momentum is not None else 0.0
+
+                enriched_constituents.append(entry)
+
+            return enriched_constituents
         except Exception as e:
             print(f"Error fetching constituents for {etf_ticker}: {e}")
             return []

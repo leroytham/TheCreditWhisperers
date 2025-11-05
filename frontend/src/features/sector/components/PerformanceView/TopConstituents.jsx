@@ -170,13 +170,53 @@ const TopConstituents = ({ constituents, sectorName }) => {
             <tbody className="divide-y divide-gray-100">
               {sortedConstituents.map((c, idx) => {
                 const percentOfAssets = c.percentOfAssets ?? c.percent_of_assets;
-                const fiftyTwoWeekHigh = c.fiftyTwoWeekHigh ?? c.fifty_two_week_high;
-                const fiftyTwoWeekLow = c.fiftyTwoWeekLow ?? c.fifty_two_week_low;
-                const fiftyTwoWeekRange = fiftyTwoWeekLow && fiftyTwoWeekHigh
-                  ? ((c.price - fiftyTwoWeekLow) / (fiftyTwoWeekHigh - fiftyTwoWeekLow)) * 100
+                const priceRaw = c.price ?? c.currentPrice ?? null;
+                const price = priceRaw !== null && priceRaw !== undefined ? Number(priceRaw) : null;
+                const fiftyTwoWeekHighRaw = c.fiftyTwoWeekHigh ?? c.fifty_two_week_high;
+                const fiftyTwoWeekLowRaw = c.fiftyTwoWeekLow ?? c.fifty_two_week_low;
+                const fiftyTwoWeekHigh = fiftyTwoWeekHighRaw !== null && fiftyTwoWeekHighRaw !== undefined
+                  ? Number(fiftyTwoWeekHighRaw)
                   : null;
-                const sentimentScore = c.sentimentScore ?? c.sentiment_score;
-                const sentimentMomentum = c.sentimentMomentum ?? c.sentiment_momentum;
+                const fiftyTwoWeekLow = fiftyTwoWeekLowRaw !== null && fiftyTwoWeekLowRaw !== undefined
+                  ? Number(fiftyTwoWeekLowRaw)
+                  : null;
+
+                let fiftyTwoWeekRange = null;
+                if (
+                  price !== null && !Number.isNaN(price) &&
+                  fiftyTwoWeekHigh !== null && !Number.isNaN(fiftyTwoWeekHigh) &&
+                  fiftyTwoWeekLow !== null && !Number.isNaN(fiftyTwoWeekLow) &&
+                  fiftyTwoWeekHigh > fiftyTwoWeekLow
+                ) {
+                  const rangeSpan = fiftyTwoWeekHigh - fiftyTwoWeekLow;
+                  const clampedPrice = Math.min(Math.max(price, fiftyTwoWeekLow), fiftyTwoWeekHigh);
+                  fiftyTwoWeekRange = ((clampedPrice - fiftyTwoWeekLow) / rangeSpan) * 100;
+                }
+
+                const rangePercent = fiftyTwoWeekRange !== null
+                  ? Math.max(0, Math.min(100, fiftyTwoWeekRange))
+                  : null;
+                const showRangeMarkers = rangePercent !== null &&
+                  price !== null && !Number.isNaN(price) &&
+                  fiftyTwoWeekLow !== null && !Number.isNaN(fiftyTwoWeekLow) &&
+                  fiftyTwoWeekHigh !== null && !Number.isNaN(fiftyTwoWeekHigh);
+
+                const sentimentScoreRaw = c.sentimentScore ?? c.sentiment_score;
+                const sentimentMomentumRaw = c.sentimentMomentum ?? c.sentiment_momentum;
+                const sentimentScore = sentimentScoreRaw !== null && sentimentScoreRaw !== undefined
+                  ? Number(sentimentScoreRaw)
+                  : null;
+                const sentimentMomentum = sentimentMomentumRaw !== null && sentimentMomentumRaw !== undefined
+                  ? Number(sentimentMomentumRaw)
+                  : null;
+                let momentumArrow = '→';
+                if (sentimentMomentum !== null && !Number.isNaN(sentimentMomentum)) {
+                  if (Math.abs(sentimentMomentum) < 0.001) {
+                    momentumArrow = '→';
+                  } else {
+                    momentumArrow = sentimentMomentum >= 0 ? '▲' : '▼';
+                  }
+                }
 
                 return (
                   <tr
@@ -222,20 +262,29 @@ const TopConstituents = ({ constituents, sectorName }) => {
                         : '--'}
                     </td>
                     <td className="py-4 px-6">
-                      {fiftyTwoWeekRange !== null ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 relative">
-                            <div
-                              className={`absolute top-0 left-0 h-2 rounded-full ${
-                                fiftyTwoWeekRange > 70 ? 'bg-green-500' :
-                                fiftyTwoWeekRange > 30 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${fiftyTwoWeekRange}%` }}
-                            />
+                      {rangePercent !== null ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <div className="flex-1 bg-gray-200 rounded-full h-2 relative">
+                              <div
+                                className={`absolute top-0 left-0 h-2 rounded-full ${
+                                  rangePercent > 70 ? 'bg-green-500' :
+                                  rangePercent > 30 ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${rangePercent}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-600 whitespace-nowrap">
+                              {Math.round(rangePercent)}%
+                            </span>
                           </div>
-                          <span className="text-xs text-gray-600 whitespace-nowrap">
-                            {fiftyTwoWeekRange.toFixed(0)}%
-                          </span>
+                          {showRangeMarkers && (
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>${fiftyTwoWeekLow.toFixed(2)}</span>
+                              <span className="text-gray-700 font-semibold">${price.toFixed(2)}</span>
+                              <span>${fiftyTwoWeekHigh.toFixed(2)}</span>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <span className="text-gray-400">--</span>
@@ -265,7 +314,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
                           sentimentMomentum >= -0.05 ? 'bg-red-50 text-red-700' :
                           'bg-red-100 text-red-800'
                         }`}>
-                          {sentimentMomentum >= 0 ? '▲' : '▼'}
+                          {momentumArrow}
                           {Math.abs(sentimentMomentum).toFixed(3)}
                         </span>
                       ) : (
