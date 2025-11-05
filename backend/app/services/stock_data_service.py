@@ -22,22 +22,6 @@ class StockDataService:
     """
 
     def __init__(self):
-        # Sector-to-ETF mapping for S&P 500 sectors
-        self.sector_etf_map = {
-            '^GSPC': 'SPY',       # S&P 500 (All Sectors)
-            '^SP500-25': 'XLY',   # Consumer Discretionary
-            '^SP500-30': 'XLP',   # Consumer Staples
-            '^SP500-35': 'XLV',   # Health Care
-            '^SP500-40': 'XLF',   # Financials
-            '^SP500-45': 'XLK',   # Tech
-            '^SP500-50': 'XLC',   # Communication Services
-            '^SP500-55': 'XLU',   # Utilities
-            '^SP500-60': 'XLRE',  # Real Estate
-            '^SP500-15': 'XLB',   # Materials
-            '^SP500-20': 'XLI',   # Industrials
-            '^GSPE': 'XLE',       # Energy
-        }
-        
         # Load Alpha Vantage API key for company overview
         self.alpha_vantage_api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
         if not self.alpha_vantage_api_key:
@@ -137,31 +121,36 @@ class StockDataService:
 
         return result
 
-    @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents_v2")
-    def get_sector_top_constituents(self, sector_ticker: str, limit: int = 30) -> list[dict]:
+    @cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_constituents_v3")
+    def get_sector_top_constituents(self, etf_ticker: str, limit: int = 30) -> list[dict]:
         """
-        Fetches all holdings for a given S&P 500 sector ticker with sentiment data.
+        Fetches all holdings for a given ETF ticker with sentiment data.
         Results are cached in Redis for SECTOR_CACHE_TTL seconds.
 
         Args:
-            sector_ticker: S&P 500 sector ticker (e.g., "^SP500-45" for Tech)
+            etf_ticker: ETF ticker symbol (e.g., "XLK" for Technology, "SPY" for S&P 500)
             limit: Maximum number of constituents to return (default 30, increased from 10)
 
         Returns:
             List of dictionaries containing constituent information with sentiment scores
 
         Raises:
-            ValueError: If sector ticker is invalid or unsupported
+            ValueError: If ETF ticker is invalid or unsupported
         """
         from app.services.news_service import NewsService
         from app.services.sentiment_service import SentimentService
+        from app.config.yfinance_sector_mapping import (
+            is_valid_etf_ticker,
+            resolve_sector_identifier,
+        )
 
         news_service = NewsService()
         sentiment_service = SentimentService()
-        
-        etf_ticker = self.sector_etf_map.get(sector_ticker)
-        if not etf_ticker:
-            raise ValueError(f"Invalid or unsupported sector ticker: {sector_ticker}")
+
+        etf_ticker = resolve_sector_identifier(etf_ticker)
+
+        if not is_valid_etf_ticker(etf_ticker):
+            raise ValueError(f"Invalid or unsupported ETF ticker: {etf_ticker}")
 
         try:
             etf = YQTicker(etf_ticker)

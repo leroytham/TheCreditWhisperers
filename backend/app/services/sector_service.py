@@ -1,26 +1,25 @@
 # app/services/sector_service.py
 
 """
-Service for managing sector data and retrieving dynamic constituent ticker baskets.
-Uses yfinance.Sector() to get real-time sector composition.
+Service for managing sector data and retrieving ETF constituent ticker baskets.
+Uses ETF holdings data for sector composition.
 """
 
-import yfinance as yf
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
+from yahooquery import Ticker as YQTicker
 from app.core.cache import cache_result
 from app.config.yfinance_sector_mapping import (
-    resolve_yfinance_sector_key,
-    get_sector_display_name,
-    get_all_yfinance_sectors,
-    YFINANCE_TO_SP500_TICKER,
-    YFINANCE_TO_SPDR_ETF,
+    is_valid_etf_ticker,
+    get_etf_display_name,
+    get_all_etf_tickers,
+    resolve_sector_identifier,
     DEFAULT_SECTOR_TICKER_LIMIT
 )
 
 
 class SectorService:
     """
-    Service to fetch and manage sector constituent tickers using yfinance.
+    Service to fetch and manage ETF constituent tickers.
     """
     _instance = None
 
@@ -36,110 +35,120 @@ class SectorService:
         """Initializes the service."""
         print("SectorService initialized successfully.")
 
-    @cache_result(ttl=86400)  # Cache for 24 hours (sector composition changes infrequently)
+    @cache_result(ttl=86400)  # Cache for 24 hours (ETF composition changes infrequently)
     def get_sector_tickers(
         self,
-        yfinance_key: str,
+        etf_ticker: str,
         limit: int = DEFAULT_SECTOR_TICKER_LIMIT
     ) -> Tuple[List[str], float]:
         """
-        Retrieves list of top ticker symbols for a sector, sorted by market weight.
+        Retrieves list of ticker symbols from ETF holdings, sorted by holding weight.
 
         Args:
-            yfinance_key: yfinance sector key (e.g., 'technology', 'healthcare')
+            etf_ticker: ETF ticker symbol (e.g., 'XLK', 'SPY')
             limit: Maximum number of tickers to return (default: 15)
                   Set to None or -1 to return all tickers
 
         Returns:
-            Tuple of (tickers, total_market_weight_coverage):
-            - tickers: List of ticker symbols sorted by market weight (descending)
-            - total_market_weight_coverage: Sum of market weights for returned tickers (0.0-1.0)
+            Tuple of (tickers, total_weight_coverage):
+            - tickers: List of ticker symbols sorted by holding weight (descending)
+            - total_weight_coverage: Sum of holding weights for returned tickers (0.0-1.0)
 
         Raises:
-            ValueError: If yfinance_key is invalid or data cannot be fetched
+            ValueError: If ETF ticker is invalid or data cannot be fetched
         """
-        print(f"Fetching sector tickers for: {yfinance_key} (limit: {limit})")
+        etf_ticker = resolve_sector_identifier(etf_ticker)
+        print(f"Fetching ETF holdings for: {etf_ticker} (limit: {limit})")
+
+        if not is_valid_etf_ticker(etf_ticker):
+            raise ValueError(f"Invalid or unsupported ETF ticker: {etf_ticker}")
 
         try:
-            # Create yfinance Sector object
-            sector = yf.Sector(yfinance_key)
+            # Fetch ETF holdings data
+            etf = YQTicker(etf_ticker)
+            holdings_data = etf.fund_holding_info
 
-            # Get top companies DataFrame
-            top_companies = sector.top_companies
+            if not holdings_data or "holdings" not in holdings_data.get(etf_ticker, {}):
+                raise ValueError(f"No holdings data found for ETF: {etf_ticker}")
 
-            if top_companies is None or top_companies.empty:
-                raise ValueError(f"No companies found for sector: {yfinance_key}")
+            holdings = holdings_data[etf_ticker]["holdings"]
 
-            # Sort by market weight (descending) - already sorted by yfinance, but ensure it
-            top_companies_sorted = top_companies.sort_values('market weight', ascending=False)
+            # Extract symbols and their holding percentages
+            holdings_list = []
+            for h in holdings:
+                symbol = h.get("symbol")
+                holding_pct = h.get("holdingPercent", 0)
+                if symbol and holding_pct:
+                    holdings_list.append((symbol, holding_pct))
+
+            if not holdings_list:
+                raise ValueError(f"No valid holdings found for ETF: {etf_ticker}")
+
+            # Sort by holding percentage (descending)
+            holdings_list.sort(key=lambda x: x[1], reverse=True)
 
             # Apply limit if specified
             if limit is not None and limit > 0:
-                top_companies_limited = top_companies_sorted.head(limit)
+                holdings_limited = holdings_list[:limit]
             else:
-                top_companies_limited = top_companies_sorted
+                holdings_limited = holdings_list
 
-            # Extract ticker symbols from the DataFrame index
-            tickers = top_companies_limited.index.tolist()
+            # Extract tickers and calculate total coverage
+            tickers = [symbol for symbol, _ in holdings_limited]
+            total_weight = sum(weight for _, weight in holdings_limited)
 
-            # Calculate total market weight coverage
-            total_market_weight = top_companies_limited['market weight'].sum()
+            print(f"Retrieved {len(tickers)} tickers for ETF '{etf_ticker}': {tickers[:5]}...")
+            print(f"Holding weight coverage: {total_weight:.2%}")
 
-            print(f"Retrieved {len(tickers)} tickers for sector '{yfinance_key}': {tickers[:5]}...")
-            print(f"Market weight coverage: {total_market_weight:.2%}")
-
-            return tickers, total_market_weight
+            return tickers, total_weight
 
         except Exception as e:
-            print(f"ERROR: Failed to fetch tickers for sector '{yfinance_key}': {str(e)}")
-            raise ValueError(f"Failed to fetch sector data: {str(e)}")
+            print(f"ERROR: Failed to fetch holdings for ETF '{etf_ticker}': {str(e)}")
+            raise ValueError(f"Failed to fetch ETF holdings: {str(e)}")
 
     def resolve_sector_key(self, identifier: str) -> str:
         """
-        Resolves any sector identifier to yfinance sector key.
+        Validates and returns ETF ticker (now acts as sector key).
 
         Args:
-            identifier: Can be sector name, S&P 500 ticker, SPDR ETF ticker, or yfinance key
+            identifier: ETF ticker symbol (e.g., 'XLK', 'SPY')
 
         Returns:
-            yfinance sector key (e.g., 'technology')
+            The ETF ticker if valid
 
         Raises:
-            ValueError: If identifier cannot be resolved
+            ValueError: If identifier is not a valid ETF ticker
         """
-        return resolve_yfinance_sector_key(identifier)
+        return resolve_sector_identifier(identifier)
 
-    def get_sector_metadata(self, yfinance_key: str) -> Dict[str, str]:
+    def get_sector_metadata(self, etf_ticker: str) -> Dict[str, str]:
         """
-        Gets metadata for a sector including display name and related tickers.
+        Gets metadata for an ETF/sector.
 
         Args:
-            yfinance_key: yfinance sector key
+            etf_ticker: ETF ticker symbol
 
         Returns:
-            Dictionary with sector metadata:
+            Dictionary with ETF metadata:
             {
-                'yfinance_key': 'technology',
-                'display_name': 'Information Technology',
-                'sp500_ticker': '^SP500-45',
-                'spdr_etf': 'XLK'
+                'etf_ticker': 'XLK',
+                'display_name': 'Technology'
             }
         """
+        resolved_ticker = resolve_sector_identifier(etf_ticker)
         return {
-            'yfinance_key': yfinance_key,
-            'display_name': get_sector_display_name(yfinance_key),
-            'sp500_ticker': YFINANCE_TO_SP500_TICKER.get(yfinance_key, ''),
-            'spdr_etf': YFINANCE_TO_SPDR_ETF.get(yfinance_key, '')
+            'etf_ticker': resolved_ticker,
+            'display_name': get_etf_display_name(resolved_ticker)
         }
 
     def get_all_sectors(self) -> List[str]:
         """
-        Returns list of all valid yfinance sector keys.
+        Returns list of all valid ETF tickers.
 
         Returns:
-            List of sector keys
+            List of ETF tickers
         """
-        return get_all_yfinance_sectors()
+        return get_all_etf_tickers()
 
 
 # Create singleton instance

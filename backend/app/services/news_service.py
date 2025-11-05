@@ -1,6 +1,7 @@
 # app/services/news_service.py
 
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 from dotenv import load_dotenv
 import asyncio
@@ -8,7 +9,7 @@ import aiohttp
 import random
 from bs4 import BeautifulSoup
 import yfinance as yf
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 # Import your existing model classes
 from app.models import News, SentimentScore, RelevanceScore
@@ -18,9 +19,10 @@ from app.services.sector_service import sector_service_instance
 from app.services.sector_sentiment_service import sector_sentiment_service
 from app.config.yfinance_sector_mapping import (
     is_all_sectors_identifier,
-    get_all_yfinance_sectors,
-    get_sector_display_name
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class NewsService:
@@ -83,7 +85,7 @@ class NewsService:
 
         Args:
             session: aiohttp ClientSession for async requests
-            ticker: Stock ticker symbol
+            ticker: Stock ticker symbol (in yfinance format)
             time_from: Optional start time in format "YYYYMMDDTHHMM" (e.g., "20240101T0000")
             time_to: Optional end time in format "YYYYMMDDTHHMM" (e.g., "20240630T2359")
             limit: Maximum number of articles to return (default: 1000, max: 1000)
@@ -1098,127 +1100,217 @@ class NewsService:
 
         return unique_articles, stats
 
-    @async_cache_result(ttl=3600)  # Cache for 60 minutes (sector news is expensive to fetch)
-    async def _get_all_sectors_news(
+    async def _assemble_sector_news_response(
         self,
-        limit: int = 100,
-        timeframe: str = "1W"
+        response_sector_key: str,
+        display_name: str,
+        tickers: List[str],
+        sector_timeframe: str,
+        limit: int,
+    market_weight_coverage: Optional[float] = None
     ) -> Dict[str, any]:
-        """
-        Aggregates news articles from ALL sectors to represent the entire market.
+        """Fetches and aggregates news for a provided ticker basket."""
 
-        This method fetches news from all 11 yfinance sectors and deduplicates,
-        effectively creating a market-wide news view.
+        if not tickers:
+            raise ValueError("No tickers available for sector aggregation.")
 
-        Args:
-            limit: Maximum number of unique articles to return (default: 100)
-            timeframe: Time range for news (e.g., '1D', '1W', '1M')
+        print(
+            f"Aggregating news for '{display_name}' (key: {response_sector_key}) with {len(tickers)} tickers"
+        )
 
-        Returns:
-            Dictionary with same structure as get_sector_news but for all sectors
-        """
-        print(f"Fetching aggregated news for ALL SECTORS (timeframe: {timeframe})")
+        failed_tickers: List[str] = []
+        successful_tickers: List[str] = []
+        all_articles: List[dict] = []
 
-        all_sector_keys = get_all_yfinance_sectors()
-        all_articles = []
-        all_tickers = []
-        total_articles_fetched = 0
-        sector_results = {}
+        batch_size = 10
+        total_batches = (len(tickers) + batch_size - 1) // batch_size
 
-        # Fetch news from each sector
-        for sector_key in all_sector_keys:
-            try:
-                # Get tickers for this sector
-                tickers, _ = sector_service_instance.get_sector_tickers(sector_key, limit=10)  # Top 10 per sector
-                
-                if not tickers:
-                    print(f"WARNING: No tickers found for sector {sector_key}")
+        for index in range(0, len(tickers), batch_size):
+            batch = tickers[index:index + batch_size]
+            print(f"Fetching batch {index // batch_size + 1}/{total_batches}: {batch}")
+
+            tasks = [
+                self.get_ticker_news_for_timeframe(
+                    ticker=ticker,
+                    timeframe=sector_timeframe,
+                    trigger_progressive=False,
+                    preserve_all_tickers=True,
+                    is_sector=True
+                )
+                for ticker in batch
+            ]
+
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for ticker, result in zip(batch, batch_results):
+                if isinstance(result, Exception):
+                    print(f"WARNING: Failed to fetch news for {ticker}: {result}")
+                    failed_tickers.append(ticker)
                     continue
 
-                all_tickers.extend(tickers)
-                sector_name = get_sector_display_name(sector_key)
-                print(f"[All Sectors] Fetching {len(tickers)} tickers from {sector_name}...")
+                successful_tickers.append(ticker)
 
-                # Fetch news for these tickers - use is_sector=True for exponential decay
-                tasks = [
-                    self.get_ticker_news_for_timeframe(
-                        ticker=ticker,
-                        timeframe=timeframe,
-                        trigger_progressive=False,
-                        preserve_all_tickers=True,
-                        is_sector=True  # Only fetch requested timeframe for sectors
-                    )
-                    for ticker in tickers
-                ]
+                if result:
+                    all_articles.extend(result)
+                    print(f"  {ticker}: {len(result)} articles")
+                else:
+                    print(f"  {ticker}: 0 articles")
 
-                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            if index + batch_size < len(tickers):
+                await asyncio.sleep(0.2)
 
-                sector_article_count = 0
-                for ticker, result in zip(tickers, batch_results):
-                    if isinstance(result, Exception):
-                        print(f"WARNING: Failed to fetch news for {ticker}: {result}")
-                        continue
-
-                    if result:
-                        all_articles.extend(result)
-                        sector_article_count += len(result)
-
-                total_articles_fetched += sector_article_count
-                sector_results[sector_name] = {
-                    'tickers': len(tickers),
-                    'articles': sector_article_count
-                }
-                print(f"[All Sectors] {sector_name}: {sector_article_count} articles")
-
-                # Add delay between sectors
-                await asyncio.sleep(0.3)
-
-            except Exception as e:
-                print(f"ERROR: Failed to fetch news for sector {sector_key}: {e}")
-                continue
-
-        # Deduplicate articles
         print(f"Total articles fetched before deduplication: {len(all_articles)}")
+
         unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
+
         print(f"Unique articles after deduplication: {len(unique_articles)}")
         print(f"Deduplication stats: {dedup_stats}")
 
-        # Limit articles
-        limited_articles = unique_articles[:limit]
+        # Filter articles by timeframe to ensure consistent datasets
+        now_utc = datetime.now(timezone.utc)
+        timeframe_days_map = {
+            '1D': 1,
+            '1W': 7,
+            '1M': 30,
+            '3M': 90,
+            '6M': 180,
+            'YTD': None,
+            '1Y': 365,
+            '5Y': 1825,
+            '10Y': 3650,
+            'MAX': None
+        }
 
-        # Calculate sector sentiment metrics (NEW)
-        print(f"Calculating market-wide sentiment metrics from {len(unique_articles)} unique articles...")
-        unique_tickers = list(set(all_tickers))
-        sentiment_metrics = sector_sentiment_service.calculate_sector_sentiment_metrics(
-            articles=unique_articles,
-            sector_tickers=unique_tickers
-        )
-        print(f"Sentiment calculation complete: slow_score={sentiment_metrics.get('slow_score'):.4f}, "
-              f"momentum={sentiment_metrics.get('sentiment_momentum'):.4f}, "
-              f"quality={sentiment_metrics.get('data_quality')}")
+        days_back = timeframe_days_map.get(sector_timeframe)
 
-        # Calculate rates
+        if days_back is not None:
+            cutoff_date = now_utc - timedelta(days=days_back)
+            filtered_articles: List[dict] = []
+
+            for article in unique_articles:
+                pub_timestamp_str = article.get("publish_timestamp")
+                pub_datetime = None
+
+                if pub_timestamp_str:
+                    try:
+                        pub_datetime = datetime.fromisoformat(pub_timestamp_str)
+                        if pub_datetime.tzinfo is None:
+                            pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+                    except (ValueError, AttributeError):
+                        pub_datetime = None
+
+                if pub_datetime is None:
+                    pub_date_str = article.get("publish_date")
+                    if pub_date_str:
+                        try:
+                            pub_datetime = datetime.strptime(pub_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                        except ValueError:
+                            continue
+
+                if pub_datetime and pub_datetime >= cutoff_date:
+                    filtered_articles.append(article)
+
+            unique_articles = filtered_articles
+            print(
+                f"Filtered to {len(unique_articles)} articles within {sector_timeframe} timeframe"
+                f" (cutoff: {cutoff_date.date()})"
+            )
+
+        unique_articles.sort(key=lambda x: x.get('publish_date', ''), reverse=True)
+
+        limited_articles = unique_articles[:limit] if limit else unique_articles
+
         total_fetched = len(all_articles)
         total_unique = len(unique_articles)
-        dedup_rate = ((total_fetched - total_unique) / total_fetched * 100) if total_fetched > 0 else 0.0
+        duplicates_removed = dedup_stats.get('total_duplicates_removed', 0)
+        dedup_rate = (duplicates_removed / total_fetched * 100) if total_fetched > 0 else 0.0
+        success_rate = (len(successful_tickers) / len(tickers) * 100) if tickers else 0.0
+
+        print(
+            f"Calculating sector sentiment metrics from {len(unique_articles)} unique articles..."
+        )
+        sentiment_metrics = sector_sentiment_service.analyze_sector_sentiment_with_momentum(
+            articles=unique_articles,
+            sector_tickers=tickers
+        )
+        print(
+            f"Sentiment calculation complete: slow_score={sentiment_metrics.get('slow_score')}, "
+            f"momentum={sentiment_metrics.get('sentiment_momentum')}, "
+            f"quality={sentiment_metrics.get('data_quality')}"
+        )
+
+        coverage_value = round(market_weight_coverage, 4) if market_weight_coverage is not None else None
 
         return {
             'success': True,
-            'sector_key': 'all-sectors',
-            'sector_name': 'All Sectors (S&P 500)',
-            'tickers_queried': unique_tickers,
-            'total_tickers': len(unique_tickers),
-            'sectors_included': len(sector_results),
-            'sector_breakdown': sector_results,
+            'sector_key': response_sector_key,
+            'sector_name': display_name,
+            'tickers_queried': list(tickers),
+            'total_tickers': len(tickers),
+            'successful_tickers': successful_tickers,
+            'failed_tickers': failed_tickers,
+            'success_rate': round(success_rate, 2),
+            'total_market_weight_coverage': coverage_value,
             'total_articles_fetched': total_fetched,
             'unique_articles': total_unique,
             'deduplication_rate': round(dedup_rate, 2),
             'articles': limited_articles,
-            'timeframe': timeframe,
+            'timeframe': sector_timeframe,
             'cached': False,
             'metadata': dedup_stats,
             'sentiment_metrics': sentiment_metrics
         }
+
+    @async_cache_result(ttl=3600)  # Cache for 60 minutes (sector news is expensive to fetch)
+    async def _get_all_sectors_news(
+        self,
+        base_etf_ticker: str,
+        limit: int = 100,
+        timeframe: str = "1W"
+    ) -> Dict[str, any]:
+        """
+        Aggregates market-wide news using the holdings of the provided "all sectors" ETF.
+        """
+        print(
+            f"Fetching aggregated news for ALL SECTORS via {base_etf_ticker} (timeframe: {timeframe})"
+        )
+
+        try:
+            tickers, market_weight_coverage = sector_service_instance.get_sector_tickers(base_etf_ticker)
+
+            if not tickers:
+                raise ValueError("No tickers available for SPY sector aggregation")
+
+            print(f"Found {len(tickers)} tickers for {base_etf_ticker}: {tickers[:5]}...")
+            if market_weight_coverage is not None:
+                print(f"Holding weight coverage: {market_weight_coverage:.2%}")
+
+            metadata = sector_service_instance.get_sector_metadata(base_etf_ticker)
+            display_name = f"{metadata['display_name']} ({base_etf_ticker})"
+
+            result = await self._assemble_sector_news_response(
+                response_sector_key=base_etf_ticker,
+                display_name=display_name,
+                tickers=tickers,
+                sector_timeframe=timeframe,
+                limit=limit,
+                market_weight_coverage=market_weight_coverage
+            )
+
+            result['base_etf'] = base_etf_ticker
+            result['sectors_included'] = 1
+            result['sector_breakdown'] = {
+                base_etf_ticker: {
+                    'tickers': len(tickers),
+                    'articles': result['total_articles_fetched']
+                }
+            }
+
+            return result
+
+        except Exception as exc:
+            print(f"ERROR: Failed to fetch aggregated news for ALL SECTORS via {base_etf_ticker}: {exc}")
+            raise
 
     async def get_sector_news(
         self,
@@ -1268,177 +1360,32 @@ class NewsService:
 
         # Check if this is "All Sectors" request
         if is_all_sectors_identifier(sector_key):
-            return await self._get_all_sectors_news(limit=limit, timeframe=sector_timeframe)
+            return await self._get_all_sectors_news(
+                base_etf_ticker=sector_key,
+                limit=limit,
+                timeframe=sector_timeframe
+            )
 
         try:
-            # Get sector tickers from sector service (now returns tuple)
             tickers, market_weight_coverage = sector_service_instance.get_sector_tickers(sector_key)
 
             if not tickers:
                 raise ValueError(f"No tickers found for sector: {sector_key}")
 
             print(f"Found {len(tickers)} tickers for sector '{sector_key}': {tickers[:5]}...")
-            print(f"Market weight coverage: {market_weight_coverage:.2%}")
+            if market_weight_coverage is not None:
+                print(f"Holding weight coverage: {market_weight_coverage:.2%}")
 
-            # Get sector metadata
             sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
 
-            # Track successful and failed tickers
-            failed_tickers = []
-            successful_tickers = []
-
-            # Fetch news for all tickers in parallel (batches of 10 for rate limiting)
-            # SECTOR LIMIT: Only fetch 1M of data maximum (capped above)
-            all_articles = []
-            batch_size = 10
-
-            for i in range(0, len(tickers), batch_size):
-                batch = tickers[i:i + batch_size]
-                print(f"Fetching batch {i//batch_size + 1}/{(len(tickers) + batch_size - 1)//batch_size}: {batch}")
-
-                # Fetch news for all tickers in batch concurrently
-                # Use sector_timeframe (capped at 1M) instead of original timeframe
-                tasks = [
-                    self.get_ticker_news_for_timeframe(
-                        ticker=ticker,
-                        timeframe=sector_timeframe,
-                        trigger_progressive=False,  # Don't trigger progressive fetching for sector queries
-                        preserve_all_tickers=True,  # Preserve full ticker_sentiment array for multi-ticker processing
-                        is_sector=True  # CRITICAL: Only fetch requested timeframe for sectors (exponential decay)
-                    )
-                    for ticker in batch
-                ]
-
-                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                # Collect articles from successful fetches
-                for ticker, result in zip(batch, batch_results):
-                    if isinstance(result, Exception):
-                        print(f"WARNING: Failed to fetch news for {ticker}: {result}")
-                        failed_tickers.append(ticker)
-                        continue
-
-                    if result:
-                        all_articles.extend(result)
-                        successful_tickers.append(ticker)
-                        print(f"  {ticker}: {len(result)} articles")
-                    else:
-                        # Empty result but no exception
-                        successful_tickers.append(ticker)
-                        print(f"  {ticker}: 0 articles")
-
-                # Add delay between batches (200ms)
-                if i + batch_size < len(tickers):
-                    await asyncio.sleep(0.2)
-
-            print(f"Total articles fetched before deduplication: {len(all_articles)}")
-
-            # Deduplicate articles
-            unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
-
-            print(f"Unique articles after deduplication: {len(unique_articles)}")
-            print(f"Deduplication stats: {dedup_stats}")
-
-            # Filter articles by timeframe (time-based filtering)
-            # This ensures 1W and 1M return different datasets even though we fetch 2M for both
-            from datetime import datetime, timezone, timedelta
-            now_utc = datetime.now(timezone.utc)
-            
-            # Map timeframe to days
-            timeframe_days_map = {
-                '1D': 1,
-                '1W': 7,
-                '1M': 30,
-                '3M': 90,
-                '6M': 180,
-                'YTD': None,  # Handled separately
-                '1Y': 365,
-                '5Y': 1825,
-                '10Y': 3650,
-                'MAX': None  # No filtering
-            }
-            
-            days_back = timeframe_days_map.get(sector_timeframe)
-            
-            if days_back is not None:
-                cutoff_date = now_utc - timedelta(days=days_back)
-                filtered_articles = []
-                
-                for article in unique_articles:
-                    pub_timestamp_str = article.get("publish_timestamp")
-                    pub_datetime = None
-                    
-                    if pub_timestamp_str:
-                        try:
-                            pub_datetime = datetime.fromisoformat(pub_timestamp_str)
-                            if pub_datetime.tzinfo is None:
-                                pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
-                        except (ValueError, AttributeError):
-                            pass
-                    
-                    # Fallback to date if timestamp not available
-                    if pub_datetime is None:
-                        pub_date_str = article.get("publish_date")
-                        if pub_date_str:
-                            try:
-                                pub_datetime = datetime.strptime(pub_date_str, "%Y-%m-%d")
-                                pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
-                            except ValueError:
-                                continue
-                    
-                    # Include article if within timeframe
-                    if pub_datetime and pub_datetime >= cutoff_date:
-                        filtered_articles.append(article)
-                
-                unique_articles = filtered_articles
-                print(f"Filtered to {len(unique_articles)} articles within {sector_timeframe} timeframe (cutoff: {cutoff_date.date()})")
-
-            # Sort by date (newest first)
-            unique_articles.sort(
-                key=lambda x: x.get('publish_date', ''),
-                reverse=True
+            return await self._assemble_sector_news_response(
+                response_sector_key=sector_key,
+                display_name=sector_metadata['display_name'],
+                tickers=tickers,
+                sector_timeframe=sector_timeframe,
+                limit=limit,
+                market_weight_coverage=market_weight_coverage
             )
-
-            # Limit to requested count
-            limited_articles = unique_articles[:limit]
-
-            # Calculate deduplication rate
-            total_fetched = len(all_articles)
-            total_unique = len(unique_articles)
-            dedup_rate = (dedup_stats['total_duplicates_removed'] / total_fetched * 100) if total_fetched > 0 else 0
-
-            # Calculate success rate
-            success_rate = (len(successful_tickers) / len(tickers) * 100) if len(tickers) > 0 else 0
-
-            # Calculate sector-wide sentiment metrics from multi-ticker articles
-            print(f"Calculating sector sentiment metrics from {len(unique_articles)} unique articles...")
-            sentiment_metrics = sector_sentiment_service.analyze_sector_sentiment_with_momentum(
-                articles=unique_articles,
-                sector_tickers=tickers
-            )
-            print(f"Sentiment calculation complete: slow_score={sentiment_metrics.get('slow_score')}, "
-                  f"momentum={sentiment_metrics.get('sentiment_momentum')}, "
-                  f"quality={sentiment_metrics.get('data_quality')}")
-
-            return {
-                'sector_key': sector_key,
-                'sector_name': sector_metadata['display_name'],
-                'tickers_queried': tickers,
-                'total_tickers': len(tickers),
-                'successful_tickers': successful_tickers,
-                'failed_tickers': failed_tickers,
-                'success_rate': round(success_rate, 2),
-                'total_market_weight_coverage': round(market_weight_coverage, 4),
-                'total_articles_fetched': total_fetched,
-                'unique_articles': total_unique,
-                'deduplication_rate': round(dedup_rate, 2),
-                'articles': limited_articles,
-                'timeframe': sector_timeframe,  # Return capped timeframe, not original
-                'cached': False,  # Will be True if returned from cache
-                'metadata': dedup_stats,
-                # Sector sentiment metrics (NEW)
-                'sentiment_metrics': sentiment_metrics
-            }
 
         except Exception as e:
             print(f"ERROR: Failed to fetch sector news for '{sector_key}': {str(e)}")

@@ -1,4 +1,4 @@
-import { sectorTickerOverrides, countryDefaultTickers, newsTickerOverrides, sectorToYfinance, etfToYfinance } from '../config/tickerMappings';
+import { countryDefaultTickers, etfToSectorName } from '../config/tickerMappings';
 
 /**
  * Resolves the appropriate ticker for a given sector and country
@@ -7,37 +7,41 @@ import { sectorTickerOverrides, countryDefaultTickers, newsTickerOverrides, sect
  * @returns {string|null} Resolved ticker symbol or null
  */
 export const resolveSectorTicker = (sector, countryCode) => {
-  // Priority 1: Explicit ticker in sector object
+  // Priority 1: Explicit ticker in sector object (ETF ticker)
   if (sector && sector.ticker) {
     return sector.ticker;
   }
 
-  // Priority 2: Sector name override mapping
-  if (sector && sector.name && sectorTickerOverrides[sector.name]) {
-    return sectorTickerOverrides[sector.name];
-  }
-
-  // Priority 3: Index name if it looks like a ticker (contains ^ or .)
+  // Priority 2: Index name if it looks like a ticker (contains ^ or .)
   if (sector && sector.index && (/\^|\./).test(sector.index)) {
     return sector.index;
   }
 
-  // Priority 4: Country default ticker
+  // Priority 3: Country default ticker
   return countryDefaultTickers[countryCode] || null;
 };
 
 /**
+ * Resolves the identifier used by API endpoints that expect the legacy "yfinance" key.
+ * With the ETF migration this now maps to the underlying ETF ticker, but we keep the
+ * helper to avoid touching all upstream hook logic in one change.
+ * @param {Object|null} sector - Sector object as defined in sectorData config
+ * @returns {string|null} Resolved identifier (ETF ticker) or null
+ */
+/**
  * Resolves the news ticker from a sector ticker
- * Maps S&P sector indices to SPDR ETF tickers for better news coverage
+ * Since we're using ETFs directly, no mapping needed
  * @param {string} ticker - Original ticker symbol
- * @returns {string} News ticker (may be same as input if no mapping exists)
+ * @returns {string} News ticker (same as input)
  */
 export const resolveNewsTicker = (ticker) => {
-  return newsTickerOverrides[ticker] || ticker;
+  return ticker;
 };
 
-// Display views share the same mapping as news coverage
-export const resolveDisplayTicker = resolveNewsTicker;
+// Display views use the same ticker
+export const resolveDisplayTicker = (ticker) => {
+  return ticker;
+};
 
 /**
  * Determines if a ticker is valid (non-null and non-empty)
@@ -49,31 +53,47 @@ export const isValidTicker = (ticker) => {
 };
 
 /**
- * Resolves a yfinance sector key from a sector object or ticker
- * @param {Object|string} sectorOrTicker - Sector object with yfinanceKey property, or ticker string
- * @returns {string|null} yfinance sector key (e.g., 'technology', 'healthcare') or null if not found
+ * Validates if a ticker is a known ETF
+ * @param {string} ticker - Ticker to validate
+ * @returns {boolean} True if ticker is a known ETF
  */
-export const resolveYfinanceSectorKey = (sectorOrTicker) => {
-  // If it's a sector object with yfinanceKey property, use it directly
-  if (sectorOrTicker && typeof sectorOrTicker === 'object' && sectorOrTicker.yfinanceKey) {
-    return sectorOrTicker.yfinanceKey;
+export const isKnownETF = (ticker) => {
+  if (!ticker) {
+    return false;
+  }
+  return Boolean(etfToSectorName[ticker.toUpperCase()]);
+};
+
+/**
+ * Resolves the identifier used by API endpoints that expect the legacy "yfinance" key.
+ * With the ETF migration this now maps to the underlying ETF ticker, but we keep the
+ * helper to avoid touching all upstream hook logic in one change.
+ * @param {Object|null} sector - Sector object as defined in sectorData config
+ * @returns {string|null} Resolved identifier (ETF ticker) or null
+ */
+export const resolveYfinanceSectorKey = (sector) => {
+  if (!sector) {
+    return null;
   }
 
-  // If it's a string ticker, resolve from mappings
-  if (typeof sectorOrTicker === 'string') {
-    const ticker = sectorOrTicker.trim();
-
-    // Check S&P 500 sector ticker mapping
-    if (sectorToYfinance[ticker]) {
-      return sectorToYfinance[ticker];
+  if (sector.ticker && typeof sector.ticker === 'string') {
+    const ticker = sector.ticker.toUpperCase();
+    if (isKnownETF(ticker)) {
+      return ticker;
     }
+    return sector.ticker;
+  }
 
-    // Check SPDR ETF ticker mapping
-    if (etfToYfinance[ticker]) {
-      return etfToYfinance[ticker];
+  if (sector.name) {
+    const match = Object.entries(etfToSectorName).find(([, name]) => name.toLowerCase() === sector.name.toLowerCase());
+    if (match) {
+      return match[0];
     }
   }
 
-  // No yfinance key found
+  if (sector.yfinanceKey) {
+    return sector.yfinanceKey;
+  }
+
   return null;
 };

@@ -5,156 +5,101 @@
 
 export const industryData = {
   US: [
-    { name: 'All Sectors', index: 'S&P 500', ticker: '^GSPC', available: true, yfinanceKey: 'all-sectors' },
-    { name: 'Communication Services', index: 'S&P 500 Communication Services', ticker: '^SP500-50', available: true, yfinanceKey: 'communication-services' },
-    { name: 'Consumer Discretionary', index: 'S&P 500 Consumer Discretionary', ticker: '^SP500-25', available: true, yfinanceKey: 'consumer-cyclical' },
-    { name: 'Consumer Staples', index: 'S&P 500 Consumer Staples', ticker: '^SP500-30', available: true, yfinanceKey: 'consumer-defensive' },
-    { name: 'Energy', index: 'S&P 500 Energy', ticker: '^GSPE', available: true, yfinanceKey: 'energy' },
-    { name: 'Financials', index: 'S&P 500 Financials', ticker: '^SP500-40', available: true, yfinanceKey: 'financial-services' },
-    { name: 'Health Care', index: 'S&P 500 Health Care', ticker: '^SP500-35', available: true, yfinanceKey: 'healthcare' },
-    { name: 'Industrials', index: 'S&P 500 Industrials', ticker: '^SP500-20', available: true, yfinanceKey: 'industrials' },
-    { name: 'Information Technology', index: 'S&P 500 Information Technology', ticker: '^SP500-45', available: true, yfinanceKey: 'technology' },
-    { name: 'Materials', index: 'S&P 500 Materials', ticker: '^SP500-15', available: true, yfinanceKey: 'basic-materials' },
-    { name: 'Real Estate', index: 'S&P 500 Real Estate', ticker: '^SP500-60', available: true, yfinanceKey: 'real-estate' },
-    { name: 'Utilities', index: 'S&P 500 Utilities', ticker: '^SP500-55', available: true, yfinanceKey: 'utilities' }
+    { name: 'All Sectors', index: 'SPDR S&P 500 ETF', ticker: 'SPY', available: true },
+    { name: 'Communication Services', index: 'Communication Services Select Sector SPDR', ticker: 'XLC', available: true },
+    { name: 'Consumer Discretionary', index: 'Consumer Discretionary Select Sector SPDR', ticker: 'XLY', available: true },
+    { name: 'Consumer Staples', index: 'Consumer Staples Select Sector SPDR', ticker: 'XLP', available: true },
+    { name: 'Energy', index: 'Energy Select Sector SPDR', ticker: 'XLE', available: true },
+    { name: 'Financials', index: 'Financial Select Sector SPDR', ticker: 'XLF', available: true },
+    { name: 'Health Care', index: 'Health Care Select Sector SPDR', ticker: 'XLV', available: true },
+    { name: 'Industrials', index: 'Industrial Select Sector SPDR', ticker: 'XLI', available: true },
+    { name: 'Information Technology', index: 'Technology Select Sector SPDR', ticker: 'XLK', available: true },
+    { name: 'Materials', index: 'Materials Select Sector SPDR', ticker: 'XLB', available: true },
+    { name: 'Real Estate', index: 'Real Estate Select Sector SPDR', ticker: 'XLRE', available: true },
+    { name: 'Utilities', index: 'Utilities Select Sector SPDR', ticker: 'XLU', available: true }
   ],
-  CHN: [
-    { name: 'All Sectors', index: 'CSI 300', ticker: '000300.SS', available: true },
-    { name: 'Energy', index: 'CSI 300 Energy', ticker: '000908.SH', available: false },
-    { name: 'Materials', index: 'CSI 300 Materials', ticker: '000909.SH', available: false },
-    { name: 'Industrials', index: 'CSI 300 Industrials', ticker: '000910.SH', available: false },
-    { name: 'Consumer Discretionary', index: 'CSI 300 Consumer Discretionary', ticker: '000911.SH', available: false },
-    { name: 'Consumer Staples', index: 'CSI 300 Consumer Staples', ticker: '000912.SH', available: false },
-    { name: 'Health Care', index: 'CSI 300 Health Care', ticker: '000913.SH', available: false },
-    { name: 'Financials', index: 'CSI 300 Financials', ticker: '000914.SH', available: false },
-    { name: 'Information Technology', index: 'CSI 300 Information Technology', ticker: '000915.SH', available: false },
-    { name: 'Telecommunication', index: 'CSI 300 Telecommunication', ticker: '000916.SH', available: false },
-    { name: 'Utilities', index: 'CSI 300 Utilities', ticker: '000917.SH', available: false }
+  // Developed Markets
+  CAN: [
+    { name: 'All Sectors', index: 'iShares MSCI Canada ETF', ticker: 'EWC', available: true }
   ],
   JPN: [
-    { name: 'All Sectors', index: 'Nikkei 225', ticker: '^N225', available: true },
-    { name: 'Foods', index: 'TOPIX-17 Foods', ticker: '.IFD.T', available: false },
-    { name: 'Fishery, Agriculture & Forestry', index: 'TOPIX-17 Fishery', ticker: '.IAF.T', available: false },
-    { name: 'Mining', index: 'TOPIX-17 Mining', ticker: '.IMN.T', available: false },
-    { name: 'Construction', index: 'TOPIX-17 Construction', ticker: '.ICN.T', available: false },
-    { name: 'Textiles & Apparels', index: 'TOPIX-17 Textiles', ticker: '.ITX.T', available: false },
-    { name: 'Pulp & Paper', index: 'TOPIX-17 Pulp & Paper', ticker: '.IPP.T', available: false },
-    { name: 'Chemicals', index: 'TOPIX-17 Chemicals', ticker: '.ICH.T', available: false },
-    { name: 'Pharmaceutical', index: 'TOPIX-17 Pharmaceutical', ticker: '.IPH.T', available: false },
-    { name: 'Oil & Coal Products', index: 'TOPIX-17 Oil & Coal', ticker: '.IOC.T', available: false },
-    { name: 'Rubber Products', index: 'TOPIX-17 Rubber', ticker: '.IRB.T', available: false },
-    { name: 'Glass & Ceramics Products', index: 'TOPIX-17 Glass & Ceramics', ticker: '.IGL.T', available: false },
-    { name: 'Iron & Steel', index: 'TOPIX-17 Iron & Steel', ticker: '.IST.T', available: false },
-    { name: 'Nonferrous Metals', index: 'TOPIX-17 Nonferrous Metals', ticker: '.INF.T', available: false },
-    { name: 'Metal Products', index: 'TOPIX-17 Metal Products', ticker: '.IMT.T', available: false },
-    { name: 'Machinery', index: 'TOPIX-17 Machinery', ticker: '.IMH.T', available: false },
-    { name: 'Electric Appliances', index: 'TOPIX-17 Electric Appliances', ticker: '.IEA.T', available: false },
-    { name: 'Transportation Equipment', index: 'TOPIX-17 Transportation Equipment', ticker: '.ITE.T', available: false },
-    { name: 'Precision Instruments', index: 'TOPIX-17 Precision Instruments', ticker: '.IPR.T', available: false },
-    { name: 'Other Products', index: 'TOPIX-17 Other Products', ticker: '.IOP.T', available: false },
-    { name: 'Electric Power & Gas', index: 'TOPIX-17 Electric Power & Gas', ticker: '.IEG.T', available: false },
-    { name: 'Land Transportation', index: 'TOPIX-17 Land Transportation', ticker: '.ILT.T', available: false },
-    { name: 'Marine Transportation', index: 'TOPIX-17 Marine Transportation', ticker: '.IMR.T', available: false },
-    { name: 'Air Transportation', index: 'TOPIX-17 Air Transportation', ticker: '.IAT.T', available: false },
-    { name: 'Warehousing', index: 'TOPIX-17 Warehousing', ticker: '.IWH.T', available: false },
-    { name: 'Information & Communication', index: 'TOPIX-17 Info & Comm', ticker: '.IIC.T', available: false },
-    { name: 'Wholesale Trade', index: 'TOPIX-17 Wholesale Trade', ticker: '.IWS.T', available: false },
-    { name: 'Retail Trade', index: 'TOPIX-17 Retail Trade', ticker: '.IRT.T', available: false },
-    { name: 'Banks', index: 'TOPIX-17 Banks', ticker: '.IBK.T', available: false },
-    { name: 'Securities', index: 'TOPIX-17 Securities', ticker: '.ISC.T', available: false },
-    { name: 'Insurance', index: 'TOPIX-17 Insurance', ticker: '.IIN.T', available: false },
-    { name: 'Other Financing Business', index: 'TOPIX-17 Other Financing', ticker: '.IOF.T', available: false },
-    { name: 'Real Estate', index: 'TOPIX-17 Real Estate', ticker: '.IRE.T', available: false },
-    { name: 'Services', index: 'TOPIX-17 Services', ticker: '.ISV.T', available: false }
-  ],
-  HKG: [
-    { name: 'All Sectors', index: 'HANG SENG INDEX', ticker: '^HSI', available: true },
-    { name: 'Finance', index: 'Hang Seng Finance', ticker: '^HSNF', available: false },
-    { name: 'Utilities', index: 'Hang Seng Utilities', ticker: '^HSNU', available: false },
-    { name: 'Properties', index: 'Hang Seng Properties', ticker: '^HSNP', available: false },
-    { name: 'Commerce & Industry', index: 'Hang Seng Commerce & Industry', ticker: '^HSCI', available: false }
-  ],
-  IND: [
-    { name: 'All Sectors', index: 'NIFTY 50', ticker: '^NSEI', available: true },
-    { name: 'Auto', index: 'Nifty Auto', ticker: '^CNXAUTO', available: false },
-    { name: 'Bank', index: 'Nifty Bank', ticker: '^NSEBANK', available: false },
-    { name: 'Energy', index: 'Nifty Energy', ticker: '^CNXENERGY', available: false },
-    { name: 'Financial Services', index: 'Nifty Financial Services', ticker: '^CNXFIN', available: false },
-    { name: 'FMCG', index: 'Nifty FMCG', ticker: '^CNXFMCG', available: false },
-    { name: 'IT', index: 'Nifty IT', ticker: '^CNXIT', available: false },
-    { name: 'Media', index: 'Nifty Media', ticker: '^CNXMEDIA', available: false },
-    { name: 'Metal', index: 'Nifty Metal', ticker: '^CNXMETAL', available: false },
-    { name: 'Pharma', index: 'Nifty Pharma', ticker: '^CNXPHARMA', available: false },
-    { name: 'Realty', index: 'Nifty Realty', ticker: '^CNXREALTY', available: false }
-  ],
-  FRA: [
-    { name: 'All Sectors', index: 'CAC 40', ticker: '^FCHI', available: true },
-    { name: 'Financials', index: 'CAC Financials', ticker: '^PAX', available: false },
-    { name: 'Industrials', index: 'CAC Industrials', ticker: '^PCIN', available: false },
-    { name: 'Consumer Services', index: 'CAC Consumer Services', ticker: '^PCCS', available: false },
-    { name: 'Health Care', index: 'CAC Health Care', ticker: '^PCHC', available: false }
-  ],
-  GBR: [
-    { name: 'All Sectors', index: 'FTSE 100', ticker: '^FTSE', available: true },
-    { name: 'Automobiles & Parts', index: 'FTSE 350 Automobiles & Parts', ticker: '^FTNMX401010', available: false },
-    { name: 'Banks', index: 'FTSE 350 Banks', ticker: '^FTNMX301010', available: false },
-    { name: 'Basic Resources', index: 'FTSE 350 Basic Resources', ticker: '^FTNMX551010', available: false },
-    { name: 'Chemicals', index: 'FTSE 350 Chemicals', ticker: '^FTNMX552010', available: false },
-    { name: 'Construction & Materials', index: 'FTSE 350 Construction & Materials', ticker: '^FTNMX501010', available: false },
-    { name: 'Financial Services', index: 'FTSE 350 Financial Services', ticker: '^FTNMX302010', available: false },
-    { name: 'Food & Beverage', index: 'FTSE 350 Food & Beverage', ticker: '^FTNMX452010', available: false },
-    { name: 'Health Care', index: 'FTSE 350 Health Care', ticker: '^FTNMX201010', available: false },
-    { name: 'Industrial Goods & Services', index: 'FTSE 350 Industrial Goods & Services', ticker: '^FTNMX502010', available: false },
-    { name: 'Insurance', index: 'FTSE 350 Insurance', ticker: '^FTNMX303010', available: false },
-    { name: 'Media', index: 'FTSE 350 Media', ticker: '^FTNMX403010', available: false },
-    { name: 'Oil & Gas', index: 'FTSE 350 Oil & Gas', ticker: '^FTNMX601010', available: false },
-    { name: 'Personal & Household Goods', index: 'FTSE 350 Personal & Household Goods', ticker: '^FTNMX452020', available: false },
-    { name: 'Real Estate', index: 'FTSE 350 Real Estate', ticker: '^FTNMX351010', available: false },
-    { name: 'Retail', index: 'FTSE 350 Retail', ticker: '^FTNMX404010', available: false },
-    { name: 'Technology', index: 'FTSE 350 Technology', ticker: '^FTNMX202010', available: false },
-    { name: 'Telecommunications', index: 'FTSE 350 Telecommunications', ticker: '^FTNMX101010', available: false },
-    { name: 'Travel & Leisure', index: 'FTSE 350 Travel & Leisure', ticker: '^FTNMX405010', available: false },
-    { name: 'Utilities', index: 'FTSE 350 Utilities', ticker: '^FTNMX651010', available: false }
-  ],
-  CAN: [
-    { name: 'All Sectors', index: 'S&P/TSX Composite', ticker: '^GSPTSE', available: true },
-    { name: 'Communication Services', index: 'S&P/TSX Capped Communication Services', ticker: '^TTCM', available: false },
-    { name: 'Consumer Discretionary', index: 'S&P/TSX Capped Consumer Discretionary', ticker: '^TTCD', available: false },
-    { name: 'Consumer Staples', index: 'S&P/TSX Capped Consumer Staples', ticker: '^TTCS', available: false },
-    { name: 'Energy', index: 'S&P/TSX Capped Energy', ticker: '^TTEN', available: false },
-    { name: 'Financials', index: 'S&P/TSX Capped Financials', ticker: '^TTFS', available: false },
-    { name: 'Health Care', index: 'S&P/TSX Capped Health Care', ticker: '^TTHC', available: false },
-    { name: 'Industrials', index: 'S&P/TSX Capped Industrials', ticker: '^TTIN', available: false },
-    { name: 'Information Technology', index: 'S&P/TSX Capped Information Technology', ticker: '^TTTK', available: false },
-    { name: 'Materials', index: 'S&P/TSX Capped Materials', ticker: '^TTMT', available: false },
-    { name: 'Real Estate', index: 'S&P/TSX Capped Real Estate', ticker: '^TTRE', available: false },
-    { name: 'Utilities', index: 'S&P/TSX Capped Utilities', ticker: '^TTUT', available: false }
+    { name: 'All Sectors', index: 'iShares MSCI Japan ETF', ticker: 'EWJ', available: true }
   ],
   DEU: [
-    { name: 'All Sectors', index: 'DAX PERFORMANCE-INDEX', ticker: '^GDAXI', available: true },
-    { name: 'Automobile', index: 'DAXsector All Automobile', ticker: '^D1A0', available: false },
-    { name: 'Banks', index: 'DAXsector All Banks', ticker: '^D1B0', available: false },
-    { name: 'Basic Resources', index: 'DAXsector All Basic Resources', ticker: '^D1C0', available: false },
-    { name: 'Chemicals', index: 'DAXsector All Chemicals', ticker: '^D1D0', available: false },
-    { name: 'Construction', index: 'DAXsector All Construction', ticker: '^D1E0', available: false },
-    { name: 'Financial Services', index: 'DAXsector All Financial Services', ticker: '^D1F0', available: false },
-    { name: 'Food & Beverage', index: 'DAXsector All Food & Beverage', ticker: '^D1G0', available: false },
-    { name: 'Health Care', index: 'DAXsector All Health Care', ticker: '^D1H0', available: false },
-    { name: 'Industrial', index: 'DAXsector All Industrial', ticker: '^D1I0', available: false },
-    { name: 'Insurance', index: 'DAXsector All Insurance', ticker: '^D1K0', available: false },
-    { name: 'Media', index: 'DAXsector All Media', ticker: '^D1L0', available: false },
-    { name: 'Oil & Gas', index: 'DAXsector All Oil & Gas', ticker: '^D1M0', available: false },
-    { name: 'Real Estate', index: 'DAXsector All Real Estate', ticker: '^D1N0', available: false },
-    { name: 'Retail', index: 'DAXsector All Retail', ticker: '^D1P0', available: false },
-    { name: 'Technology', index: 'DAXsector All Technology', ticker: '^D1R0', available: false },
-    { name: 'Telecommunication', index: 'DAXsector All Telecommunication', ticker: '^D1S0', available: false },
-    { name: 'Travel & Leisure', index: 'DAXsector All Travel & Leisure', ticker: '^D1T0', available: false },
-    { name: 'Utilities', index: 'DAXsector All Utilities', ticker: '^D1U0', available: false }
+    { name: 'All Sectors', index: 'iShares MSCI Germany ETF', ticker: 'EWG', available: true }
   ],
-  SAU: [
-    { name: 'All Sectors', index: 'Tadawul All Share', ticker: '^TASI.SR', available: true },
-    { name: 'Energy', index: 'Tadawul Energy', ticker: 'TASI10.SR', available: false },
-    { name: 'Materials', index: 'Tadawul Materials', ticker: 'TASI20.SR', available: false },
-    { name: 'Financials', index: 'Tadawul Financials', ticker: 'TASI40.SR', available: false }
+  GBR: [
+    { name: 'All Sectors', index: 'iShares MSCI United Kingdom ETF', ticker: 'EWU', available: true }
+  ],
+  FRA: [
+    { name: 'All Sectors', index: 'iShares MSCI France ETF', ticker: 'EWQ', available: true }
+  ],
+  AUS: [
+    { name: 'All Sectors', index: 'iShares MSCI Australia ETF', ticker: 'EWA', available: true }
+  ],
+  CHE: [
+    { name: 'All Sectors', index: 'iShares MSCI Switzerland ETF', ticker: 'EWL', available: true }
+  ],
+  HKG: [
+    { name: 'All Sectors', index: 'iShares MSCI Hong Kong ETF', ticker: 'EWH', available: true }
+  ],
+  ITA: [
+    { name: 'All Sectors', index: 'iShares MSCI Italy ETF', ticker: 'EWI', available: true }
+  ],
+  ESP: [
+    { name: 'All Sectors', index: 'iShares MSCI Spain ETF', ticker: 'EWP', available: true }
+  ],
+  NLD: [
+    { name: 'All Sectors', index: 'iShares MSCI Netherlands ETF', ticker: 'EWN', available: true }
+  ],
+  SWE: [
+    { name: 'All Sectors', index: 'iShares MSCI Sweden ETF', ticker: 'EWD', available: true }
+  ],
+  SGP: [
+    { name: 'All Sectors', index: 'iShares MSCI Singapore ETF', ticker: 'EWS', available: true }
+  ],
+  BEL: [
+    { name: 'All Sectors', index: 'iShares MSCI Belgium ETF', ticker: 'EWK', available: true }
+  ],
+  AUT: [
+    { name: 'All Sectors', index: 'iShares MSCI Austria ETF', ticker: 'EWO', available: true }
+  ],
+
+  // Emerging Markets
+  CHN: [
+    { name: 'All Sectors', index: 'iShares MSCI China ETF', ticker: 'MCHI', available: true }
+  ],
+  IND: [
+    { name: 'All Sectors', index: 'iShares MSCI India ETF', ticker: 'INDA', available: true }
+  ],
+  TWN: [
+    { name: 'All Sectors', index: 'iShares MSCI Taiwan ETF', ticker: 'EWT', available: true }
+  ],
+  KOR: [
+    { name: 'All Sectors', index: 'iShares MSCI South Korea ETF', ticker: 'EWY', available: true }
+  ],
+  BRA: [
+    { name: 'All Sectors', index: 'iShares MSCI Brazil ETF', ticker: 'EWZ', available: true }
+  ],
+  MEX: [
+    { name: 'All Sectors', index: 'iShares MSCI Mexico ETF', ticker: 'EWW', available: true }
+  ],
+  ZAF: [
+    { name: 'All Sectors', index: 'iShares MSCI South Africa ETF', ticker: 'EZA', available: true }
+  ],
+  MYS: [
+    { name: 'All Sectors', index: 'iShares MSCI Malaysia ETF', ticker: 'EWM', available: true }
+  ],
+  TUR: [
+    { name: 'All Sectors', index: 'iShares MSCI Turkey ETF', ticker: 'TUR', available: true }
+  ],
+  POL: [
+    { name: 'All Sectors', index: 'iShares MSCI Poland ETF', ticker: 'EPOL', available: true }
+  ],
+  CHL: [
+    { name: 'All Sectors', index: 'iShares MSCI Chile ETF', ticker: 'ECH', available: true }
+  ],
+  PER: [
+    { name: 'All Sectors', index: 'iShares MSCI Peru ETF', ticker: 'EPU', available: true }
   ]
 };

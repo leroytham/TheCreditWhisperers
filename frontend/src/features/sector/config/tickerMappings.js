@@ -1,92 +1,96 @@
 /**
- * Ticker mapping configurations for sector analysis
+ * Ticker mapping configurations for ETF-based sector analysis
  */
 
 /**
- * Maps sector names to their corresponding ticker symbols
- * Used for resolving sector-specific data when explicit ticker not provided
+ * Maps ETF tickers to sector/country display names
+ * Includes US sectors and all country ETFs
  */
-export const sectorTickerOverrides = {
-  'All Sectors': '^GSPC',
-  'Communication Services': 'sp500-communication-services',
-  'Consumer Discretionary': 'sp500-consumer-discretionary',
-  'Consumer Staples': 'sp500-consumer-staples',
-  'Energy': 'sp500-energy',
-  'Financials': 'sp500-financials',
-  'Health Care': 'sp500-health-care',
-  'Industrials': 'sp500-industrials',
-  'Information Technology': 'sp500-45',
-  'Materials': 'sp500-materials',
-  'Real Estate': 'sp500-real-estate',
-  'Utilities': 'sp500-utilities'
+export const etfToSectorName = {
+  // US Sectors
+  'SPY': 'All Sectors',
+  'XLK': 'Information Technology',
+  'XLV': 'Health Care',
+  'XLF': 'Financials',
+  'XLI': 'Industrials',
+  'XLY': 'Consumer Discretionary',
+  'XLP': 'Consumer Staples',
+  'XLE': 'Energy',
+  'XLB': 'Materials',
+  'XLC': 'Communication Services',
+  'XLRE': 'Real Estate',
+  'XLU': 'Utilities',
+
+  // Developed Markets
+  'EWC': 'Canada',
+  'EWJ': 'Japan',
+  'EWG': 'Germany',
+  'EWU': 'United Kingdom',
+  'EWQ': 'France',
+  'EWA': 'Australia',
+  'EWL': 'Switzerland',
+  'EWH': 'Hong Kong',
+  'EWI': 'Italy',
+  'EWP': 'Spain',
+  'EWN': 'Netherlands',
+  'EWD': 'Sweden',
+  'EWS': 'Singapore',
+  'EWK': 'Belgium',
+  'EWO': 'Austria',
+
+  // Emerging Markets
+  'MCHI': 'China',
+  'INDA': 'India',
+  'EWT': 'Taiwan',
+  'EWY': 'South Korea',
+  'EWZ': 'Brazil',
+  'EWW': 'Mexico',
+  'EZA': 'South Africa',
+  'EWM': 'Malaysia',
+  'TUR': 'Turkey',
+  'EPOL': 'Poland',
+  'ECH': 'Chile',
+  'EPU': 'Peru'
 };
 
 /**
- * Maps S&P sector index codes to SPDR ETF tickers for news fetching
- * Many news services have better coverage for ETFs than sector indices
- */
-export const newsTickerOverrides = {
-  '^SP500-25': 'XLY',   // Consumer Discretionary
-  '^SP500-30': 'XLP',   // Consumer Staples
-  '^SP500-35': 'XLV',   // Health Care
-  '^SP500-40': 'XLF',   // Financials
-  '^SP500-45': 'XLK',   // Information Technology
-  '^SP500-50': 'XLC',   // Communication Services
-  '^SP500-55': 'XLU',   // Utilities
-  '^SP500-60': 'XLRE',  // Real Estate
-  '^SP500-15': 'XLB',   // Materials
-  '^SP500-20': 'XLI',   // Industrials
-  '^GSPE': 'XLE',       // Energy
-};
-
-/**
- * Maps S&P 500 sector tickers to yfinance sector keys for news aggregation
- */
-export const sectorToYfinance = {
-  '^SP500-45': 'technology',           // Information Technology
-  '^SP500-35': 'healthcare',            // Health Care
-  '^SP500-40': 'financial-services',    // Financials
-  '^SP500-20': 'industrials',           // Industrials
-  '^SP500-25': 'consumer-cyclical',     // Consumer Discretionary
-  '^SP500-30': 'consumer-defensive',    // Consumer Staples
-  '^GSPE': 'energy',                    // Energy
-  '^SP500-15': 'basic-materials',       // Materials
-  '^SP500-50': 'communication-services', // Communication Services
-  '^SP500-60': 'real-estate',           // Real Estate
-  '^SP500-55': 'utilities',             // Utilities
-};
-
-/**
- * Maps SPDR ETF tickers to yfinance sector keys for news aggregation
- */
-export const etfToYfinance = {
-  'XLK': 'technology',
-  'XLV': 'healthcare',
-  'XLF': 'financial-services',
-  'XLI': 'industrials',
-  'XLY': 'consumer-cyclical',
-  'XLP': 'consumer-defensive',
-  'XLE': 'energy',
-  'XLB': 'basic-materials',
-  'XLC': 'communication-services',
-  'XLRE': 'real-estate',
-  'XLU': 'utilities',
-};
-
-/**
- * Default country index tickers as fallback
+ * Default country ETF tickers
+ * Maps ISO country codes to their primary ETF tickers
  */
 export const countryDefaultTickers = {
-  US: '^GSPC',
-  CHN: '000300.SS',
-  JPN: '^N225',
-  HKG: '^HSI',
-  IND: '^NSEI',
-  FRA: '^FCHI',
-  GBR: '^FTSE',
-  CAN: '^GSPTSE',
-  DEU: '^GDAXI',
-  SAU: '^TASI.SR'
+  // United States
+  US: 'SPY',
+
+  // Developed Markets
+  CAN: 'EWC',
+  JPN: 'EWJ',
+  DEU: 'EWG',
+  GBR: 'EWU',
+  FRA: 'EWQ',
+  AUS: 'EWA',
+  CHE: 'EWL',
+  HKG: 'EWH',
+  ITA: 'EWI',
+  ESP: 'EWP',
+  NLD: 'EWN',
+  SWE: 'EWD',
+  SGP: 'EWS',
+  BEL: 'EWK',
+  AUT: 'EWO',
+
+  // Emerging Markets
+  CHN: 'MCHI',
+  IND: 'INDA',
+  TWN: 'EWT',
+  KOR: 'EWY',
+  BRA: 'EWZ',
+  MEX: 'EWW',
+  ZAF: 'EZA',
+  MYS: 'EWM',
+  TUR: 'TUR',
+  POL: 'EPOL',
+  CHL: 'ECH',
+  PER: 'EPU'
 };
 
 /**
