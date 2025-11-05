@@ -1,7 +1,7 @@
 import React from 'react';
 import { industryData } from '../../config/sectorData';
 import { getCountryName } from '../../config/regionData';
-import { resolveSectorTicker } from '../../utils/tickerResolver';
+import { resolveSectorTicker, resolveDisplayTicker } from '../../utils/tickerResolver';
 
 /**
  * SectorList component - displays sectors for selected country
@@ -80,7 +80,7 @@ const SectorList = ({ selectedCountry, selectedSector, onSectorSelect }) => {
                     <span className="text-sm text-gray-600">{sector.index}</span>
                     {sector.ticker && (
                       <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                        {sector.ticker}
+                        {resolveDisplayTicker(sector.ticker)}
                       </span>
                     )}
                   </div>

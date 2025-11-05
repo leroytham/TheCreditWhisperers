@@ -36,6 +36,9 @@ export const resolveNewsTicker = (ticker) => {
   return newsTickerOverrides[ticker] || ticker;
 };
 
+// Display views share the same mapping as news coverage
+export const resolveDisplayTicker = resolveNewsTicker;
+
 /**
  * Determines if a ticker is valid (non-null and non-empty)
  * @param {string|null} ticker - Ticker to validate
