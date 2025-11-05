@@ -92,7 +92,7 @@ export const countryDefaultTickers = {
 /**
  * Chart timeframe options
  */
-export const TIMEFRAMES = ['1D', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
+export const TIMEFRAMES = ['1D', '1M', '3M', '6M', 'YTD', '1Y'];
 
 /**
  * Chart display configuration

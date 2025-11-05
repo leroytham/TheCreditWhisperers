@@ -15,7 +15,7 @@ import React from 'react';
 const TimeRangeSelector = ({
   activeTimeframe = '1W',
   onTimeframeChange,
-  timeframes = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y'],
+  timeframes = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y'],
   className = ''
 }) => {
   return (

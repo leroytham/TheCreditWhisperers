@@ -20,7 +20,7 @@ const ViewModeToggle = ({
   className = ''
 }) => {
   // For long timeframes, show read-only aggregation indicator instead of toggle
-  if (['1Y', '5Y'].includes(timeframe)) {
+  if (['1Y'].includes(timeframe)) {
     return (
       <div className={`inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 bg-gray-50 ${className}`}>
         <span className="text-sm font-medium text-gray-700">Monthly Averages</span>

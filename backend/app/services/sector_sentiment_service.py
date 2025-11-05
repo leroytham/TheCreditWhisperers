@@ -869,7 +869,6 @@ class SectorSentimentService:
             '3M': {'hours': 2160, 'num_points': 2160 // interval_hours},
             '6M': {'hours': 4320, 'num_points': 4320 // interval_hours},
             '1Y': {'hours': 8760, 'num_points': 8760 // interval_hours},
-            '5Y': {'hours': 43800, 'num_points': 43800 // interval_hours}
         }
 
         config = timeframe_configs.get(timeframe, timeframe_configs['1W'])
@@ -995,8 +994,8 @@ class SectorSentimentService:
                 label = point_datetime.strftime("%b %-d %-I%p")
             elif timeframe in ['3M', '6M']:
                 label = point_datetime.strftime("%b %-d")
-            elif timeframe in ['1Y', '5Y']:
-                label = point_datetime.strftime("%b %-d, %Y") if timeframe == '5Y' else point_datetime.strftime("%b %-d")
+            elif timeframe == '1Y':
+                label = point_datetime.strftime("%b %-d")
             else:
                 label = point_datetime.strftime("%b %-d")
 

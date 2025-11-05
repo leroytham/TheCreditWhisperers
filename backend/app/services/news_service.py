@@ -614,8 +614,6 @@ class NewsService:
         Batching strategy:
         - Short timeframes (< 6 months): 20 batches (20,000 articles max)
         - Medium timeframes (6-12 months): 50 batches (50,000 articles max)
-        - Long timeframes (1-5 years): 100 batches (100,000 articles max)
-        - Very long timeframes (> 5 years): 150 batches (150,000 articles max)
 
         Args:
             months: Number of months of historical data requested
@@ -627,10 +625,9 @@ class NewsService:
             return 20
         elif months <= 12:
             return 50
-        elif months <= 60:  # Up to 5 years
-            return 100
-        else:  # > 5 years
-            return 150
+        else:
+            # Cap at 12 months
+            return 50
 
     def _get_timeframe_months(self, timeframe: str, is_sector: bool = False) -> float:
         """
@@ -672,9 +669,6 @@ class NewsService:
             '6M': 3600,     # 1 hour
             'YTD': 14400,   # 4 hours
             '1Y': 43200,    # 12 hours
-            '5Y': 86400,    # 24 hours
-            '10Y': 172800,  # 48 hours (2 days)
-            'MAX': 259200   # 72 hours (3 days)
         }
         return ttl_map.get(timeframe, settings.NEWS_CACHE_TTL)
 
@@ -762,7 +756,7 @@ class NewsService:
         """
         Trigger progressive background fetching for a timeframe and queue subsequent timeframes.
 
-        Fetching order: 1M → 6M → YTD → 1Y → 5Y → 10Y → MAX
+        Fetching order: 1M → 6M → YTD → 1Y
 
         Args:
             ticker: Stock ticker symbol
@@ -779,10 +773,7 @@ class NewsService:
             '3M': '6M',
             '6M': 'YTD',
             'YTD': '1Y',
-            '1Y': '5Y',
-            '5Y': '10Y',
-            '10Y': 'MAX',
-            'MAX': None       # End of chain
+            '1Y': None,      # End of chain - no fetching beyond 1Y
         }
 
         task_key = f"{ticker}:{timeframe}"
@@ -831,7 +822,7 @@ class NewsService:
 
         Args:
             ticker: Stock ticker symbol
-            timeframe: Timeframe filter ('1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', 'MAX')
+            timeframe: Timeframe filter ('1D', '1W', '1M', '3M', '6M', 'YTD', '1Y')
             trigger_progressive: Whether to trigger background fetch for future timeframes
             preserve_all_tickers: If True, preserves full ticker_sentiment array for multi-ticker processing (sector mode)
             is_sector: If True, only fetch the requested timeframe (for sector exponential decay)

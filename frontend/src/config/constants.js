@@ -57,7 +57,6 @@ export const TIMEFRAMES = [
   { value: '6M', label: '6 Months' },
   { value: 'YTD', label: 'Year to Date' },
   { value: '1Y', label: '1 Year' },
-  { value: '5Y', label: '5 Years' },
 ];
 
 // Sentiment labels (new standardized Bullish/Bearish terminology)

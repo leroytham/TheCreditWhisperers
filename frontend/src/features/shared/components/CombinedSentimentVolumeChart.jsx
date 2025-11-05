@@ -144,8 +144,8 @@ const CombinedSentimentVolumeChart = ({
       return weeklyData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }
 
-    // For long timeframes (1Y, 5Y), aggregate by month
-    if (['1Y', '5Y'].includes(timeframe)) {
+    // For long timeframes (1Y), aggregate by month
+    if (['1Y'].includes(timeframe)) {
       const monthlyData = [];
       const monthMap = new Map();
 
@@ -278,9 +278,6 @@ const CombinedSentimentVolumeChart = ({
     } else if (timeframe === 'YTD' || timeframe === '1Y') {
       // 365 daily points: show every 60th day (~6 labels)
       step = 60;
-    } else if (timeframe === '5Y') {
-      // 1825 daily points: show every 365th day (~5 labels)
-      step = 365;
     } else {
       // Default: ~7-8 labels
       step = Math.max(1, Math.floor(processedData.length / 7));
@@ -313,7 +310,7 @@ const CombinedSentimentVolumeChart = ({
   // Chart title based on timeframe with accurate granularity
   const getChartTitle = () => {
     // Determine aggregation level based on actual viewMode
-    if (viewMode === 'monthly' || (['1Y', '5Y'].includes(timeframe))) {
+    if (viewMode === 'monthly' || (['1Y'].includes(timeframe))) {
       return `Sentiment & Volume (${timeframe}) - Monthly Averages`;
     } else if (viewMode === 'weekly' || (['3M', '6M', 'YTD'].includes(timeframe))) {
       return `Sentiment & Volume (${timeframe}) - Weekly Averages`;
@@ -334,8 +331,8 @@ const CombinedSentimentVolumeChart = ({
     const getDateDisplay = () => {
       const date = new Date(dataPoint.timestamp);
       
-      // Monthly aggregation for 1Y, 5Y
-      if (viewMode === 'monthly' || ['1Y', '5Y'].includes(timeframe)) {
+      // Monthly aggregation for 1Y
+      if (viewMode === 'monthly' || ['1Y'].includes(timeframe)) {
         return {
           title: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: timezone }),
           subtitle: 'Monthly Average',

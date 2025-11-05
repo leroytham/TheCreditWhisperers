@@ -24,9 +24,6 @@ export const useDailySentiment = (ticker, timeframe = '7D') => {
       '6M': 180,
       'YTD': 365, // Will be calculated on backend
       '1Y': 365,
-      '5Y': 1825, // 5 years
-      '10Y': 3650, // 10 years
-      'MAX': 7300, // ~20 years
       '7D': 7  // Fallback for legacy usage
     };
     return map[tf] || 7;

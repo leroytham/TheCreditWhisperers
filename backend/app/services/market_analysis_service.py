@@ -80,7 +80,7 @@ class MarketAnalysisService:
 
         Args:
             ticker: Stock ticker symbol
-            timeframe: Timeframe for analysis (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y)
+            timeframe: Timeframe for analysis (1D, 1W, 1M, 3M, 6M, YTD, 1Y)
             std_threshold: Standard deviation multiplier for significance
             event_count: Number of top events to return (auto-determined if None)
 
@@ -100,7 +100,6 @@ class MarketAnalysisService:
             "6M": "6mo",
             "YTD": "ytd",
             "1Y": "1y",
-            "5Y": "5y"
         }
         period = period_map.get(timeframe, "1y")
         

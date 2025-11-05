@@ -2,13 +2,13 @@
  * usePriceData Hook
  *
  * Custom hook for fetching and polling price data
- * Dynamically fetches 1Y or 5Y of data based on needs
+ * Fetches 1Y of data for all timeframes
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { PRICE_POLL_INTERVAL } from '../../shared/utils/constants';
 
-export const usePriceData = (ticker, timeframe = '5Y') => {
+export const usePriceData = (ticker, timeframe = '1Y') => {
   const [priceData1Y, setPriceData1Y] = useState([]);
   const [companyName, setCompanyName] = useState('');
   const [currency, setCurrency] = useState('USD');

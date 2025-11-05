@@ -74,7 +74,7 @@ class StockDataService:
 
         Args:
             df: DataFrame with datetime index
-            timeframe: One of "1D", "1M", "6M", "1Y", "YTD", "5Y"
+            timeframe: One of "1D", "1M", "6M", "1Y", "YTD"
 
         Returns:
             Filtered DataFrame or original if timeframe not recognized
@@ -86,7 +86,7 @@ class StockDataService:
         if timeframe == "1D":
             return df
 
-        # For daily timeframes (1M, 6M, YTD, 1Y, 5Y), exclude today's incomplete data
+        # For daily timeframes (1M, 6M, YTD, 1Y), exclude today's incomplete data
         # Only show completed trading days (yesterday and before)
 
         # Get today's date (normalize to remove time component and handle timezone)
@@ -114,7 +114,6 @@ class StockDataService:
             "1M": 29,
             "6M": 179,
             "1Y": 364,
-            "5Y": 1824  # Approximately 5 years
         }
 
         if timeframe in time_deltas:

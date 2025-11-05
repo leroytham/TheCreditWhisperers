@@ -48,9 +48,8 @@ def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
     Example: /stocks/AAPL/historical-data?timeframe=3M
     """
     try:
-        # Determine the period to fetch based on timeframe
-        # For 5Y, we need to fetch 5 years of data
-        period = "5y" if timeframe == "5Y" else "1y"
+        # Fetch 1 year of data for all timeframes
+        period = "1y"
         
         # 1. Fetch data from the service with appropriate period
         full_data = stock_data_service.get_stock_data(ticker, period=period)
@@ -490,7 +489,7 @@ async def prefetch_significant_events(ticker: str, background_tasks: BackgroundT
     """
     try:
         # Define all timeframes to prefetch
-        timeframes = ['1D', '1M', '6M', 'YTD', '1Y', '5Y']
+        timeframes = ['1D', '1M', '6M', 'YTD', '1Y']
         
         # Add background tasks for each timeframe
         for tf in timeframes:
@@ -519,8 +518,6 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         # For 1D intraday data, fetch with 1-minute interval
         if timeframe == "1D":
             stock_data = stock_data_service.get_stock_data(ticker, period="1d", interval="1m")
-        elif timeframe == "5Y":
-            stock_data = stock_data_service.get_stock_data(ticker, period="5y", interval="1d")
         else:
             stock_data = stock_data_service.get_stock_data(ticker, period="1y", interval="1d")
 
@@ -611,7 +608,7 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
 
     Args:
         ticker: Stock ticker symbol
-        timeframe: Time range for news data (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y) - default: 1Y
+        timeframe: Time range for news data (1D, 1W, 1M, 3M, 6M, YTD, 1Y) - default: 1Y
 
     Returns comprehensive sentiment data including:
     - feed: Raw Alpha Vantage feed data with all details

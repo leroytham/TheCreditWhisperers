@@ -8,7 +8,7 @@
 /**
  * Filters price data based on selected timeframe
  * @param {Array} priceData1Y - Full year of price data
- * @param {string} timeframe - Selected timeframe ('1D', '1M', '6M', 'YTD', '1Y', '5Y')
+ * @param {string} timeframe - Selected timeframe ('1D', '1M', '6M', 'YTD', '1Y')
  * @returns {Array} Filtered price data
  */
 export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
@@ -73,9 +73,8 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
         return pt.date !== todayString;
       });
       break;
-    case '5Y':
     default:
-      // For 5Y, exclude today's data - only show completed trading days
+      // For any other timeframe, exclude today's data - only show completed trading days
       filtered = priceData1Y.filter(pt => {
         // Explicitly exclude today by comparing date strings
         return pt.date !== todayString;
@@ -146,9 +145,6 @@ export const formatXAxisLabel = (date, timeframe, time = null) => {
     case '1Y':
       // Show date as "M/DD" (e.g., "10/20")
       return `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-    case '5Y':
-      // Show year as "YYYY" (e.g., "2021")
-      return dateObj.getFullYear().toString();
     default:
       return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
@@ -342,9 +338,6 @@ export const formatTooltipDateTime = (date, timeframe, time = null) => {
         return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
       return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    case '5Y':
-      // Always show "MMM DD, YYYY"
-      return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     default:
       return dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }

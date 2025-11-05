@@ -71,8 +71,8 @@ const PerformanceView = ({
 
   // Auto-switch view mode based on timeframe
   useEffect(() => {
-    // For 1Y and 5Y: force to 'monthly' (monthly aggregation, both rolling/daily disabled)
-    if (['1Y', '5Y'].includes(sentimentTimeframe)) {
+    // For 1Y: force to 'monthly' (monthly aggregation, both rolling/daily disabled)
+    if (['1Y'].includes(sentimentTimeframe)) {
       setViewMode('monthly');
     }
     // For 3M, 6M, YTD: force to 'weekly' (weekly aggregation, rolling disabled)
@@ -86,34 +86,30 @@ const PerformanceView = ({
     // For 1D, 1W, 1M: allow both rolling and daily modes (no forced change)
   }, [sentimentTimeframe, viewMode]);
 
-  // Fetch data based on selected timeframe (only for 5Y, since 1D comes from parent)
+  // Fetch data based on selected timeframe (only for 1D, since parent provides 1Y data)
   const {
     priceData1Y: timeframeSpecificData,
     prevClose: timeframeSpecificPrevClose,
     loading: timeframeLoading,
     error: timeframeError
-  } = usePriceData(ticker, timeframe === '5Y' ? '5Y' : '1Y');
+  } = usePriceData(ticker, '1Y');
 
   // Use timeframe-specific data if available, otherwise fall back to parent data
   // Memoize to prevent reference changes that trigger re-renders
   const activePriceData = useMemo(() => {
     return timeframe === '1D'
       ? priceData1D
-      : timeframe === '5Y'
-        ? timeframeSpecificData
         : priceData1Y;
-  }, [timeframe, priceData1D, timeframeSpecificData, priceData1Y]);
+  }, [timeframe, priceData1D, priceData1Y]);
 
   const activePrevClose = useMemo(() => {
     return timeframe === '1D'
       ? prevClose1D
-      : timeframe === '5Y'
-        ? timeframeSpecificPrevClose
         : prevCloseFromParent;
-  }, [timeframe, prevClose1D, timeframeSpecificPrevClose, prevCloseFromParent]);
+  }, [timeframe, prevClose1D, prevCloseFromParent]);
 
   // Only show loading on initial page load, not on timeframe switches
-  const isTimeframeSpecificLoading = isInitialLoad && timeframe === '5Y' && timeframeLoading;
+  const isTimeframeSpecificLoading = isInitialLoad && timeframeLoading;
 
   // Mark initial load as complete once we have data
   useEffect(() => {
