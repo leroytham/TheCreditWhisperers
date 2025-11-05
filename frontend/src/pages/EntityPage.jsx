@@ -91,7 +91,7 @@ const EntityPage = () => {
 
   const { news, sentiment, apiMetadata, loading: newsLoading, error: newsError } = useNewsData(ticker, '1Y');
   const { dailySentiment, loading: dailySentimentLoading, error: dailySentimentError } = useDailySentiment(ticker, sentimentTimeframe);
-  const { significantEvents } = useSignificantEvents(ticker, priceTimeframe);
+  const { significantEvents, loading: significantEventsLoading, error: significantEventsError } = useSignificantEvents(ticker, priceTimeframe);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -193,6 +193,8 @@ const EntityPage = () => {
             newsError={newsError}
             apiMetadata={apiMetadata}
             significantEvents={significantEvents}
+            significantEventsLoading={significantEventsLoading}
+            significantEventsError={significantEventsError}
             prevClose={prevClose}
             prevClose1D={prevClose1D}
             activeTab={activeSubTab}

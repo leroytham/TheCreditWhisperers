@@ -53,6 +53,8 @@ const PerformanceView = ({
   newsError,
   apiMetadata,
   significantEvents,
+  significantEventsLoading,
+  significantEventsError,
   prevClose: prevCloseFromParent,
   prevClose1D,
   activeTab = 'overview',
@@ -234,6 +236,8 @@ const PerformanceView = ({
               <div className="lg:col-start-3 lg:row-start-1 lg:row-span-2 h-full">
                 <SignificantEvents
                   events={significantEvents}
+                  loading={significantEventsLoading}
+                  error={significantEventsError}
                   ticker={ticker}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full flex flex-col"
                   selectedEventDate={selectedEventDate}

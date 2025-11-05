@@ -12,6 +12,8 @@ import NewsDetailModal from './NewsDetailModal';
  *
  * @param {Object} props
  * @param {Array} props.events - Array of significant events
+ * @param {boolean} props.loading - Loading state from hook
+ * @param {string} props.error - Error message from hook
  * @param {string} props.ticker - Ticker symbol for display context
  * @param {string} props.sectorName - Sector name for display context
  * @param {string} props.className - Additional CSS classes for wrapper
@@ -20,6 +22,8 @@ import NewsDetailModal from './NewsDetailModal';
  */
 const SignificantEvents = ({
   events,
+  loading,
+  error,
   ticker,
   sectorName,
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6 flex flex-col h-full',
@@ -61,8 +65,53 @@ const SignificantEvents = ({
     });
   };
 
+  // Show loading skeleton while fetching
+  if (loading) {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Significant Events</h3>
+          {displayName && <span className="text-sm text-gray-500">{displayName}</span>}
+        </div>
+        <div className="space-y-3 py-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="animate-pulse">
+              <div className="flex items-center justify-between mb-2">
+                <div className="h-4 bg-gray-200 rounded w-24"></div>
+                <div className="h-4 bg-gray-200 rounded w-16"></div>
+              </div>
+              <div className="h-3 bg-gray-200 rounded w-3/4 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  if (!events || events.length === 0) {
+  // Show error state if fetch failed
+  if (error && !loading) {
+    return (
+      <div className={className}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Significant Events</h3>
+          {displayName && <span className="text-sm text-gray-500">{displayName}</span>}
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center text-center py-10">
+          <div className="text-red-500 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Failed to Load Events</h3>
+          <p className="mt-1 text-sm text-gray-500">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty state only after loading completes
+  if (!loading && (!events || events.length === 0)) {
     return (
       <div className={className}>
         <div className="flex items-center justify-between mb-4">
