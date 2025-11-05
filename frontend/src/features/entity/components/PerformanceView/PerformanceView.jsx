@@ -45,6 +45,8 @@ const PerformanceView = ({
   priceLoading1D,
   priceError1D,
   dailySentiment,
+  dailySentimentLoading,
+  dailySentimentError,
   sentiment,
   news,
   newsLoading,
@@ -118,7 +120,7 @@ const PerformanceView = ({
   }, [priceData1Y]);
 
   // Fetch rolling sentiment data for the combined chart
-  const { data: rollingData, hasData: hasRollingData, loading: sentimentLoading, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
+  const { data: rollingData, hasData: hasRollingData, loading: sentimentLoading, error: sentimentError, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
 
   // Filter price data based on timeframe
   // FIXED: Only depend on activePriceData and timeframe to prevent infinite loop
@@ -384,9 +386,38 @@ const PerformanceView = ({
                   />
                 </div>
               </div>
-              
-              {/* Loading Overlay */}
-              {sentimentLoading ? (
+
+              {/* Mode-aware loading and error states */}
+              {(() => {
+                const activeSentimentLoading = viewMode === 'rolling' ? sentimentLoading : dailySentimentLoading;
+                const activeSentimentError = viewMode === 'rolling' ? sentimentError : dailySentimentError;
+
+                // Show error state if sentiment data fetch failed
+                if (activeSentimentError && !activeSentimentLoading) {
+                  return (
+                    <div className="relative" style={{ minHeight: '400px' }}>
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center max-w-md">
+                          <div className="text-red-500 mb-4">
+                            <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div className="text-lg font-medium text-gray-900 mb-2">Failed to Load Sentiment Data</div>
+                          <div className="text-sm text-gray-600 mb-4">{activeSentimentError}</div>
+                          <button
+                            onClick={() => window.location.reload()}
+                            className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return activeSentimentLoading ? (
                 <div className="relative" style={{ minHeight: '400px' }}>
                   <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10 rounded-lg">
                     <div className="text-center">
@@ -412,7 +443,8 @@ const PerformanceView = ({
                   exchange={exchange}
                   ticker={ticker}
                 />
-              )}
+              );
+              })()}
             </div>
 
             {/* Row 2: Core Metrics (4 columns) */}

@@ -90,7 +90,7 @@ const EntityPage = () => {
   const { priceData1Y: priceData1D, prevClose: prevClose1D, loading: priceLoading1D, error: priceError1D } = usePriceData(ticker, '1D');
 
   const { news, sentiment, apiMetadata, loading: newsLoading, error: newsError } = useNewsData(ticker, '1Y');
-  const { dailySentiment } = useDailySentiment(ticker, sentimentTimeframe);
+  const { dailySentiment, loading: dailySentimentLoading, error: dailySentimentError } = useDailySentiment(ticker, sentimentTimeframe);
   const { significantEvents } = useSignificantEvents(ticker, priceTimeframe);
 
   return (
@@ -185,6 +185,8 @@ const EntityPage = () => {
             priceError1D={priceError1D}
             lastFetched={lastFetched}
             dailySentiment={dailySentiment}
+            dailySentimentLoading={dailySentimentLoading}
+            dailySentimentError={dailySentimentError}
             sentiment={sentiment}
             news={news}
             newsLoading={newsLoading}
