@@ -58,18 +58,78 @@ const TopConstituents = ({ constituents, sectorName }) => {
     });
   };
 
+  const numericSortKeys = new Set([
+    'price',
+    'marketCap',
+    'percentOfAssets',
+    'volume',
+    'sentimentScore',
+    'sentimentMomentum'
+  ]);
+
+  const getSortValue = (item, key) => {
+    let rawValue;
+    switch (key) {
+      case 'price':
+        rawValue = item.price ?? item.currentPrice;
+        break;
+      case 'marketCap':
+        rawValue = item.marketCap ?? item.market_cap;
+        break;
+      case '% of Assets': // not used but guard
+      case 'percentOfAssets':
+        rawValue = item.percentOfAssets ?? item.percent_of_assets;
+        break;
+      case 'volume':
+        rawValue = item.volume;
+        break;
+      case 'sentimentScore':
+        rawValue = item.sentimentScore ?? item.sentiment_score;
+        break;
+      case 'sentimentMomentum':
+        rawValue = item.sentimentMomentum ?? item.sentiment_momentum;
+        break;
+      default:
+        rawValue = item[key];
+        break;
+    }
+
+    if (rawValue === null || rawValue === undefined) {
+      return null;
+    }
+
+    if (numericSortKeys.has(key)) {
+      const numeric = Number(rawValue);
+      return Number.isNaN(numeric) ? null : numeric;
+    }
+
+    if (typeof rawValue === 'string') {
+      return rawValue.toLowerCase();
+    }
+
+    return rawValue;
+  };
+
   const sortedConstituents = [...constituents].sort((a, b) => {
-    let aVal = a[sortConfig.key];
-    let bVal = b[sortConfig.key];
-    
-    if (aVal === null || aVal === undefined) return 1;
-    if (bVal === null || bVal === undefined) return -1;
-    
+    const aVal = getSortValue(a, sortConfig.key);
+    const bVal = getSortValue(b, sortConfig.key);
+
+    if (aVal === null && bVal === null) return 0;
+    if (aVal === null) return 1;
+    if (bVal === null) return -1;
+
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return sortConfig.direction === 'asc'
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    }
+
+    if (aVal === bVal) return 0;
+
     if (sortConfig.direction === 'asc') {
       return aVal > bVal ? 1 : -1;
-    } else {
-      return aVal < bVal ? 1 : -1;
     }
+    return aVal < bVal ? 1 : -1;
   });
 
   const SortIcon = ({ columnKey }) => {
@@ -130,7 +190,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
                   className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort('price')}
                 >
-                  Price <SortIcon columnKey="price" />
+                  Price &amp; 52W Range <SortIcon columnKey="price" />
                 </th>
                 <th 
                   className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -149,9 +209,6 @@ const TopConstituents = ({ constituents, sectorName }) => {
                   onClick={() => handleSort('volume')}
                 >
                   Volume <SortIcon columnKey="volume" />
-                </th>
-                <th className="text-left py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  52W Range
                 </th>
                 <th 
                   className="text-right py-3 px-6 text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
@@ -234,36 +291,12 @@ const TopConstituents = ({ constituents, sectorName }) => {
                     </td>
                     <td className="py-4 px-6 text-right">
                       <div className="font-medium text-gray-900">
-                        {c.price
-                          ? `$${Number(c.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        {price !== null && !Number.isNaN(price)
+                          ? `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : '--'}
                       </div>
-                      {c.dayHigh && c.dayLow && (
-                        <div className="text-xs text-gray-500">
-                          ${c.dayLow.toFixed(2)} - ${c.dayHigh.toFixed(2)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-right text-gray-900">
-                      {c.marketCap || c.market_cap
-                        ? `$${(Number(c.marketCap || c.market_cap) / 1e9).toFixed(2)}B`
-                        : '--'}
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="font-medium text-gray-900">
-                        {percentOfAssets
-                          ? `${(percentOfAssets * 100).toFixed(2)}%`
-                          : '--'}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right text-gray-900">
-                      {c.volume
-                        ? `${(c.volume / 1e6).toFixed(2)}M`
-                        : '--'}
-                    </td>
-                    <td className="py-4 px-6">
                       {rangePercent !== null ? (
-                        <div className="space-y-2">
+                        <div className="mt-2 space-y-1">
                           <div className="flex items-center space-x-2">
                             <div className="flex-1 bg-gray-200 rounded-full h-2 relative">
                               <div
@@ -287,8 +320,25 @@ const TopConstituents = ({ constituents, sectorName }) => {
                           )}
                         </div>
                       ) : (
-                        <span className="text-gray-400">--</span>
+                        <div className="mt-2 text-xs text-gray-400">--</div>
                       )}
+                    </td>
+                    <td className="py-4 px-6 text-right text-gray-900">
+                      {c.marketCap || c.market_cap
+                        ? `$${(Number(c.marketCap || c.market_cap) / 1e9).toFixed(2)}B`
+                        : '--'}
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="font-medium text-gray-900">
+                        {percentOfAssets
+                          ? `${(percentOfAssets * 100).toFixed(2)}%`
+                          : '--'}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right text-gray-900">
+                      {c.volume
+                        ? `${(c.volume / 1e6).toFixed(2)}M`
+                        : '--'}
                     </td>
                     <td className="py-4 px-6 text-right">
                       {sentimentScore !== null && sentimentScore !== undefined ? (

@@ -307,8 +307,19 @@ class StockDataService:
                         print(f"Error calculating sentiment for {symbol}: {e}")
 
                 # Default to neutral if sentiment couldn't be derived
-                entry["sentimentScore"] = float(sentiment_score) if sentiment_score is not None else 0.0
-                entry["sentimentMomentum"] = float(sentiment_momentum) if sentiment_momentum is not None else 0.0
+                entry["sentimentScore"] = None
+                if sentiment_score is not None:
+                    try:
+                        entry["sentimentScore"] = float(sentiment_score)
+                    except (TypeError, ValueError):
+                        entry["sentimentScore"] = None
+
+                entry["sentimentMomentum"] = None
+                if sentiment_momentum is not None:
+                    try:
+                        entry["sentimentMomentum"] = float(sentiment_momentum)
+                    except (TypeError, ValueError):
+                        entry["sentimentMomentum"] = None
 
                 enriched_constituents.append(entry)
 
