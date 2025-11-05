@@ -11,7 +11,6 @@ import {
   CombinedSentimentVolumeChart,
   TimeRangeSelector,
   ViewModeToggle,
-  EventsToggle,
   SignificantEvents,
   RelatedNews,
   DetailedRelatedNews,
@@ -89,6 +88,7 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
 
   // Process price data based on timeframe
   const {
+    priceData,
     chartData,
     priceRange,
     priceChange,
@@ -175,21 +175,34 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               <div className="lg:col-start-1 lg:col-span-2 lg:row-start-2 bg-white border border-gray-200 rounded-lg shadow overflow-hidden p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
-                    <EventsToggle
-                      showEvents={showEvents}
-                      onToggle={setShowEvents}
-                    />
-                  </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Price Performance</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-700">Events</span>
+                        <button
+                          onClick={() => setShowEvents(!showEvents)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 ${
+                            showEvents ? 'bg-gray-900' : 'bg-gray-300'
+                          }`}
+                          role="switch"
+                          aria-checked={showEvents}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              showEvents ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
                   <div className="flex space-x-2">
                     {TIMEFRAMES.map(tf => (
                       <button
                         key={tf}
                         onClick={() => setTimeframe(tf)}
-                        className={`px-4 py-1.5 text-xs font-semibold transition-all ${
+                        className={`px-3 py-1 rounded text-sm ${
                           timeframe === tf
-                            ? 'bg-gray-900 text-white rounded-md'
-                            : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                            ? 'bg-gray-900 text-white'
+                            : 'text-gray-600 hover:bg-gray-100'
                         }`}
                       >
                         {tf}
@@ -197,17 +210,30 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                     ))}
                   </div>
                 </div>
-                <PriceChart
-                  chartData={chartData}
-                  priceRange={priceRange}
-                  priceChange={priceChange}
-                  companyName={companyName}
-                  ticker={ticker}
-                  topEvents={topEvents}
-                  showEvents={showEvents}
-                  timeframe={timeframe}
-                  prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
-                />
+                {timeframe === '1D' ? (
+                  <PriceChart
+                    priceData={priceData}
+                    ticker={ticker}
+                    companyName={companyName}
+                    currency={currency}
+                    significantEvents={showEvents ? topEvents : []}
+                    timeframe={timeframe}
+                    prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                    showSignificantEvents={showEvents}
+                  />
+                ) : (
+                  <PriceChart
+                    chartData={chartData}
+                    priceRange={priceRange}
+                    priceChange={priceChange}
+                    companyName={companyName}
+                    ticker={ticker}
+                    topEvents={topEvents}
+                    showEvents={showEvents}
+                    timeframe={timeframe}
+                    prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                  />
+                )}
               </div>
             </div>
 
@@ -233,20 +259,33 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-4">
                 <h3 className="text-lg font-semibold text-gray-900">Detailed Performance</h3>
-                <EventsToggle
-                  showEvents={showEvents}
-                  onToggle={setShowEvents}
-                />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Events</span>
+                  <button
+                    onClick={() => setShowEvents(!showEvents)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 ${
+                      showEvents ? 'bg-gray-900' : 'bg-gray-300'
+                    }`}
+                    role="switch"
+                    aria-checked={showEvents}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        showEvents ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
               <div className="flex space-x-2">
                 {TIMEFRAMES.map(tf => (
                   <button
                     key={tf}
                     onClick={() => setTimeframe(tf)}
-                    className={`px-4 py-1.5 text-xs font-semibold transition-all ${
+                    className={`px-3 py-1 rounded text-sm ${
                       timeframe === tf
-                        ? 'bg-gray-900 text-white rounded-md'
-                        : 'text-gray-600 hover:text-gray-900 bg-transparent'
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
                     }`}
                   >
                     {tf}
@@ -254,17 +293,30 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                 ))}
               </div>
             </div>
-            <PriceChart
-              chartData={chartData}
-              priceRange={priceRange}
-              priceChange={priceChange}
-              companyName={companyName}
-              ticker={ticker}
-              topEvents={topEvents}
-              showEvents={showEvents}
-              timeframe={timeframe}
-              prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
-            />
+            {timeframe === '1D' ? (
+              <PriceChart
+                priceData={priceData}
+                ticker={ticker}
+                companyName={companyName}
+                currency={currency}
+                significantEvents={showEvents ? topEvents : []}
+                timeframe={timeframe}
+                prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                showSignificantEvents={showEvents}
+              />
+            ) : (
+              <PriceChart
+                chartData={chartData}
+                priceRange={priceRange}
+                priceChange={priceChange}
+                companyName={companyName}
+                ticker={ticker}
+                topEvents={topEvents}
+                showEvents={showEvents}
+                timeframe={timeframe}
+                prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+              />
+            )}
           </div>
         );
 
