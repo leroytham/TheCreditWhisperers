@@ -26,7 +26,6 @@ import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
 import { formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
-import { usePriceData } from '../../hooks/usePriceData';
 
 /**
  * PerformanceView Component
@@ -41,6 +40,10 @@ const PerformanceView = ({
   exchange,
   priceData1Y,
   priceData1D,
+  priceLoading1Y,
+  priceError1Y,
+  priceLoading1D,
+  priceError1D,
   dailySentiment,
   sentiment,
   news,
@@ -87,15 +90,7 @@ const PerformanceView = ({
     // For 1D, 1W, 1M: allow both rolling and daily modes (no forced change)
   }, [sentimentTimeframe, viewMode]);
 
-  // Fetch data based on selected timeframe (only for 1D, since parent provides 1Y data)
-  const {
-    priceData1Y: timeframeSpecificData,
-    prevClose: timeframeSpecificPrevClose,
-    loading: timeframeLoading,
-    error: timeframeError
-  } = usePriceData(ticker, '1Y');
-
-  // Use timeframe-specific data if available, otherwise fall back to parent data
+  // Use timeframe-specific data and loading states from parent
   // Memoize to prevent reference changes that trigger re-renders
   const activePriceData = useMemo(() => {
     return timeframe === '1D'
@@ -109,8 +104,11 @@ const PerformanceView = ({
         : prevCloseFromParent;
   }, [timeframe, prevClose1D, prevCloseFromParent]);
 
+  // Determine active loading state based on current timeframe
+  const activeLoading = timeframe === '1D' ? priceLoading1D : priceLoading1Y;
+
   // Only show loading on initial page load, not on timeframe switches
-  const isTimeframeSpecificLoading = isInitialLoad && timeframeLoading;
+  const isTimeframeSpecificLoading = isInitialLoad && activeLoading;
 
   // Mark initial load as complete once we have data
   useEffect(() => {
@@ -155,11 +153,35 @@ const PerformanceView = ({
   })) : [];
   const currentPrice = realtimeChartData.length > 0 ? realtimeChartData[realtimeChartData.length - 1] : null;
 
-  // Check if data is loading
-  const isLoading = !priceData1Y || priceData1Y.length === 0;
+  // Check if data is loading using actual loading states
+  const isLoading = priceLoading1Y || priceLoading1D;
 
   // Render content based on active tab
   const renderContent = () => {
+    // Show error state if price data fetch failed
+    const priceError = priceError1Y || priceError1D;
+    if (priceError && !isLoading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center max-w-md">
+            <div className="text-red-500 mb-4">
+              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="text-lg font-medium text-gray-900 mb-2">Failed to Load Price Data</div>
+            <div className="text-sm text-gray-600 mb-4">{priceError}</div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     // Show loading for initial data or timeframe-specific data
     if (isLoading || isTimeframeSpecificLoading) {
       return (
