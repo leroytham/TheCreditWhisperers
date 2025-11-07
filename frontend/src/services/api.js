@@ -90,6 +90,12 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // IMPORTANT: Preserve cancel errors - don't transform them
+    // This allows components to properly detect and ignore canceled requests
+    if (axios.isCancel(error)) {
+      throw error; // Re-throw unchanged so axios.isCancel() works downstream
+    }
+
     // Handle network errors
     if (!error.response) {
       console.error('❌ Network Error:', error.message);
@@ -203,8 +209,8 @@ const apiService = {
   getCategorizedNews: (ticker, startDate, endDate) =>
     api.get(`/news/${ticker}/categorized`, { params: { start_date: startDate, end_date: endDate } }),
 
-  getDailySentiment: (ticker) =>
-    api.get('/daily-sentiment', { params: { ticker } }),
+  getDailySentiment: (ticker, timeframe = null) =>
+    api.get('/daily-sentiment', { params: { ticker, ...(timeframe && { timeframe }) } }),
 
   getNewsModels: (ticker) =>
     api.get('/news-models', { params: { ticker } }),
@@ -222,6 +228,51 @@ const apiService = {
   // Search
   searchTicker: (query) =>
     api.get('/search-ticker', { params: { q: query } }),
+
+  // Portfolio endpoints
+  // Note: All paths are relative to API_BASE_URL which is '/api'
+  // The proxy will rewrite '/api/*' to '/*' when forwarding to backend
+  getPortfolioAccounts: (username, config = {}) =>
+    api.get(`/accounts/${username}`, config),
+
+  getPortfolioHoldings: (username, accountName, config = {}) =>
+    api.get(`/portfolio/holdings/${username}/${encodeURIComponent(accountName)}`, config),
+
+  getPortfolioPerformance: (username, accountName, timeframe = '1Y', config = {}) => {
+    const params = timeframe ? { timeframe } : {};
+    return api.get(`/portfolio/performance/${username}/${encodeURIComponent(accountName)}`, {
+      ...config,
+      params: { ...params, ...(config.params || {}) }
+    });
+  },
+
+  getPortfolioNews: (username, accountName, config = {}) =>
+    api.get(`/portfolio/news/${username}/${encodeURIComponent(accountName)}`, config),
+
+  getPortfolioSentiment: (username, accountName) =>
+    api.get(`/portfolio/sentiment/${username}/${encodeURIComponent(accountName)}`),
+
+  getPortfolioDailySentiment: (username, accountName, timeframe = null, days = null) =>
+    api.get(`/portfolio/daily-sentiment/${username}/${encodeURIComponent(accountName)}`, {
+      params: {
+        ...(timeframe && { timeframe }),
+        ...(days && { days })
+      }
+    }),
+
+  getPortfolioRollingSentiment: (username, accountName, timeframe = '1W') =>
+    api.get(`/portfolio/rolling-sentiment/${username}/${encodeURIComponent(accountName)}`, {
+      params: { timeframe }
+    }),
+
+  addPortfolio: (portfolioData) =>
+    api.post('/portfolio/save', portfolioData),
+
+  updatePortfolio: (portfolioData) =>
+    api.put('/portfolio/update', portfolioData),
+
+  deletePortfolio: (username, accountName) =>
+    api.delete(`/portfolio/delete/${username}/${encodeURIComponent(accountName)}`),
 };
 
 export default apiService;

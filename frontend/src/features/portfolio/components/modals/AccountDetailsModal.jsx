@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
 
 /**
@@ -28,6 +29,9 @@ const AccountDetailsModal = ({ isOpen, onClose }) => {
     <div
       className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="account-details-title"
     >
       <div
         className="relative mx-auto p-8 border w-full max-w-7xl shadow-lg rounded-md bg-white"
@@ -35,8 +39,12 @@ const AccountDetailsModal = ({ isOpen, onClose }) => {
       >
         {/* Modal Header */}
         <div className="flex justify-between items-start mb-8">
-          <h3 className="text-2xl font-semibold text-gray-900">Account Details</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <h3 id="account-details-title" className="text-2xl font-semibold text-gray-900">Account Details</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+            aria-label="Close account details modal"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -116,6 +124,11 @@ const AccountDetailsModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+};
+
+AccountDetailsModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default AccountDetailsModal;

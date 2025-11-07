@@ -344,6 +344,128 @@ class StockDataService:
             print(f"Error fetching company info for {ticker}: {e}")
             return None
 
+    @cache_result(ttl=86400, key_prefix="ticker_sector")  # Cache for 24 hours
+    def get_ticker_sector_info(self, ticker: str) -> dict:
+        """
+        Gets sector and industry information for a ticker.
+        Results are cached in Redis for 24 hours (sector info rarely changes).
+
+        Args:
+            ticker: Stock ticker symbol
+
+        Returns:
+            Dictionary with sector and industry info, defaults to "N/A" if not available
+        """
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            info = ticker_obj.info
+            return {
+                "sector": info.get("sector", "N/A"),
+                "industry": info.get("industry", "N/A"),
+                "sector_key": info.get("sectorKey"),
+            }
+        except Exception as e:
+            print(f"Error fetching sector info for {ticker}: {e}")
+            return {"sector": "N/A", "industry": "N/A", "sector_key": None}
+
+    @async_cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="market_price")  # Cache for 5 minutes
+    async def get_current_market_price(self, ticker: str) -> dict | None:
+        """
+        Get current market price with day change and 52-week range for a ticker.
+        Optimized async version with caching for portfolio holdings endpoint.
+        Results are cached in Redis for PRICE_CACHE_TTL seconds (5 minutes).
+
+        Args:
+            ticker: Stock ticker symbol
+
+        Returns:
+            Dictionary with current price, previous close, day change data, 52-week range, or None if error
+        """
+        try:
+            ticker_obj = yf.Ticker(ticker)
+
+            # Get live market data from info
+            info = ticker_obj.info
+
+            # Use regularMarketPrice for live data, fallback to currentPrice or historical close
+            market_price = info.get("regularMarketPrice") or info.get("currentPrice")
+
+            if market_price is None:
+                # Fallback to historical close if live price unavailable
+                hist = ticker_obj.history(period="1d")
+                if hist.empty:
+                    return None
+                market_price = float(hist["Close"].iloc[-1])
+            else:
+                market_price = float(market_price)
+
+            # Get previous close and 52-week range for additional data
+            try:
+                # Use 'or' operator to properly handle None values
+                previous_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+
+                # Get 52-week range
+                fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+                fifty_two_week_low = info.get("fiftyTwoWeekLow")
+
+                if market_price and previous_close:
+                    day_change_value = float(market_price - previous_close)
+                    day_change_percent = float((day_change_value / previous_close) * 100)
+                else:
+                    day_change_value = None
+                    day_change_percent = None
+                    previous_close = None
+            except Exception as e:
+                print(f"⚠️ Info fetch failed for {ticker}: {e}")
+                day_change_value = None
+                day_change_percent = None
+                previous_close = None
+                fifty_two_week_high = None
+                fifty_two_week_low = None
+
+            return {
+                "market_price": market_price,
+                "previous_close": previous_close,
+                "day_change_value": day_change_value,
+                "day_change_percent": day_change_percent,
+                "fifty_two_week_high": fifty_two_week_high,
+                "fifty_two_week_low": fifty_two_week_low,
+            }
+        except Exception as e:
+            print(f"Error fetching market price for {ticker}: {e}")
+            return None
+
+    @async_cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="historical_price")  # Cache for 5 minutes
+    async def get_historical_price(self, ticker: str, start_date: str, end_date: str) -> dict | None:
+        """
+        Get historical price data for a specific date range.
+        Optimized async version with caching for portfolio performance endpoint.
+        Results are cached in Redis for PRICE_CACHE_TTL seconds (5 minutes).
+
+        Args:
+            ticker: Stock ticker symbol
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+
+        Returns:
+            Dictionary with historical price data, or None if error
+        """
+        try:
+            ticker_obj = yf.Ticker(ticker)
+            hist = ticker_obj.history(start=start_date, end=end_date)
+
+            if hist.empty:
+                return None
+
+            return {
+                "start_price": float(hist['Close'].iloc[0]) if len(hist) > 0 else None,
+                "end_price": float(hist['Close'].iloc[-1]) if len(hist) > 0 else None,
+                "history": hist
+            }
+        except Exception as e:
+            print(f"Error fetching historical price for {ticker}: {e}")
+            return None
+
     @async_cache_result(ttl=86400, key_prefix="company_overview")  # Cache for 24 hours
     async def get_company_overview(self, ticker: str) -> dict | None:
         """

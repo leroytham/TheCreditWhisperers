@@ -13,11 +13,18 @@ export const useSignificantEvents = (ticker, timeframe = '1D') => {
   const prefetchInitiated = useRef(new Set());
 
   useEffect(() => {
+    // If ticker is null (lazy loading - tab not active), set loading to false immediately
+    if (!ticker) {
+      setLoading(false);
+      return;
+    }
+
+    // Set loading immediately when ticker changes (before async fetch)
+    setLoading(true);
+    setError(null);
+
     const fetchSignificantEvents = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
         const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${timeframe}`);
         const data = await response.json();
 
@@ -47,7 +54,7 @@ export const useSignificantEvents = (ticker, timeframe = '1D') => {
     const prefetchAllTimeframes = async () => {
       if (!prefetchInitiated.current.has(ticker)) {
         prefetchInitiated.current.add(ticker);
-        
+
         try {
           console.log(`[PREFETCH] Initiating background fetch for all timeframes: ${ticker}`);
           await fetch(`/api/stocks/${ticker}/prefetch-events`, {
@@ -59,10 +66,8 @@ export const useSignificantEvents = (ticker, timeframe = '1D') => {
       }
     };
 
-    if (ticker) {
-      fetchSignificantEvents();
-      prefetchAllTimeframes();
-    }
+    fetchSignificantEvents();
+    prefetchAllTimeframes();
   }, [ticker, timeframe]);
 
   return {

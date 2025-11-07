@@ -121,8 +121,12 @@ const PerformanceView = ({
     }
   }, [priceData1Y]);
 
-  // Fetch rolling sentiment data for the combined chart
-  const { data: rollingData, hasData: hasRollingData, loading: sentimentLoading, error: sentimentError, sourceEarliestDates } = useRollingSentiment(ticker, sentimentTimeframe);
+  // Fetch rolling sentiment data for the combined chart (only when viewing sentiment tab)
+  const shouldFetchRollingSentiment = activeTab === 'sentiment';
+  const { data: rollingData, hasData: hasRollingData, loading: sentimentLoading, error: sentimentError, sourceEarliestDates } = useRollingSentiment(
+    shouldFetchRollingSentiment ? ticker : null,
+    sentimentTimeframe
+  );
 
   // Filter price data based on timeframe
   // FIXED: Only depend on activePriceData and timeframe to prevent infinite loop
@@ -155,16 +159,44 @@ const PerformanceView = ({
     date: point.date,
     time: point.time
   })) : [];
-  const currentPrice = realtimeChartData.length > 0 ? realtimeChartData[realtimeChartData.length - 1] : null;
+
+  // Current price with fallback to 1Y data if 1D unavailable
+  const currentPrice = useMemo(() => {
+    // Try 1D real-time data first
+    if (realtimeChartData.length > 0) {
+      return {
+        ...realtimeChartData[realtimeChartData.length - 1],
+        isRealtime: true,
+        isEstimate: false
+      };
+    }
+    // Fall back to 1Y last close if 1D unavailable
+    if (priceData1Y && priceData1Y.length > 0) {
+      const lastClose = priceData1Y[priceData1Y.length - 1];
+      return {
+        x: priceData1Y.length - 1,
+        y: parseFloat(lastClose.close) || parseFloat(lastClose.price) || 0,
+        date: lastClose.date,
+        time: lastClose.time,
+        isRealtime: false,
+        isEstimate: true
+      };
+    }
+    return null;
+  }, [realtimeChartData, priceData1Y]);
 
   // Check if data is loading using actual loading states
   const isLoading = priceLoading1Y || priceLoading1D;
 
   // Render content based on active tab
   const renderContent = () => {
-    // Show error state if price data fetch failed
-    const priceError = priceError1Y || priceError1D;
-    if (priceError && !isLoading) {
+    // Split error detection for graceful degradation
+    const hasPrice1YError = priceError1Y && !priceLoading1Y;
+    const hasPrice1DError = priceError1D && !priceLoading1D;
+    const hasPartialPriceData = (priceData1Y?.length > 0) || (priceData1D?.length > 0);
+
+    // Show full error only when BOTH feeds fail AND no partial data available
+    if ((hasPrice1YError && hasPrice1DError) && !hasPartialPriceData) {
       return (
         <div className="flex items-center justify-center h-64">
           <div className="text-center max-w-md">
@@ -174,7 +206,7 @@ const PerformanceView = ({
               </svg>
             </div>
             <div className="text-lg font-medium text-gray-900 mb-2">Failed to Load Price Data</div>
-            <div className="text-sm text-gray-600 mb-4">{priceError}</div>
+            <div className="text-sm text-gray-600 mb-4">{priceError1Y || priceError1D}</div>
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
@@ -203,6 +235,40 @@ const PerformanceView = ({
       case 'overview':
         return (
           <>
+            {/* Warning banners for partial price data failures */}
+            {hasPrice1DError && !hasPrice1YError && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      Real-time intraday data is temporarily unavailable. Current price shown from latest historical close.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {hasPrice1YError && !hasPrice1DError && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      Historical price data is temporarily unavailable. Only intraday view is available.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Combined Grid: Top & Middle Rows */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8" style={{ gridTemplateRows: 'auto 1fr' }}>
               {/* Price Summary Card - Row 1, Col 1 */}
@@ -212,6 +278,9 @@ const PerformanceView = ({
                   <span className="text-3xl font-bold text-gray-900">
                     {currentPrice ? formatPrice(currentPrice.y, currency) : '--'}
                   </span>
+                  {currentPrice?.isEstimate && (
+                    <span className="text-xs text-gray-500 font-normal">(est.)</span>
+                  )}
                   <span className="text-lg font-medium text-gray-500">{currency}</span>
                 </div>
                 <div className={`text-sm font-medium ${getPriceChangeColor(priceChange)}`}>
@@ -457,6 +526,8 @@ const PerformanceView = ({
                 sentiment={sentiment}
                 newsCount={news?.length || 0}
                 dataQuality={sentiment?.data_quality}
+                loading={newsLoading}
+                error={newsError}
               />
               <MomentumCard
                 sentimentMomentum={sentiment?.sentiment_momentum}
@@ -467,16 +538,22 @@ const PerformanceView = ({
                 slowScore={sentiment?.slow_score}
                 halfLifeFastHours={sentiment?.half_life_fast_hours}
                 halfLifeSlowHours={sentiment?.half_life_slow_hours}
+                loading={newsLoading}
+                error={newsError}
               />
               <NewsCoverageCard
                 effectiveNewsVolume={sentiment?.effective_news_volume}
                 volumeInterpretation={sentiment?.volume_interpretation}
                 dataQuality={sentiment?.data_quality}
+                loading={newsLoading}
+                error={newsError}
               />
               <SentimentConfidenceCard
                 sentimentVolatility={sentiment?.sentiment_volatility}
                 volatilityQuality={sentiment?.volatility_quality}
                 dataQuality={sentiment?.data_quality}
+                loading={newsLoading}
+                error={newsError}
               />
             </div>
 
@@ -490,6 +567,8 @@ const PerformanceView = ({
                 breadthInterpretation={sentiment?.breadth_interpretation}
                 breadthQuality={sentiment?.breadth_quality}
                 avgScore={sentiment?.avg_score}
+                loading={newsLoading}
+                error={newsError}
               />
               <SentimentShockCard
                 sentimentZScore={sentiment?.sentiment_z_score}
@@ -499,6 +578,8 @@ const PerformanceView = ({
                 zScoreDaysOfHistory={sentiment?.z_score_days_of_history}
                 zScoreQuality={sentiment?.z_score_quality}
                 currentScore={sentiment?.slow_score}
+                loading={newsLoading}
+                error={newsError}
               />
             </div>
 
@@ -508,6 +589,8 @@ const PerformanceView = ({
                 sourceConcentrationHhi={sentiment?.sourceConcentrationHhi}
                 concentrationInterpretation={sentiment?.concentrationInterpretation}
                 topSources={sentiment?.topSources}
+                loading={newsLoading}
+                error={newsError}
               />
               <SentimentByTopicCard
                 dominantTopic={sentiment?.dominantTopic}
@@ -516,6 +599,8 @@ const PerformanceView = ({
                 topicCount={sentiment?.topicCount}
                 sentimentByTopic={sentiment?.sentimentByTopic}
                 topicWeights={sentiment?.topicWeights}
+                loading={newsLoading}
+                error={newsError}
               />
             </div>
           </div>

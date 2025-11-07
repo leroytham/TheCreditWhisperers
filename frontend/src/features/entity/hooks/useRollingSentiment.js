@@ -14,11 +14,18 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
   const [sourceEarliestDates, setSourceEarliestDates] = useState(null);
 
   useEffect(() => {
+    // If ticker is null (lazy loading - tab not active), set loading to false immediately
+    if (!ticker) {
+      setLoading(false);
+      return;
+    }
+
+    // Set loading immediately when ticker changes (before async fetch)
+    setLoading(true);
+    setError(null);
+
     const fetchRollingSentiment = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
         const params = new URLSearchParams({
           ticker: ticker || '',
           timeframe: timeframe || ''
@@ -49,9 +56,7 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
       }
     };
 
-    if (ticker) {
-      fetchRollingSentiment();
-    }
+    fetchRollingSentiment();
   }, [ticker, timeframe]);
 
   return {

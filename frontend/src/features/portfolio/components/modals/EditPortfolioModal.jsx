@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
-import axios from 'axios';
+import { usePortfolio } from '../../../../context/PortfolioContext';
+import apiService from '../../../../services/api';
+import useAppStore from '../../../../store/useAppStore';
+import LoadingSpinner from '../../../../components/LoadingSpinner';
 
 /**
  * EditPortfolioModal Component
@@ -17,6 +21,8 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
   });
   const [holdings, setHoldings] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const { selectedAccount } = usePortfolio();
+  const { notifyError, notifyWarning } = useAppStore();
 
   const updateAccountDetails = (field, value) => {
     setAccountDetails(prev => ({
@@ -27,31 +33,31 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
 
   const validateForm = () => {
     if (!accountDetails.accountName.trim()) {
-      alert('Please enter an account name.');
+      notifyWarning('Please enter an account name.', { category: 'Portfolio' });
       return false;
     }
     if (!accountDetails.accountNumber.trim()) {
-      alert('Please enter an account number.');
+      notifyWarning('Please enter an account number.', { category: 'Portfolio' });
       return false;
     }
     if (!accountDetails.openDate) {
-      alert('Please select an open date.');
+      notifyWarning('Please select an open date.', { category: 'Portfolio' });
       return false;
     }
-    
+
     // Validate each holding
     for (let i = 0; i < holdings.length; i++) {
       const holding = holdings[i];
       if (!holding.symbol.trim()) {
-        alert(`Please enter a symbol for holding ${i + 1}.`);
+        notifyWarning(`Please enter a symbol for holding ${i + 1}.`, { category: 'Portfolio' });
         return false;
       }
       if (!holding.quantity || holding.quantity <= 0) {
-        alert(`Please enter a valid quantity for holding ${i + 1}.`);
+        notifyWarning(`Please enter a valid quantity for holding ${i + 1}.`, { category: 'Portfolio' });
         return false;
       }
       if (!holding.purchasePrice || holding.purchasePrice <= 0) {
-        alert(`Please enter a valid purchase price for holding ${i + 1}.`);
+        notifyWarning(`Please enter a valid purchase price for holding ${i + 1}.`, { category: 'Portfolio' });
         return false;
       }
     }
@@ -63,35 +69,34 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
     const fetchPortfolio = async () => {
       try {
         setLoading(true);
-        const username = sessionStorage.getItem('user');
-        const accountName = sessionStorage.getItem('selectedAccountName');
 
-        if (!username || !accountName) {
-          console.warn('Missing username or account name in sessionStorage.');
+        if (!selectedAccount?.username || !selectedAccount?.accountName) {
+          notifyWarning('Please select an account first.', { category: 'Portfolio' });
           return;
         }
 
-        const response = await axios.get(
-          `http://localhost:8000/portfolio/${username}/${encodeURIComponent(accountName)}`
+        // Fetch portfolio data using the GET portfolio endpoint
+        // Note: This endpoint returns both account and holdings data
+        const response = await apiService.get(
+          `/portfolio/${selectedAccount.username}/${encodeURIComponent(selectedAccount.accountName)}`
         );
 
         const data = response.data;
 
         if (!data.account) {
-          console.error('No account found for this user.');
-          alert('No portfolio data found for the selected account.');
+          notifyError('No portfolio data found for the selected account.', { category: 'Portfolio' });
           handleClose();
           return;
         }
 
-        // ✅ Pre-fill account details
+        // Pre-fill account details
         setAccountDetails({
           accountName: data.account.client_account_name || '',
           accountNumber: data.account.account_no || '',
           openDate: data.account.open_date || '',
         });
 
-        // ✅ Pre-fill holdings
+        // Pre-fill holdings
         setHoldings(
           (data.holdings || []).map((h) => ({
             symbol: h.symbol || '',
@@ -101,8 +106,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
           }))
         );
       } catch (error) {
-        console.error('Error loading portfolio:', error);
-        alert('Failed to load portfolio data. Please try again.');
+        // Error notification is already handled by apiService interceptor
         handleClose();
       } finally {
         setLoading(false);
@@ -117,7 +121,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       setAccountDetails({ accountName: '', accountNumber: '', openDate: '' });
       setHoldings([]);
     }
-  }, [isOpen]);
+  }, [isOpen, selectedAccount, notifyWarning, notifyError]);
 
   const handleClose = () => {
     setCurrentStep(1);
@@ -157,16 +161,14 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
 
     try {
       setIsSaving(true);
-      const username = sessionStorage.getItem('user');
-      const accountName = sessionStorage.getItem('selectedAccountName');
 
-      if (!username || !accountName) {
-        alert('Please select an account before saving.');
+      if (!selectedAccount?.username || !selectedAccount?.accountName) {
+        notifyWarning('Please select an account before saving.', { category: 'Portfolio' });
         return;
       }
 
       const payload = {
-        username,
+        username: selectedAccount.username,
         accountDetails,
         holdings: holdings.map(holding => ({
           ...holding,
@@ -175,20 +177,12 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
         })),
       };
 
-      const response = await axios.put(
-        'http://localhost:8000/portfolio/update',
-        payload
-      );
+      await apiService.updatePortfolio(payload);
 
-      alert(response.data.message || 'Portfolio updated successfully!');
+      // Success notification is already handled by apiService interceptor
       handleClose();
     } catch (error) {
-      console.error('Error saving portfolio:', error);
-      if (error.response?.data?.detail) {
-        alert(`Error: ${error.response.data.detail}`);
-      } else {
-        alert('Failed to update portfolio. Please check your input and try again.');
-      }
+      // Error notification is already handled by apiService interceptor
     } finally {
       setIsSaving(false);
     }
@@ -200,6 +194,9 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
     <div
       className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
       onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-portfolio-title"
     >
       <div
         className="relative mx-auto p-8 border w-full max-w-4xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto"
@@ -207,13 +204,15 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       >
         {/* Header */}
         <div className="flex justify-between items-start mb-6">
-          <h3 className="text-2xl font-semibold text-gray-900">
-            Edit Portfolio{' '}
-            {loading && (
-              <span className="text-sm text-gray-500 ml-2">(Loading...)</span>
-            )}
+          <h3 id="edit-portfolio-title" className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
+            Edit Portfolio
+            {loading && <LoadingSpinner size="sm" />}
           </h3>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
+          <button
+            onClick={handleClose}
+            className="text-gray-400 hover:text-gray-600"
+            aria-label="Close edit portfolio modal"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -227,29 +226,38 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4 text-sm">
               <div>
-                <label className="text-gray-500">Account Name</label>
+                <label htmlFor="edit-account-name" className="text-gray-500">Account Name *</label>
                 <input
+                  id="edit-account-name"
                   type="text"
                   value={accountDetails.accountName}
                   onChange={(e) => updateAccountDetails('accountName', e.target.value)}
+                  required
+                  aria-required="true"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="text-gray-500">Account #</label>
+                <label htmlFor="edit-account-number" className="text-gray-500">Account # *</label>
                 <input
+                  id="edit-account-number"
                   type="text"
                   value={accountDetails.accountNumber}
                   onChange={(e) => updateAccountDetails('accountNumber', e.target.value)}
+                  required
+                  aria-required="true"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="text-gray-500">Open Date</label>
+                <label htmlFor="edit-open-date" className="text-gray-500">Open Date *</label>
                 <input
+                  id="edit-open-date"
                   type="date"
                   value={accountDetails.openDate}
                   onChange={(e) => updateAccountDetails('openDate', e.target.value)}
+                  required
+                  aria-required="true"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -265,7 +273,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
               <button
                 onClick={() => {
                   if (!accountDetails.accountName.trim() || !accountDetails.accountNumber.trim() || !accountDetails.openDate) {
-                    alert('Please fill in all account details before proceeding.');
+                    notifyWarning('Please fill in all account details before proceeding.', { category: 'Portfolio' });
                     return;
                   }
                   setCurrentStep(2);
@@ -391,6 +399,11 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+};
+
+EditPortfolioModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default EditPortfolioModal;

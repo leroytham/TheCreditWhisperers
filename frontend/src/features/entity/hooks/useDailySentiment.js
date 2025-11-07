@@ -30,11 +30,18 @@ export const useDailySentiment = (ticker, timeframe = '7D') => {
   };
 
   useEffect(() => {
+    // If ticker is null (lazy loading - tab not active), set loading to false immediately
+    if (!ticker) {
+      setLoading(false);
+      return;
+    }
+
+    // Set loading immediately when ticker changes (before async fetch)
+    setLoading(true);
+    setError(null);
+
     const fetchDailySentiment = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
         // Pass timeframe parameter to backend for proper news fetching
         // Backend will use timeframe to fetch appropriate amount of historical news
         const response = await fetch(`/api/daily-sentiment?ticker=${ticker}&timeframe=${timeframe}`);
@@ -49,9 +56,7 @@ export const useDailySentiment = (ticker, timeframe = '7D') => {
       }
     };
 
-    if (ticker) {
-      fetchDailySentiment();
-    }
+    fetchDailySentiment();
   }, [ticker, timeframe]);
 
   return {

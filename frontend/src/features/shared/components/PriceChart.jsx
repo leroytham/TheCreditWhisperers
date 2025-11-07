@@ -25,12 +25,15 @@ import NewsDetailModal from './NewsDetailModal';
  *
  * @param {Object} props
  * @param {Array} props.priceData - Raw price data (entity mode)
+ * @param {Array} props.benchmarkData - Benchmark price data for comparison overlay
+ * @param {boolean} props.showBenchmark - Whether to show benchmark overlay
  * @param {Array} props.chartData - Pre-processed chart data (sector mode)
  * @param {Object} props.priceRange - Pre-calculated price range (sector mode)
  * @param {number} props.priceChange - Pre-calculated price change (sector mode)
  * @param {string} props.ticker - Ticker symbol
  * @param {string} props.companyName - Company/sector name
  * @param {string} props.currency - Currency code
+ * @param {string} props.displayMode - 'value' or 'percent' - controls tooltip formatting
  * @param {Array} props.significantEvents - Events for entity mode
  * @param {Array} props.topEvents - Events for sector mode
  * @param {boolean} props.showEvents - Whether to show event markers (sector mode)
@@ -43,12 +46,15 @@ import NewsDetailModal from './NewsDetailModal';
  */
 const PriceChart = ({
   priceData,
+  benchmarkData = [],
+  showBenchmark = false,
   chartData: preProcessedChartData,
   priceRange: preProcessedPriceRange,
   priceChange: preProcessedPriceChange,
   ticker,
   companyName,
   currency,
+  displayMode = 'value',
   significantEvents = [],
   topEvents = [],
   showEvents = true,
@@ -134,7 +140,21 @@ const PriceChart = ({
 
   // Calculate chart data based on mode
   const chartData = preProcessedChartData || generateChartData(priceData);
+
+  // Process benchmark data if provided
+  const benchmarkChartData = showBenchmark && benchmarkData && benchmarkData.length > 0
+    ? generateChartData(benchmarkData)
+    : [];
+
+  // Calculate price range, combining with benchmark if shown
   let priceRange = preProcessedPriceRange || getPriceRange(chartData);
+  if (showBenchmark && benchmarkChartData.length > 0) {
+    const benchmarkRange = getPriceRange(benchmarkChartData);
+    priceRange = {
+      min: Math.min(priceRange.min, benchmarkRange.min),
+      max: Math.max(priceRange.max, benchmarkRange.max)
+    };
+  }
 
   // For 1D timeframe, expand price range to include prevClose if needed
   if (timeframe === '1D' && prevClose && priceRange) {
@@ -205,6 +225,13 @@ const PriceChart = ({
     : null;
   const fillPath = detectedMode === 'entity'
     ? calculateFillPath(chartData, priceRange, chartWidth, chartHeight, paddingLeft, paddingTop)
+    : null;
+
+  // Calculate benchmark line path if benchmark is shown
+  const benchmarkLinePath = showBenchmark && benchmarkChartData.length > 0
+    ? (detectedMode === 'entity'
+      ? calculateChartPath(benchmarkChartData, priceRange, chartWidth, chartHeight, paddingLeft, paddingTop)
+      : null)
     : null;
 
   // Empty state
@@ -302,7 +329,9 @@ const PriceChart = ({
                   fontSize="11"
                   fontWeight="600"
                 >
-                  {price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  {displayMode === 'percent'
+                    ? `${price.toFixed(2)}%`
+                    : price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </text>
               </g>
             );
@@ -369,6 +398,33 @@ const PriceChart = ({
             fill="none"
             stroke={priceChange >= 0 ? '#00a850' : '#dc2626'}
             strokeWidth="1.5"
+          />
+        )}
+
+        {/* Benchmark line - S&P 500 overlay (solid gray) */}
+        {showBenchmark && detectedMode === 'entity' && benchmarkLinePath && (
+          <path
+            d={benchmarkLinePath}
+            fill="none"
+            stroke="#6b7280"
+            strokeWidth="1.5"
+            opacity="0.8"
+          />
+        )}
+        {showBenchmark && detectedMode === 'sector' && benchmarkChartData.length > 0 && (
+          <path
+            d={`M ${paddingLeft} ${(paddingTop + chartHeight) - ((benchmarkChartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)} ${benchmarkChartData
+              .slice(1)
+              .map((point, i) => {
+                const x = paddingLeft + ((i + 1) * (chartWidth / Math.max(1, benchmarkChartData.length - 1)));
+                const y = (paddingTop + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+                return `L ${x} ${y}`;
+              })
+              .join(' ')}`}
+            fill="none"
+            stroke="#6b7280"
+            strokeWidth="1.5"
+            opacity="0.8"
           />
         )}
 
@@ -838,7 +894,10 @@ const PriceChart = ({
           }}
         >
           <div className="text-sm font-bold text-gray-900">
-            {formatPrice(hoveredPoint.price)} {currency}
+            {displayMode === 'percent'
+              ? `${formatPrice(hoveredPoint.price, '', 2)}%`
+              : `${formatPrice(hoveredPoint.price)} ${currency}`
+            }
           </div>
           <div className="text-xs text-gray-600 mt-0.5">
             {formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time)}
@@ -881,14 +940,26 @@ const PriceChart = ({
           <div className="text-xs text-gray-500 mb-1">
             {hoveredEvent.start_date}
           </div>
-          <div
-            className="text-sm font-semibold mb-2"
-            style={{
-              color: hoveredEvent.trend === 'Downward' ? '#dc2626' : '#00a850'
-            }}
-          >
-            {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct).toFixed(2)}% {hoveredEvent.trend}
-          </div>
+          {/* Show trend/movement for entity events, or description for portfolio events */}
+          {hoveredEvent.total_move_pct !== undefined ? (
+            <div
+              className="text-sm font-semibold mb-2"
+              style={{
+                color: hoveredEvent.trend === 'Downward' ? '#dc2626' : '#00a850'
+              }}
+            >
+              {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct).toFixed(2)}% {hoveredEvent.trend}
+            </div>
+          ) : (
+            <div className="text-sm mb-2 text-gray-700">
+              {hoveredEvent.description}
+              {hoveredEvent.impact_value && (
+                <span className="ml-2 text-green-600 font-semibold">
+                  +${hoveredEvent.impact_value.toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Divider line */}
           <div className="border-t border-gray-300 mb-3"></div>

@@ -588,26 +588,7 @@ const CombinedSentimentVolumeChart = ({
     </div>
   );
 
-  // Loading/empty state
-  if (!processedData || processedData.length === 0) {
-    return (
-      <div className={className}>
-        <h3 className="text-lg font-semibold mb-4">
-          {getChartTitle()}
-        </h3>
-        <div className="bg-white border border-gray-200 rounded-lg shadow-md p-6" style={{ minHeight: '500px' }}>
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-              <div>Loading combined data...</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // No data available message
+  // No data available message - Check this FIRST to avoid infinite loading
   if (!hasData) {
     return (
       <div className={className}>
@@ -626,6 +607,25 @@ const CombinedSentimentVolumeChart = ({
                 <br />
                 Try selecting a shorter timeframe.
               </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading/empty state - Check AFTER hasData to ensure proper state display
+  if (!processedData || processedData.length === 0) {
+    return (
+      <div className={className}>
+        <h3 className="text-lg font-semibold mb-4">
+          {getChartTitle()}
+        </h3>
+        <div className="bg-white border border-gray-200 rounded-lg shadow-md p-6" style={{ minHeight: '500px' }}>
+          <div className="flex items-center justify-center h-full text-gray-400">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+              <div>Loading combined data...</div>
             </div>
           </div>
         </div>

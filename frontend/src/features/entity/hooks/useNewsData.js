@@ -14,11 +14,18 @@ export const useNewsData = (ticker, timeframe = '1Y') => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // If ticker is null (lazy loading - tab not active), set loading to false immediately
+    if (!ticker) {
+      setLoading(false);
+      return;
+    }
+
+    // Set loading immediately when ticker changes (before async fetch)
+    setLoading(true);
+    setError(null);
+
     const fetchNewsData = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
         const response = await fetch(`/api/news?ticker=${ticker}&timeframe=${timeframe}`);
         const data = await response.json();
 
@@ -86,9 +93,7 @@ export const useNewsData = (ticker, timeframe = '1Y') => {
       }
     };
 
-    if (ticker) {
-      fetchNewsData();
-    }
+    fetchNewsData();
   }, [ticker, timeframe]);
 
   return {

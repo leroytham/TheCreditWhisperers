@@ -1,25 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Search, User } from 'lucide-react';
-import axios from 'axios';
+import { usePortfolio } from '../../../context/PortfolioContext';
+import apiService from '../../../services/api';
 
+/**
+ * ClientInfoBar Component
+ *
+ * Top navigation bar for portfolio page that displays and manages account selection.
+ * Features a dropdown menu with searchable account list, showing account name and number.
+ * Integrates with PortfolioContext for centralized account state management.
+ *
+ * Key Features:
+ * - Searchable account dropdown
+ * - Visual indication of selected account
+ * - Loading state during account fetch
+ * - Automatic account fetch on component mount
+ *
+ * @returns {React.ReactElement} Rendered client info bar component
+ *
+ * @example
+ * // Used at the top of portfolio page
+ * <ClientInfoBar />
+ */
 const ClientInfoBar = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { selectedAccount, actions } = usePortfolio();
 
   // Fetch accounts for current logged-in user
   useEffect(() => {
     const username = sessionStorage.getItem('user');
-    if (!username) return;
+    if (!username) {
+      setLoading(false);
+      return;
+    }
 
     const fetchAccounts = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/accounts/${username}`);
+        const response = await apiService.getPortfolioAccounts(username);
         setAccounts(response.data.accounts || []);
       } catch (error) {
-        console.error('Failed to fetch accounts:', error);
+        // Error is already handled by apiService interceptor with notification
       } finally {
         setLoading(false);
       }
@@ -36,18 +59,17 @@ const ClientInfoBar = () => {
   );
 
   const handleAccountSelect = (account) => {
-    setSelectedAccount(account);
+    const username = sessionStorage.getItem('user');
+
+    // Update context with selected account
+    actions.selectAccount(
+      username,
+      account.client_account_name,
+      account.account_no
+    );
+
     setIsDropdownOpen(false);
     setSearchTerm('');
-
-    // Store selected account name for later use
-    sessionStorage.setItem('selectedAccountName', account.client_account_name);
-    sessionStorage.setItem('selectedAccountNo', account.account_no);
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("accountChanged"));
-    }
-    
   };
 
   return (
@@ -67,7 +89,7 @@ const ClientInfoBar = () => {
                 </span>
                 {selectedAccount ? (
                   <span className="text-sm font-semibold text-gray-100">
-                    {selectedAccount.account_no} — {selectedAccount.client_account_name}
+                    {selectedAccount.accountNumber} — {selectedAccount.accountName}
                   </span>
                 ) : (
                   <span className="text-sm italic text-gray-400">
@@ -81,7 +103,7 @@ const ClientInfoBar = () => {
 
           {/* Dropdown Menu */}
           {isDropdownOpen && (
-            <div className="absolute top-full mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden animate-fadeIn">
+            <div className="absolute top-full mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-40 overflow-hidden animate-fadeIn">
               <div className="p-3 border-b border-gray-100 flex items-center space-x-2">
                 <Search className="h-4 w-4 text-gray-400" />
                 <input
@@ -99,7 +121,7 @@ const ClientInfoBar = () => {
                       key={account.account_no}
                       onClick={() => handleAccountSelect(account)}
                       className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                        selectedAccount?.account_no === account.account_no
+                        selectedAccount?.accountNumber === account.account_no
                           ? 'bg-blue-50 font-semibold text-blue-700'
                           : 'text-gray-700'
                       }`}

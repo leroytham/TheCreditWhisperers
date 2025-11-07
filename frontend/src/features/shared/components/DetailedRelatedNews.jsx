@@ -50,16 +50,15 @@ const DetailedRelatedNews = ({
     }
     
     if (isSector) {
-      // For sectors: weighted score = sum of (sentiment_score × relevance_score)
-      let weightedScore = 0;
+      // For sectors/portfolios: sum raw relevance scores (independent of sentiment direction)
+      let totalRelevance = 0;
       article.ticker_sentiment.forEach(ts => {
         if (sectorTickers.has(ts.ticker?.toUpperCase())) {
-          const sentimentScore = parseFloat(ts.ticker_sentiment_score) || 0;
           const relevanceScore = parseFloat(ts.relevance_score) || 0;
-          weightedScore += sentimentScore * relevanceScore;
+          totalRelevance += relevanceScore;
         }
       });
-      return weightedScore;
+      return totalRelevance;
     } else {
       // For entities: single ticker's relevance score
       const tickerSent = article.ticker_sentiment.find(

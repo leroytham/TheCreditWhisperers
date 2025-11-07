@@ -1,4 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
+import LoadingSpinner from '../../../components/LoadingSpinner';
+import { InlineError } from '../../../components/ErrorDisplay';
+import { useAccountContext } from '../../../hooks/usePortfolioData';
+import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
+
+// Chart display constants
+const BAR_HEIGHT_MULTIPLIER = 2.8; // Scale return percentage to pixels for chart display
+const MIN_BAR_HEIGHT_PX = 10; // Minimum visible bar height in pixels
+const MAX_BAR_HEIGHT_PX = 85; // Maximum bar height in pixels (chart area limit)
 
 /**
  * PerformanceCard Component
@@ -17,75 +27,20 @@ import React, { useState, useEffect } from 'react';
 const PerformanceCard = ({ onViewPerformance }) => {
   const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'list'
   const [showSP500, setShowSP500] = useState(true); // Toggle S&P 500 visibility
-  const [performanceData, setPerformanceData] = useState([]);
-  const [portfolioInfo, setPortfolioInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Fetch performance data on mount and when account changes
-  useEffect(() => {
-    fetchPerformanceData();
+  // Use hooks for context and data fetching
+  const { selectedAccount } = useAccountContext();
+  const { performance, performanceLoading, performanceError, refetchPerformance } = usePortfolioOverview();
 
-    // Listen for account changes
-    const handleAccountChange = () => {
-      fetchPerformanceData();
-    };
-    window.addEventListener('accountChanged', handleAccountChange);
-    return () => window.removeEventListener('accountChanged', handleAccountChange);
-  }, []);
+  const loading = performanceLoading;
+  const error = performanceError;
+  const refetch = refetchPerformance;
 
-  const fetchPerformanceData = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const username = sessionStorage.getItem('user');
-      const accountName = sessionStorage.getItem('selectedAccountName');
-
-      if (!username || !accountName) {
-        setError('Please select an account first.');
-        setLoading(false);
-        return;
-      }
-
-      console.log(`Fetching performance for: ${username} / ${accountName}`);
-
-      const response = await fetch(
-        `http://localhost:8000/portfolio/performance/${username}/${encodeURIComponent(accountName)}`
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch performance data');
-      }
-
-      const data = await response.json();
-      console.log('Performance data received:', data);
-
-      // Debug: Log each period's data
-      if (data.performance) {
-        data.performance.forEach(p => {
-          console.log(`${p.period}: Portfolio ${p.return}%, S&P500 ${p.sp500}%, Bar heights: Portfolio=${Math.min(Math.abs(p.return) * 3, 100)}%, S&P=${Math.min(Math.abs(p.sp500) * 3, 100)}%`);
-        });
-      }
-
-      if (data.error) {
-        setError(data.error);
-        setPerformanceData([]);
-      } else {
-        setPerformanceData(data.performance || []);
-        setPortfolioInfo({
-          account_name: data.account_name,
-          calculation_date: data.calculation_date
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching performance data:', err);
-      setError('Failed to load performance data');
-      setPerformanceData([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const performanceData = performance?.performance || [];
+  const portfolioInfo = performance ? {
+    account_name: performance.account_name,
+    calculation_date: performance.calculation_date
+  } : null;
 
   return (
     <div className="bg-white p-4 sm:p-5 md:p-6 rounded-lg shadow-md border border-gray-200">
@@ -141,8 +96,8 @@ const PerformanceCard = ({ onViewPerformance }) => {
       {loading && (
         <div className="mt-10 flex justify-center items-center h-40">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-3"></div>
-            <p className="text-gray-600 mb-1 font-medium">Calculating performance...</p>
+            <LoadingSpinner size="md" />
+            <p className="text-gray-600 mb-1 font-medium mt-3">Calculating performance...</p>
             <p className="text-xs text-gray-400">Fetching historical prices</p>
           </div>
         </div>
@@ -151,15 +106,7 @@ const PerformanceCard = ({ onViewPerformance }) => {
       {/* Error State */}
       {error && !loading && (
         <div className="mt-10 flex justify-center items-center h-40">
-          <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6">
-            <p className="text-red-600 text-sm mb-3 font-medium">⚠️ {error}</p>
-            <button
-              onClick={fetchPerformanceData}
-              className="text-xs text-blue-600 hover:text-blue-700 font-semibold hover:underline"
-            >
-              🔄 Try Again
-            </button>
-          </div>
+          <InlineError message={error?.message || String(error)} onRetry={refetch} />
         </div>
       )}
 
@@ -186,8 +133,8 @@ const PerformanceCard = ({ onViewPerformance }) => {
                   {/* Top half (positive) */}
                   <div className="flex-1 relative flex justify-around items-end">
                     {performanceData.map((data, index) => {
-                      const portfolioHeightPx = Math.max(10, Math.min(Math.abs(data.return) * 2.8, 85));
-                      const sp500HeightPx = Math.max(10, Math.min(Math.abs(data.sp500) * 2.8, 85));
+                      const portfolioHeightPx = Math.max(MIN_BAR_HEIGHT_PX, Math.min(Math.abs(data.return) * BAR_HEIGHT_MULTIPLIER, MAX_BAR_HEIGHT_PX));
+                      const sp500HeightPx = Math.max(MIN_BAR_HEIGHT_PX, Math.min(Math.abs(data.sp500) * BAR_HEIGHT_MULTIPLIER, MAX_BAR_HEIGHT_PX));
 
                       return data.isPositive ? (
                         <div
@@ -249,8 +196,8 @@ const PerformanceCard = ({ onViewPerformance }) => {
                   {/* Bottom half (negative) */}
                   <div className="flex-1 relative flex justify-around items-start">
                     {performanceData.map((data, index) => {
-                      const portfolioHeightPx = Math.max(10, Math.min(Math.abs(data.return) * 2.8, 85));
-                      const sp500HeightPx = Math.max(10, Math.min(Math.abs(data.sp500) * 2.8, 85));
+                      const portfolioHeightPx = Math.max(MIN_BAR_HEIGHT_PX, Math.min(Math.abs(data.return) * BAR_HEIGHT_MULTIPLIER, MAX_BAR_HEIGHT_PX));
+                      const sp500HeightPx = Math.max(MIN_BAR_HEIGHT_PX, Math.min(Math.abs(data.sp500) * BAR_HEIGHT_MULTIPLIER, MAX_BAR_HEIGHT_PX));
 
                       return !data.isPositive ? (
                         <div
@@ -465,6 +412,10 @@ const PerformanceCard = ({ onViewPerformance }) => {
       `}</style>
     </div>
   );
+};
+
+PerformanceCard.propTypes = {
+  onViewPerformance: PropTypes.func.isRequired,
 };
 
 export default PerformanceCard;

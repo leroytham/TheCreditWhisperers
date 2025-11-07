@@ -45,14 +45,17 @@ const SentimentByTopicCard = ({
   // Sort topics by weight (descending)
   const sortedTopics = useMemo(() => {
     if (!sentimentByTopic || Object.keys(sentimentByTopic).length === 0) return [];
-    
+
+    // Calculate total weight once, with guard against zero
+    const totalWeight = Object.values(topicWeights).reduce((a, b) => a + b, 0);
+
     return Object.entries(sentimentByTopic)
       .map(([topic, sentiment]) => ({
         topic: formatTopicName(topic),
         sentiment: sentiment,
         weight: topicWeights[topic] || 0,
-        percentage: topicWeights[topic] 
-          ? (topicWeights[topic] / Object.values(topicWeights).reduce((a, b) => a + b, 0)) * 100 
+        percentage: totalWeight > 0 && topicWeights[topic]
+          ? (topicWeights[topic] / totalWeight) * 100
           : 0
       }))
       .sort((a, b) => b.weight - a.weight);

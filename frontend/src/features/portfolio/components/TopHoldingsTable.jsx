@@ -1,11 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
+import LoadingSpinner from '../../../components/LoadingSpinner';
 
-const TopHoldingsTable = () => {
+/**
+ * TopHoldingsTable Component
+ *
+ * Displays portfolio holdings in a tabbed table with three views:
+ * - All Holdings: Complete list of portfolio holdings
+ * - Top Gainers: Holdings with positive returns sorted by gain percentage
+ * - Top Losers: Holdings with negative returns sorted by loss percentage
+ *
+ * OPTIMIZED VERSION: Uses React Query via usePortfolioOverview hook for:
+ * - Automatic request deduplication (no duplicate API calls)
+ * - Caching and background refetching
+ * - Parallel data loading with other portfolio components
+ *
+ * @param {Object} props - Component props
+ * @param {Function} [props.onViewAllHoldings] - Callback when "VIEW ALL HOLDINGS" is clicked
+ * @returns {React.ReactElement} Rendered holdings table component with tabs
+ *
+ * @example
+ * // Used in portfolio page to display holdings overview
+ * <TopHoldingsTable onViewAllHoldings={() => setActiveTab('holdings')} />
+ */
+const TopHoldingsTable = ({ onViewAllHoldings }) => {
   const [activeTab, setActiveTab] = useState('all-holdings');
-  const [holdings, setHoldings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+
+  // Use unified portfolio data hook - automatically handles caching and deduplication
+  const { holdings, holdingsLoading, holdingsError, refetchHoldings } = usePortfolioOverview();
 
   const tabs = [
     { id: 'all-holdings', label: 'All Holdings' },
@@ -13,61 +37,15 @@ const TopHoldingsTable = () => {
     { id: 'top-losers', label: 'Top Losers' },
   ];
 
-  useEffect(() => {
-    const fetchHoldings = async () => {
-      setLoading(true);
-      setError('');
-
-      const username = sessionStorage.getItem('user');
-      const accountName = sessionStorage.getItem('selectedAccountName');
-
-      if (!username || !accountName) {
-        setError('Please select an account first.');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const response = await fetch(
-          `http://localhost:8000/portfolio/holdings/${username}/${encodeURIComponent(
-            accountName
-          )}`
-        );
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.detail || 'Failed to fetch holdings');
-        }
-
-        const data = await response.json();
-        setHoldings(data.holdings || []);
-      } catch (err) {
-        console.error('Error fetching holdings:', err);
-        setError('Failed to load holdings data.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHoldings();
-
-    if (typeof window !== "undefined") {
-      fetchHoldings();
-      window.addEventListener("accountChanged", fetchHoldings);
-      return () => window.removeEventListener("accountChanged", fetchHoldings);
-    }
-    
-  }, []);
-
   // Filter holdings based on selected tab
   const filteredHoldings =
     activeTab === 'top-gainers'
       ? holdings
-          .filter((h) => h.isPositive)
+          .filter((h) => h.isPositive === true)
           .sort((a, b) => b.gainLossPercent - a.gainLossPercent)
       : activeTab === 'top-losers'
       ? holdings
-          .filter((h) => !h.isPositive)
+          .filter((h) => h.isPositive === false)
           .sort((a, b) => a.gainLossPercent - b.gainLossPercent)
       : holdings;
 
@@ -95,10 +73,14 @@ const TopHoldingsTable = () => {
       </div>
 
       {/* Loading / Error / Empty states */}
-      {loading ? (
-        <p className="text-center text-gray-500 mt-6">Loading holdings...</p>
-      ) : error ? (
-        <p className="text-center text-red-500 mt-6">{error}</p>
+      {holdingsLoading ? (
+        <div className="flex justify-center items-center mt-6">
+          <LoadingSpinner />
+        </div>
+      ) : holdingsError ? (
+        <p className="text-center text-red-500 mt-6">
+          {holdingsError?.message || 'Failed to load holdings. Please try again.'}
+        </p>
       ) : holdings.length === 0 ? (
         <p className="text-center text-gray-400 mt-6">No holdings found for this account.</p>
       ) : (
@@ -134,28 +116,32 @@ const TopHoldingsTable = () => {
                 <td className="py-4 text-right">
                   <span
                     className={`text-sm font-medium ${
-                      holding.isPositive ? 'text-green-600' : 'text-red-600'
+                      holding.isPositive === true ? 'text-green-600' :
+                      holding.isPositive === false ? 'text-red-600' :
+                      'text-gray-400'
                     }`}
                   >
-                    {holding.profitLoss !== null ? `$${holding.profitLoss}` : '-'}
+                    {holding.profitLoss !== null ? `$${holding.profitLoss}` : '—'}
                   </span>
                 </td>
                 <td className="py-4 text-right">
                   <span
                     className={`inline-flex items-center px-2 py-1 rounded-md text-sm font-medium ${
-                      holding.isPositive
+                      holding.isPositive === true
                         ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
+                        : holding.isPositive === false
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-gray-100 text-gray-600'
                     }`}
                   >
-                    {holding.isPositive ? (
+                    {holding.isPositive === true ? (
                       <TrendingUp className="w-4 h-4 mr-1" />
-                    ) : (
+                    ) : holding.isPositive === false ? (
                       <TrendingDown className="w-4 h-4 mr-1" />
-                    )}
+                    ) : null}
                     {holding.gainLossPercent !== null
                       ? `${holding.gainLossPercent}%`
-                      : '-'}
+                      : '—'}
                   </span>
                 </td>
                 <td className="py-4 text-right">{holding.newsVolume}</td>
@@ -168,18 +154,28 @@ const TopHoldingsTable = () => {
       )}
 
       <div className="text-center mt-4 flex justify-center gap-4">
-        <a href="#" className="text-sm font-semibold text-blue-600 hover:underline">
-          VIEW ALL HOLDINGS
-        </a>
+        {onViewAllHoldings && (
+          <button
+            onClick={onViewAllHoldings}
+            className="text-sm font-semibold text-blue-600 hover:underline"
+          >
+            VIEW ALL HOLDINGS
+          </button>
+        )}
         <button
-          onClick={() => window.location.reload()}
-          className="text-sm font-semibold text-blue-600 hover:underline"
+          onClick={() => refetchHoldings()}
+          disabled={holdingsLoading}
+          className="text-sm font-semibold text-blue-600 hover:underline disabled:text-gray-400 disabled:cursor-not-allowed"
         >
-          REFRESH HOLDINGS
+          {holdingsLoading ? 'REFRESHING...' : 'REFRESH HOLDINGS'}
         </button>
       </div>
     </div>
   );
+};
+
+TopHoldingsTable.propTypes = {
+  onViewAllHoldings: PropTypes.func,
 };
 
 export default TopHoldingsTable;

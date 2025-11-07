@@ -89,9 +89,26 @@ const EntityPage = () => {
   // Fetch real-time 1D data for current price display
   const { priceData1Y: priceData1D, prevClose: prevClose1D, loading: priceLoading1D, error: priceError1D } = usePriceData(ticker, '1D');
 
-  const { news, sentiment, apiMetadata, loading: newsLoading, error: newsError } = useNewsData(ticker, '1Y');
-  const { dailySentiment, loading: dailySentimentLoading, error: dailySentimentError } = useDailySentiment(ticker, sentimentTimeframe);
-  const { significantEvents, loading: significantEventsLoading, error: significantEventsError } = useSignificantEvents(ticker, priceTimeframe);
+  // Tab-aware lazy fetching: determine which data to fetch based on active tab
+  const shouldFetchNews = ['overview', 'news'].includes(activeSubTab);
+  const shouldFetchDailySentiment = ['sentiment'].includes(activeSubTab);
+  const shouldFetchSignificantEvents = ['overview', 'performance'].includes(activeSubTab);
+
+  // Call hooks unconditionally but pass skip flags to control fetching
+  const { news, sentiment, apiMetadata, loading: newsLoading, error: newsError } = useNewsData(
+    shouldFetchNews ? ticker : null,
+    '1Y'
+  );
+
+  const { dailySentiment, loading: dailySentimentLoading, error: dailySentimentError } = useDailySentiment(
+    shouldFetchDailySentiment ? ticker : null,
+    sentimentTimeframe
+  );
+
+  const { significantEvents, loading: significantEventsLoading, error: significantEventsError } = useSignificantEvents(
+    shouldFetchSignificantEvents ? ticker : null,
+    priceTimeframe
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">

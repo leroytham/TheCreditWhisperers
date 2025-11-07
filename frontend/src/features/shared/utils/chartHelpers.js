@@ -144,8 +144,16 @@ export const getPriceRange = (chartData, paddingPercent = 0.1) => {
   const prices = chartData.map(d => d.y);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
-  const padding = (max - min) * paddingPercent;
 
+  // Handle flat series (zero range) to prevent division by zero
+  const range = max - min;
+  if (range < 0.01) {
+    const midpoint = (max + min) / 2;
+    const epsilon = midpoint * 0.01 || 1;  // 1% of value or 1 minimum
+    return { min: midpoint - epsilon, max: midpoint + epsilon };
+  }
+
+  const padding = range * paddingPercent;
   return { min: min - padding, max: max + padding };
 };
 

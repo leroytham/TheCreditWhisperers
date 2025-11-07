@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
+import apiService from '../../../../services/api';
 
 /**
  * AddPortfolioModal Component
@@ -112,26 +114,14 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
         })),
       };
 
-      console.log('🔹 Sending payload:', payload);
-
-      const response = await fetch('http://localhost:8000/portfolio/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to save portfolio');
-      }
-
-      const result = await response.json();
-      console.log('Portfolio saved:', result);
+      const result = await apiService.addPortfolio(payload);
       alert('Portfolio saved successfully!');
       handleClose();
     } catch (error) {
-      console.error('Error saving portfolio:', error);
-      alert('Error saving portfolio: ' + error.message);
+      // Error handled by apiService interceptor
+      if (error.name !== 'AbortError' && !apiService.api?.isCancel?.(error)) {
+        alert('Error saving portfolio: ' + error.message);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -144,6 +134,9 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
     <div
       className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50"
       onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-portfolio-title"
     >
       <div
         className="relative mx-auto p-8 border w-full max-w-4xl shadow-lg rounded-md bg-white"
@@ -151,8 +144,12 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       >
         {/* Header */}
         <div className="flex justify-between items-start mb-6">
-          <h3 className="text-2xl font-semibold text-gray-900">Add New Portfolio</h3>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
+          <h3 id="add-portfolio-title" className="text-2xl font-semibold text-gray-900">Add New Portfolio</h3>
+          <button
+            onClick={handleClose}
+            className="text-gray-400 hover:text-gray-600"
+            aria-label="Close add portfolio modal"
+          >
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -166,33 +163,42 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
               <div>
-                <label className="text-gray-500">Account Name</label>
+                <label htmlFor="add-account-name" className="text-gray-500">Account Name *</label>
                 <input
+                  id="add-account-name"
                   type="text"
                   value={accountDetails.accountName}
                   onChange={(e) => updateAccount('accountName', e.target.value)}
                   placeholder="e.g., ABC Portfolio"
+                  required
+                  aria-required="true"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="text-gray-500">Account #</label>
+                <label htmlFor="add-account-number" className="text-gray-500">Account # *</label>
                 <input
+                  id="add-account-number"
                   type="text"
                   value={accountDetails.accountNumber}
                   onChange={(e) => updateAccount('accountNumber', e.target.value)}
                   placeholder="e.g., 123456"
+                  required
+                  aria-required="true"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="text-gray-500">Open Date</label>
+                <label htmlFor="add-open-date" className="text-gray-500">Open Date *</label>
                 <input
+                  id="add-open-date"
                   type="date"
                   value={accountDetails.openDate}
                   onChange={(e) => updateAccount('openDate', e.target.value)}
+                  required
+                  aria-required="true"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -284,6 +290,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
                         <button
                           onClick={() => removeHolding(index)}
                           className="text-gray-400 hover:text-red-500"
+                          aria-label={`Remove holding ${holding.symbol || index + 1}`}
                         >
                           <Trash2 className="h-5 w-5" />
                         </button>
@@ -326,6 +333,11 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+};
+
+AddPortfolioModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default AddPortfolioModal;
