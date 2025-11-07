@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(env CI=true npm test:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

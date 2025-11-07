@@ -167,9 +167,9 @@ const PriceChart = ({
       max: adjustedMax + padding
     };
   }
-  const { currentPrice, priceChange, priceChangePercent } =
+  const { currentPrice, priceChange, priceChangePercent, isValidPercentage } =
     preProcessedPriceChange !== undefined
-      ? { currentPrice: chartData[chartData.length - 1], priceChange: preProcessedPriceChange, priceChangePercent: preProcessedPriceChange }
+      ? { currentPrice: chartData[chartData.length - 1], priceChange: preProcessedPriceChange, priceChangePercent: preProcessedPriceChange, isValidPercentage: true }
       : calculatePriceChange(chartData);
 
   // Chart dimensions
@@ -597,7 +597,7 @@ const PriceChart = ({
                   cx={originalXPos}
                   cy={dataY}
                   r="6"
-                  fill={priceChangePercent >= 0 ? '#00a850' : '#ef4444'}
+                  fill={event.trend === 'Upward' ? '#00a850' : '#ef4444'}
                   stroke="white"
                   strokeWidth="2"
                 />
@@ -763,7 +763,7 @@ const PriceChart = ({
                   cx={originalXPos}
                   cy={dataY}
                   r="6"
-                  fill={priceChangePercent >= 0 ? '#00a850' : '#ef4444'}
+                  fill={event.trend === 'Upward' ? '#00a850' : '#ef4444'}
                   stroke="white"
                   strokeWidth="2"
                 />

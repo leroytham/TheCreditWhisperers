@@ -142,23 +142,35 @@ const PerformanceView = ({
   }, [activePriceData, timeframe]);
 
   // Create chart data from price data
-  const chartData = priceData.map((point, i) => ({
-    x: i,
-    y: parseFloat(point.close) || parseFloat(point.price) || 0,
-    date: point.date,
-    time: point.time
-  }));
+  const chartData = priceData.map((point, i) => {
+    // Use explicit checks with NaN handling to correctly handle 0 values
+    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(point.close) : NaN;
+    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(point.price) : NaN;
+
+    return {
+      x: i,
+      y: !isNaN(closeValue) ? closeValue : (!isNaN(priceValue) ? priceValue : 0),
+      date: point.date,
+      time: point.time
+    };
+  });
 
   // Calculate price changes for the selected timeframe
   const { priceChange, priceChangePercent } = calculatePriceChange(chartData);
 
   // Get current price from real-time 1D data (always use latest intraday price)
-  const realtimeChartData = priceData1D ? priceData1D.map((point, i) => ({
-    x: i,
-    y: parseFloat(point.close) || parseFloat(point.price) || 0,
-    date: point.date,
-    time: point.time
-  })) : [];
+  const realtimeChartData = priceData1D ? priceData1D.map((point, i) => {
+    // Use explicit checks with NaN handling to correctly handle 0 values
+    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(point.close) : NaN;
+    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(point.price) : NaN;
+
+    return {
+      x: i,
+      y: !isNaN(closeValue) ? closeValue : (!isNaN(priceValue) ? priceValue : 0),
+      date: point.date,
+      time: point.time
+    };
+  }) : [];
 
   // Current price with fallback to 1Y data if 1D unavailable
   const currentPrice = useMemo(() => {

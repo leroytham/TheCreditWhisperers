@@ -122,14 +122,20 @@ export const generateChartData = (priceData) => {
     return [];
   }
 
-  return priceData.map((point, i) => ({
-    x: i,
-    y: parseFloat(point.close) || parseFloat(point.price) || 0,
-    date: point.date,
-    time: point.time,
-    volume: point.volume || 0,
-    index: i
-  }));
+  return priceData.map((point, i) => {
+    // Use nullish coalescing with NaN check to handle 0 correctly
+    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(point.close) : NaN;
+    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(point.price) : NaN;
+
+    return {
+      x: i,
+      y: !isNaN(closeValue) ? closeValue : (!isNaN(priceValue) ? priceValue : 0),
+      date: point.date,
+      time: point.time,
+      volume: point.volume || 0,
+      index: i
+    };
+  });
 };
 
 /**
@@ -549,7 +555,7 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 /**
  * Calculate price change metrics
  * @param {Array} chartData - Chart data points
- * @returns {Object} Object with currentPrice, startPrice, priceChange, priceChangePercent
+ * @returns {Object} Object with currentPrice, startPrice, priceChange, priceChangePercent, isValidPercentage
  */
 export const calculatePriceChange = (chartData) => {
   if (chartData.length === 0) {
@@ -557,20 +563,58 @@ export const calculatePriceChange = (chartData) => {
       currentPrice: null,
       startPrice: null,
       priceChange: 0,
-      priceChangePercent: 0
+      priceChangePercent: 0,
+      isValidPercentage: false
     };
   }
 
   const currentPoint = chartData[chartData.length - 1];
   const startPoint = chartData[0];
+
+  // Early check for NaN values
+  if (!isFinite(startPoint.y) || !isFinite(currentPoint.y)) {
+    return {
+      currentPrice: currentPoint.y,
+      startPrice: startPoint.y,
+      priceChange: 0,
+      priceChangePercent: null,
+      isValidPercentage: false
+    };
+  }
+
   const priceChange = currentPoint.y - startPoint.y;
-  const priceChangePercent = (priceChange / startPoint.y) * 100;
+
+  // Fix Bug 3: Guard against division by zero
+  // This prevents Infinity/NaN from leaking into UI state
+  let priceChangePercent = 0;
+  let isValidPercentage = true;
+
+  if (startPoint.y > 0) {
+    // Normal case: positive start price
+    priceChangePercent = (priceChange / startPoint.y) * 100;
+  } else if (startPoint.y === 0) {
+    // Zero start price: percentage change is undefined
+    // Started from $0, now has value - mathematically undefined
+    priceChangePercent = null;
+    isValidPercentage = false;
+  } else if (startPoint.y < 0) {
+    // Negative start price (unusual but handle robustly)
+    // Calculate based on absolute value
+    priceChangePercent = (priceChange / Math.abs(startPoint.y)) * -100;
+  }
+
+  // Additional safety: Check for NaN/Infinity after calculation
+  if (!isFinite(priceChangePercent)) {
+    priceChangePercent = null;
+    isValidPercentage = false;
+  }
 
   return {
     currentPrice: currentPoint.y,
     startPrice: startPoint.y,
     priceChange,
-    priceChangePercent
+    priceChangePercent,
+    isValidPercentage
   };
 };
 
