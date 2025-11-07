@@ -127,25 +127,43 @@ const useAppStore = create(
         // ===== NOTIFICATIONS =====
         notifications: [],
 
-        addNotification: (notification) => set((state) => ({
-          notifications: [
-            ...state.notifications,
-            {
-              id: Date.now() + Math.random(), // Ensure unique ID
-              timestamp: new Date().toISOString(),
-              type: 'info', // 'success' | 'error' | 'warning' | 'info' | 'critical'
-              category: 'System', // 'Portfolio' | 'Market' | 'News' | 'System'
-              priority: 'medium', // 'low' | 'medium' | 'high' | 'critical'
-              isRead: false,
-              isArchived: false,
-              showAsToast: true, // Show in toast container
-              duration: 5000, // Auto-dismiss duration in ms (null = no auto-dismiss)
-              actionUrl: null, // Optional link for "View Details"
-              metadata: {}, // Flexible object for custom data
-              ...notification,
-            },
-          ],
-        })),
+        addNotification: (notification) => set((state) => {
+          // Generate subcategory if not provided
+          const category = notification.category || 'System';
+          const subcategoryMap = {
+            'Market': 'Market Signals',
+            'Portfolio': 'Portfolio Updates',
+            'News': 'News & Insights',
+            'System': 'Operational Alerts',
+          };
+
+          const newNotification = {
+            id: Date.now() + Math.random(), // Ensure unique ID
+            timestamp: new Date().toISOString(),
+            type: 'info', // 'success' | 'error' | 'warning' | 'info' | 'critical'
+            category: 'System', // 'Portfolio' | 'Market' | 'News' | 'System'
+            subcategory: subcategoryMap[category] || 'General',
+            priority: 'medium', // 'low' | 'medium' | 'high' | 'critical'
+            isRead: false,
+            isArchived: false,
+            showAsToast: true, // Show in toast container
+            duration: 5000, // Auto-dismiss duration in ms (null = no auto-dismiss)
+            actionUrl: null, // Optional link for "View Details"
+            metadata: {}, // Flexible object for custom data
+            ...notification,
+          };
+
+          // Generate preview field from message if not provided
+          if (!newNotification.preview && newNotification.message) {
+            newNotification.preview = newNotification.message.length > 80
+              ? newNotification.message.substring(0, 80) + '...'
+              : newNotification.message;
+          }
+
+          return {
+            notifications: [...state.notifications, newNotification],
+          };
+        }),
 
         removeNotification: (id) => set((state) => ({
           notifications: state.notifications.filter((n) => n.id !== id),
@@ -179,6 +197,14 @@ const useAppStore = create(
         },
 
         clearNotifications: () => set({ notifications: [] }),
+
+        clearActiveNotifications: () => set((state) => ({
+          notifications: state.notifications.filter((n) => n.isArchived),
+        })),
+
+        clearArchivedNotifications: () => set((state) => ({
+          notifications: state.notifications.filter((n) => !n.isArchived),
+        })),
 
         // Helper methods for specific notification types
         notifySuccess: (message, options = {}) => {
@@ -233,6 +259,32 @@ const useAppStore = create(
           });
         },
 
+        // Helper for creating enriched notifications with full metadata
+        notifyWithMetadata: (config = {}) => {
+          const { addNotification } = get();
+          addNotification({
+            type: config.type || 'info',
+            title: config.title || 'Notification',
+            message: config.message || '',
+            category: config.category || 'System',
+            subcategory: config.subcategory,
+            priority: config.priority || 'medium',
+            preview: config.preview,
+            // Optional rich data fields
+            modalTitle: config.modalTitle,
+            subject: config.subject,
+            body: config.body,
+            signalAnalysis: config.signalAnalysis,
+            portfolioImpact: config.portfolioImpact,
+            accountServicing: config.accountServicing,
+            // Standard fields
+            duration: config.duration !== undefined ? config.duration : 5000,
+            actionUrl: config.actionUrl,
+            showAsToast: config.showAsToast !== undefined ? config.showAsToast : true,
+            metadata: config.metadata || {},
+          });
+        },
+
         // ===== PREFERENCES =====
         preferences: {
           showSentimentColors: true,
@@ -264,6 +316,118 @@ const useAppStore = create(
           },
         }),
 
+        // ===== PORTFOLIOS =====
+        selectedPortfolio: null, // Currently selected portfolio { id, name, ... }
+        userPortfolios: [], // All user's portfolios
+        portfoliosLoading: false,
+        portfoliosError: null,
+
+        setSelectedPortfolio: (portfolio) => set({
+          selectedPortfolio: portfolio,
+        }),
+
+        setUserPortfolios: (portfolios) => set({
+          userPortfolios: portfolios,
+          portfoliosLoading: false,
+          portfoliosError: null,
+        }),
+
+        setPortfoliosLoading: (loading) => set({ portfoliosLoading: loading }),
+
+        setPortfoliosError: (error) => set({
+          portfoliosError: error,
+          portfoliosLoading: false,
+        }),
+
+        // Load user's portfolios from API
+        loadUserPortfolios: async () => {
+          const { setPortfoliosLoading, setUserPortfolios, setPortfoliosError, setSelectedPortfolio, selectedPortfolio } = get();
+
+          setPortfoliosLoading(true);
+
+          try {
+            const response = await fetch('/api/portfolios/', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to fetch portfolios');
+            }
+
+            const data = await response.json();
+            const portfolios = data.portfolios || [];
+
+            setUserPortfolios(portfolios);
+
+            // Auto-select primary portfolio if no portfolio is selected
+            if (!selectedPortfolio && portfolios.length > 0) {
+              const primary = portfolios.find(p => p.is_primary) || portfolios[0];
+              setSelectedPortfolio(primary);
+            }
+
+            return portfolios;
+          } catch (error) {
+            console.error('Error loading portfolios:', error);
+            setPortfoliosError(error.message);
+            return [];
+          }
+        },
+
+        // Get portfolio by ID
+        getPortfolioById: (portfolioId) => {
+          const { userPortfolios } = get();
+          return userPortfolios.find(p => p.id === portfolioId);
+        },
+
+        // Update a portfolio in the list
+        updatePortfolioInList: (portfolioId, updates) => set((state) => ({
+          userPortfolios: state.userPortfolios.map(p =>
+            p.id === portfolioId ? { ...p, ...updates } : p
+          ),
+          selectedPortfolio: state.selectedPortfolio?.id === portfolioId
+            ? { ...state.selectedPortfolio, ...updates }
+            : state.selectedPortfolio,
+        })),
+
+        // Set portfolio as primary
+        setPrimaryPortfolio: async (portfolioId) => {
+          const { updatePortfolioInList, setSelectedPortfolio, getPortfolioById } = get();
+
+          try {
+            const response = await fetch(`/api/portfolios/${portfolioId}/set-primary`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to set primary portfolio');
+            }
+
+            // Update all portfolios to reflect new primary
+            set((state) => ({
+              userPortfolios: state.userPortfolios.map(p => ({
+                ...p,
+                is_primary: p.id === portfolioId,
+              })),
+            }));
+
+            const portfolio = getPortfolioById(portfolioId);
+            if (portfolio) {
+              setSelectedPortfolio({ ...portfolio, is_primary: true });
+            }
+
+            return true;
+          } catch (error) {
+            console.error('Error setting primary portfolio:', error);
+            return false;
+          }
+        },
+
         // ===== CACHE INVALIDATION =====
         lastRefresh: {},
 
@@ -288,6 +452,8 @@ const useAppStore = create(
           selectedTimeframe: state.selectedTimeframe,
           priceAlerts: state.priceAlerts,
           notifications: state.notifications,
+          selectedPortfolio: state.selectedPortfolio,
+          userPortfolios: state.userPortfolios,
         }),
       }
     ),

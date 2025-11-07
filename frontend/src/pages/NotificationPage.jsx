@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import AppHeader from '../components/layout/AppHeader';
-import NotificationFilters from '../features/notifications/components/NotificationFilters';
 import NotificationList from '../features/notifications/components/NotificationList';
 import NotificationModal from '../features/notifications/components/NotificationModal';
 import useAppStore from '../store/useAppStore';
@@ -24,7 +23,7 @@ const NotificationPage = () => {
   });
 
   // Get notifications from store
-  const { notifications, markAsRead, archiveNotification, markAllAsRead, clearNotifications, notifySuccess, notifyError, notifyWarning, notifyInfo } = useAppStore();
+  const { notifications, markAsRead, archiveNotification, markAllAsRead, clearNotifications, clearActiveNotifications, clearArchivedNotifications, notifySuccess, notifyError, notifyWarning, notifyInfo } = useAppStore();
 
   // Filter notifications based on category filters
   const filterNotifications = (notificationsList) => {
@@ -56,13 +55,22 @@ const NotificationPage = () => {
   };
 
   const handleClearAll = () => {
-    const confirm = window.confirm('Are you sure you want to clear all notifications?');
+    const tabName = activeTab === 'active' ? 'active' : 'archived';
+    const confirm = window.confirm(`Are you sure you want to clear all ${tabName} notifications?`);
     if (confirm) {
-      clearNotifications();
+      if (activeTab === 'active') {
+        clearActiveNotifications();
+      } else {
+        clearArchivedNotifications();
+      }
     }
   };
 
   const handleGenerateTestNotifications = () => {
+    // Get the notifyWithMetadata helper
+    const { notifyWithMetadata } = useAppStore.getState();
+
+    // Simple notifications
     notifySuccess('Portfolio updated successfully', {
       category: 'Portfolio',
       actionUrl: '/portfolio'
@@ -81,6 +89,31 @@ const NotificationPage = () => {
     notifyInfo('3 new articles available for AAPL', {
       category: 'News',
       actionUrl: '/entity?ticker=AAPL'
+    });
+
+    // Enriched notification with full metadata
+    notifyWithMetadata({
+      type: 'warning',
+      category: 'Market',
+      subcategory: 'Market Signals',
+      title: 'Critical Sentiment Alert',
+      message: 'AAPL sentiment dropped significantly (-0.45) with 3x normal news volume',
+      preview: 'AAPL sentiment dropped significantly (-0.45)...',
+      modalTitle: 'Market Alert: AAPL',
+      subject: 'Critical Sentiment Change Detected',
+      body: 'Apple Inc. (AAPL) has experienced a sharp decline in sentiment score from +0.12 to -0.45 over the past 24 hours, coinciding with a 3x increase in news volume compared to the 7-day average. This suggests a significant negative market event or news development.',
+      priority: 'high',
+      signalAnalysis: {
+        triggerRule: 'Sentiment < -0.3 AND Volume > 2x Avg',
+        sentimentScore: -0.45,
+        volumeChange: '+200%',
+      },
+      portfolioImpact: {
+        ticker: 'AAPL',
+        price: '$147.52',
+        change: '-3.2%',
+      },
+      actionUrl: '/entity?ticker=AAPL',
     });
   };
 

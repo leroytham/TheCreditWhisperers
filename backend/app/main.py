@@ -3,7 +3,10 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from .api import routes as api_routes
+from .api.notification_routes import router as notification_router
+from .api.portfolio_routes import router as portfolio_router
 from .api.websocket import websocket_endpoint
+from .database import create_indexes
 import logging
 import warnings
 import os
@@ -43,6 +46,12 @@ app.add_middleware(
 # Note: No prefix needed here - the frontend proxy handles /api routing
 app.include_router(api_routes.router)
 
+# Include notification routes
+app.include_router(notification_router)
+
+# Include portfolio routes
+app.include_router(portfolio_router)
+
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")
 async def websocket_route(websocket: WebSocket, client_id: str):
@@ -62,6 +71,24 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "websocket_endpoint": "/ws/notifications/{client_id}"}
+
+# Startup event handler
+@app.on_event("startup")
+async def startup_event():
+    """
+    Initialize database indexes and perform startup tasks.
+    """
+    logger.info("Starting up application...")
+
+    # Create MongoDB indexes for notifications
+    try:
+        create_indexes()
+        logger.info("Database indexes created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database indexes: {e}")
+        # Continue startup even if index creation fails
+
+    logger.info("Application startup complete")
 
 # Cleanup handler for multiprocessing resources
 @app.on_event("shutdown")

@@ -6,7 +6,7 @@ import LoginCard from "./components/auth/LoginPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import EntityPage from "./pages/EntityPage";
 import SectorPage from "./pages/SectorPage";
-import NotificationPage from "./pages/NotificationPage";
+import NotificationPageEnhanced from "./pages/NotificationPageEnhanced";
 import ToastContainer from "./features/notifications/components/ToastContainer";
 import { usePriceAlerts } from "./features/notifications/hooks/usePriceAlerts";
 import { useNewsNotifications } from "./features/notifications/hooks/useNewsNotifications";
@@ -80,7 +80,7 @@ function App() {
             <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/entity" element={<EntityPage />} />
             <Route path="/sector_page" element={<SectorPage />} />
-            <Route path="/notifications" element={<NotificationPage />} />
+            <Route path="/notifications" element={<NotificationPageEnhanced />} />
             <Route path="/" element={<LoginCard />} />
           </Routes>
           {/* Global Toast Notification Container */}
