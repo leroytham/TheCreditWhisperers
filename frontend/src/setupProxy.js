@@ -24,7 +24,8 @@ module.exports = function(app) {
     createProxyMiddleware({
       target: backendUrl,
       changeOrigin: true,
-      pathRewrite: {'^/api': ''}, // Remove /api prefix when forwarding to backend
+      // NOTE: We DON'T rewrite the path anymore - backend now handles /api prefix
+      // This makes development and production consistent
       logLevel: 'debug',
       onProxyReq: (proxyReq, req, res) => {
         // Log proxied requests in development
@@ -98,8 +99,8 @@ module.exports = function(app) {
 
   console.log('\n✅ Proxy Configuration Loaded:');
   console.log(`   Backend URL: ${backendUrl}`);
-  console.log(`   API: /api/* -> ${backendUrl}/*`);
+  console.log(`   API: /api/* -> ${backendUrl}/api/*`);
   console.log(`   WebSocket: /ws/* -> ${backendUrl}/ws/*`);
-  console.log(`   Path rewrite: /api -> / (removes /api prefix)`);
+  console.log(`   Path rewrite: None (backend handles /api prefix)`);
   console.log('');
 };

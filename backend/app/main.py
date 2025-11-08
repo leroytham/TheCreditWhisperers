@@ -1,7 +1,9 @@
 # app/main.py
 
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from .api import routes as api_routes
 from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
@@ -11,6 +13,7 @@ from .core.config import settings
 import logging
 import warnings
 import os
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -64,14 +67,17 @@ app.add_middleware(
 )
 
 # Include the API router from routes.py
-# Note: No prefix needed here - the frontend proxy handles /api routing
-app.include_router(api_routes.router)
+# IMPORTANT: /api prefix is required for production deployment
+# - Development: setupProxy.js forwards /api/* to backend (strips /api)
+# - Production: Frontend makes requests to /api/*, backend must handle them
+# We add the prefix here so both environments work correctly
+app.include_router(api_routes.router, prefix="/api")
 
-# Include notification routes
-app.include_router(notification_router)
+# Include notification routes (also with /api prefix)
+app.include_router(notification_router, prefix="/api")
 
-# Include portfolio routes
-app.include_router(portfolio_router)
+# Include portfolio routes (also with /api prefix)
+app.include_router(portfolio_router, prefix="/api")
 
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")
@@ -83,15 +89,57 @@ async def websocket_route(websocket: WebSocket, client_id: str):
         logger.error(f"WebSocket error for client {client_id}: {e}")
         raise
 
-# A simple root endpoint
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to the Financial Analysis API"}
+# =============================================================================
+# STATIC FILE SERVING FOR REACT FRONTEND
+# =============================================================================
+# The React frontend is built and copied to app/static/ during deployment
+# We serve it from the FastAPI backend to support:
+# 1. Single deployment (frontend + backend together)
+# 2. React Router client-side routing (catch-all route)
+# 3. Proper static asset serving (JS, CSS, images)
 
-# Health check endpoint
+# Get the static directory path
+STATIC_DIR = Path(__file__).parent / "static"
+
+# Mount static files (JS, CSS, images, etc.) at /static
+# This serves files like /static/js/main.js, /static/css/main.css
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    logger.info(f"Mounted static directory: {STATIC_DIR}")
+else:
+    logger.warning(f"Static directory not found: {STATIC_DIR}")
+    logger.warning("Frontend will not be served. Run 'npm run build' in frontend/")
+
+# Health check endpoint (must come before catch-all route)
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "websocket_endpoint": "/ws/notifications/{client_id}"}
+
+# Catch-all route to serve index.html for React Router
+# This MUST be defined LAST so API routes take precedence
+# Handles all routes like /, /login, /portfolio, etc. by serving index.html
+# React Router then handles the client-side routing
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    """
+    Serve the React frontend for all non-API routes.
+    This enables React Router to handle client-side routing.
+
+    NOTE: This route is defined last so API routes take precedence.
+    API routes are already registered above via app.include_router()
+    """
+    index_path = STATIC_DIR / "index.html"
+
+    if index_path.exists():
+        return FileResponse(index_path)
+    else:
+        # If index.html doesn't exist, show helpful error
+        return {
+            "error": "Frontend not built",
+            "message": "Run 'cd frontend && npm run build' to build the React app",
+            "static_dir": str(STATIC_DIR),
+            "index_exists": index_path.exists()
+        }
 
 # Startup event handler
 @app.on_event("startup")
