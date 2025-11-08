@@ -67,16 +67,19 @@ app.add_middleware(
 )
 
 # Include the API router from routes.py
-# IMPORTANT: /api prefix is required for production deployment
-# - Development: setupProxy.js forwards /api/* to backend (strips /api)
-# - Production: Frontend makes requests to /api/*, backend must handle them
-# We add the prefix here so both environments work correctly
+# IMPORTANT: We include routers TWICE to support both localhost and production:
+# - Localhost: setupProxy.js strips /api prefix, so backend needs routes without prefix
+# - Production: Frontend calls /api/* directly, so backend needs routes with /api prefix
+# This dual setup ensures both environments work without code changes
+
+# Routes WITHOUT /api prefix (for localhost development)
+app.include_router(api_routes.router)
+app.include_router(notification_router)
+app.include_router(portfolio_router)
+
+# Routes WITH /api prefix (for production deployment)
 app.include_router(api_routes.router, prefix="/api")
-
-# Include notification routes (also with /api prefix)
 app.include_router(notification_router, prefix="/api")
-
-# Include portfolio routes (also with /api prefix)
 app.include_router(portfolio_router, prefix="/api")
 
 # WebSocket endpoint for real-time notifications
