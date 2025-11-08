@@ -9,9 +9,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       # Step 1: Checkout the repository
@@ -58,20 +55,23 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r ./backend/requirements.txt
 
-      # Step 7: Login to Azure
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_6E5A11DC635D4DDCB73922C6512F90D9 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_C1F29871F55C49CFAC9874215D03FF26 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_0783F7F4D4284F15A23ED9DAC79BAE70 }}
-
-      # Step 8: Deploy to Azure Web App
+      # =============================================================================
+      # Step 7: Deploy to Azure Web App using Publish Profile
+      # =============================================================================
+      # SETUP REQUIRED: Add GitHub Secret
+      # 1. Go to Azure Portal > App Service "credit" > Download publish profile
+      # 2. Go to GitHub > Settings > Secrets and variables > Actions
+      # 3. Click "New repository secret"
+      # 4. Name: AZURE_WEBAPP_PUBLISH_PROFILE
+      # 5. Value: Paste the entire contents of the publish profile XML file
+      # 6. Click "Add secret"
+      # =============================================================================
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'credit'
           slot-name: 'Production'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ./backend
           startup-command: >
             gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 app.main:app
