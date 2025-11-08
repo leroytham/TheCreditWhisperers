@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import LoginCard from "./components/auth/LoginPage";
@@ -81,7 +81,7 @@ function App() {
             <Route path="/entity" element={<EntityPage />} />
             <Route path="/sector_page" element={<SectorPage />} />
             <Route path="/notifications" element={<NotificationPageEnhanced />} />
-            <Route path="/" element={<LoginCard />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
           </Routes>
           {/* Global Toast Notification Container */}
           <ToastContainer />
