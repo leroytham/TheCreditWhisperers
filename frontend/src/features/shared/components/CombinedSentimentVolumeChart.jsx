@@ -11,6 +11,39 @@ const hasTimeComponent = (timestamp) => {
 };
 
 /**
+ * Helper to process aggregated headlines: deduplicate, score, rank, and limit
+ * @param {Array} headlinesList - Array of headlines to process
+ * @param {number} maxHeadlines - Maximum number of headlines to return (default: 15)
+ * @returns {Array} Processed array of top headlines
+ */
+const processAggregatedHeadlines = (headlinesList, maxHeadlines = 15) => {
+  if (!headlinesList || headlinesList.length === 0) {
+    return [];
+  }
+
+  // Deduplicate headlines by link using a Map
+  const uniqueHeadlines = new Map();
+  headlinesList.forEach(headline => {
+    if (headline && headline.link && !uniqueHeadlines.has(headline.link)) {
+      uniqueHeadlines.set(headline.link, headline);
+    }
+  });
+
+  // Score each headline and sort by impact
+  // Score = abs(sentiment_score) * (relevance_score || 1)
+  const scoredHeadlines = Array.from(uniqueHeadlines.values())
+    .map(headline => ({
+      ...headline,
+      _score: Math.abs(headline.sentiment_score || 0) * (headline.relevance_score || 1)
+    }))
+    .sort((a, b) => b._score - a._score)
+    .slice(0, maxHeadlines)
+    .map(({ _score, ...headline }) => headline); // Remove the temporary _score field
+
+  return scoredHeadlines;
+};
+
+/**
  * CombinedSentimentVolumeChart Component
  *
  * Combined chart with dual Y-axes showing both volume and sentiment:
@@ -183,7 +216,7 @@ const CombinedSentimentVolumeChart = ({
           }),
           volume: Math.round(avgVolume),
           sentiment: avgSentiment,
-          headlines: [] // Aggregated data doesn't preserve individual headlines
+          headlines: processAggregatedHeadlines(weekData.headlinesList) // Process and preserve top headlines
         });
       });
 
@@ -233,7 +266,7 @@ const CombinedSentimentVolumeChart = ({
           }),
           volume: Math.round(avgVolume),
           sentiment: avgSentiment,
-          headlines: [] // Aggregated data doesn't preserve individual headlines
+          headlines: processAggregatedHeadlines(monthData.headlinesList) // Process and preserve top headlines
         });
       });
 
@@ -581,9 +614,16 @@ const CombinedSentimentVolumeChart = ({
 
       {/* Headlines */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        <h5 className="text-sm font-semibold text-gray-700 mb-2">
-          Top Headlines ({hasHeadlines ? dataPoint.headlines.length : 0})
-        </h5>
+        <div className="mb-2">
+          <h5 className="text-sm font-semibold text-gray-700">
+            {dateDisplay.isAggregated ? 'Top Headlines from Period' : 'Top Headlines'} ({hasHeadlines ? dataPoint.headlines.length : 0})
+          </h5>
+          {dateDisplay.isAggregated && hasHeadlines && (
+            <p className="text-xs text-gray-500 mt-1">
+              Showing top stories from this {dateDisplay.aggregationType} (ranked by impact: sentiment × relevance)
+            </p>
+          )}
+        </div>
 
         {hasHeadlines ? (
           <>
@@ -667,12 +707,9 @@ const CombinedSentimentVolumeChart = ({
                   <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  <p className="text-sm font-medium">Headlines unavailable for aggregated data</p>
+                  <p className="text-sm font-medium">No headlines available for this {dateDisplay.aggregationType} period</p>
                   <p className="text-xs mt-2">
-                    This data point shows {dateDisplay.aggregationType} averages across multiple days.
-                  </p>
-                  <p className="text-xs mt-1 text-blue-500">
-                    Switch to 1D, 1W, or 1M timeframe to view individual headlines.
+                    No news articles were found during this time window.
                   </p>
                 </>
               ) : (
@@ -857,44 +894,66 @@ const CombinedSentimentVolumeChart = ({
               {/* Volume Area Chart (rendered first, as background) */}
               {(() => {
                 const baseline = topPadding + chartHeight;
-                let pathD = '';
 
-                // Build stepped area chart with explicit left/right edges for each bar
-                // This prevents triangular distortion with sparse data
-                processedData.forEach((point, i) => {
-                  // Handle single-point case: center with narrow bar
-                  let xLeft, xRight;
-                  if (processedData.length === 1) {
-                    const centerX = getXPosition(i);
-                    const barHalfWidth = Math.min(50, chartWidth * 0.1);
-                    xLeft = centerX - barHalfWidth;
-                    xRight = centerX + barHalfWidth;
-                  } else {
-                    xLeft = getXPosition(i);
-                    xRight = leftPadding + ((i + 1) * stepWidth);
-                  }
+                if (!processedData || processedData.length === 0) {
+                  return null;
+                }
+
+                // Pre-compute bar bounds so we can clamp to the plot area cleanly
+                const barSegments = processedData.map((point, i) => {
                   const barHeight = point.volume > 0
                     ? (point.volume / volumeMax) * chartHeight
                     : 0;
-                  const y = topPadding + chartHeight - barHeight;
+                  const y = baseline - barHeight;
 
-                  if (i === 0) {
-                    // Start at left edge of first bar at baseline
-                    pathD = `M ${xLeft} ${baseline}`;
-                  } else {
-                    // Draw from previous bar's right edge at baseline to current bar's left edge
-                    pathD += ` L ${xLeft} ${baseline}`;
+                  if (processedData.length === 1) {
+                    const centerX = getXPosition(i);
+                    const halfWidth = Math.min(chartWidth * 0.2, 60);
+                    const xLeft = Math.max(leftPadding, centerX - halfWidth);
+                    const xRight = Math.min(leftPadding + chartWidth, centerX + halfWidth);
+                    return { xLeft, xRight, y };
                   }
 
-                  // Draw up to bar height at left edge
-                  pathD += ` L ${xLeft} ${y}`;
-                  // Draw across to right edge at bar height
-                  pathD += ` L ${xRight} ${y}`;
-                  // Draw down to baseline at right edge
-                  pathD += ` L ${xRight} ${baseline}`;
+                  const centerX = getXPosition(i);
+                  const maxHalfWidth = stepWidth / 2;
+                  const desiredHalfWidth = Math.min(maxHalfWidth, Math.min(24, stepWidth * 0.45));
+
+                  let xLeft = centerX - desiredHalfWidth;
+                  let xRight = centerX + desiredHalfWidth;
+
+                  if (i === 0) {
+                    xLeft = leftPadding;
+                  }
+                  if (i === processedData.length - 1) {
+                    xRight = leftPadding + chartWidth;
+                  }
+
+                  xLeft = Math.max(leftPadding, xLeft);
+                  xRight = Math.min(leftPadding + chartWidth, xRight);
+
+                  if (xRight <= xLeft) {
+                    // Ensure a visible bar when points are extremely dense
+                    const fallbackHalfWidth = Math.max(0.5, maxHalfWidth * 0.4);
+                    const adjustedCenter = Math.min(leftPadding + chartWidth, Math.max(leftPadding, centerX));
+                    xLeft = Math.max(leftPadding, adjustedCenter - fallbackHalfWidth);
+                    xRight = Math.min(leftPadding + chartWidth, adjustedCenter + fallbackHalfWidth);
+                  }
+
+                  return { xLeft, xRight, y };
                 });
 
-                // Close the path
+                let pathD = `M ${barSegments[0].xLeft} ${baseline}`;
+
+                barSegments.forEach((segment, index) => {
+                  if (index > 0) {
+                    pathD += ` L ${segment.xLeft} ${baseline}`;
+                  }
+
+                  pathD += ` L ${segment.xLeft} ${segment.y}`;
+                  pathD += ` L ${segment.xRight} ${segment.y}`;
+                  pathD += ` L ${segment.xRight} ${baseline}`;
+                });
+
                 pathD += ' Z';
 
                 return (
