@@ -979,12 +979,12 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
 
             daily_data[date]["headlines"].append(headline_item)
 
-        # Calculate average scores and sort headlines by sentiment magnitude
+        # Calculate average scores and sort headlines by sentiment magnitude and relevance
         for date, data in daily_data.items():
             if data["count"] > 0:
                 data["score"] = data["score"] / data["count"]
-            # Sort headlines by absolute sentiment score (most polar first)
-            data["headlines"].sort(key=lambda x: abs(x["sentiment_score"]), reverse=True)
+            # Sort headlines by absolute sentiment score and relevance (most impactful first)
+            data["headlines"].sort(key=lambda x: abs(x.get("sentiment_score", 0)) * max(0.0001, x.get("relevance_score", 1.0)), reverse=True)
 
         return {
             "ticker": ticker,

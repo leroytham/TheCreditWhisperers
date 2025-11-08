@@ -270,7 +270,7 @@ const PriceChart = ({
     const prev = (idx > 0 && chartData[idx - 1]) ? chartData[idx - 1].y : hoveredPoint.price;
     const change = hoveredPoint.price - prev;
     const changePct = prev ? (change / prev) * 100 : 0;
-    const dateStr = hoveredPoint.date ? formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time) : '';
+    const dateStr = hoveredPoint.date ? formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time, exchange) : '';
     return { left, top, change, changePct, dateStr };
   })() : null;
 
@@ -966,8 +966,23 @@ const PriceChart = ({
             <div className="text-sm mb-2 text-gray-700">
               {hoveredEvent.description}
               {hoveredEvent.impact_value && (
-                <span className="ml-2 text-green-600 font-semibold">
-                  +${hoveredEvent.impact_value.toLocaleString()}
+                <span className={`ml-2 font-semibold ${
+                  hoveredEvent.type === 'dividend'
+                    ? 'text-green-600'  // Money received
+                    : hoveredEvent.type === 'purchase'
+                    ? 'text-gray-600'   // Money spent (neutral)
+                    : hoveredEvent.impact_value < 0
+                    ? 'text-red-600'    // Withdrawal/loss
+                    : 'text-green-600'  // Default positive
+                }`}>
+                  {hoveredEvent.type === 'dividend'
+                    ? '+'
+                    : hoveredEvent.type === 'purchase'
+                    ? ''  // No sign for purchases (cost displayed)
+                    : hoveredEvent.impact_value < 0
+                    ? '-'
+                    : '+'
+                  }${Math.abs(hoveredEvent.impact_value).toLocaleString()}
                 </span>
               )}
             </div>

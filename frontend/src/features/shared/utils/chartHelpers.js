@@ -1,3 +1,5 @@
+import { parseExchangeDate, parseExchangeTimestamp } from './formatters';
+
 /**
  * Shared Chart Helper Functions
  *
@@ -166,13 +168,17 @@ export const getPriceRange = (chartData, paddingPercent = 0.1) => {
 
 /**
  * Format X-axis label based on timeframe
- * @param {Date} date - Date object
+ * @param {Date|string} date - Date object or string
  * @param {string} timeframe - Timeframe (1D, 1M, 6M, YTD, 1Y, 5Y)
  * @param {string} time - Time string (for intraday)
+ * @param {string} exchange - Exchange code for timezone-aware parsing (default: 'NASDAQ')
  * @returns {string} Formatted label
  */
-export const formatXAxisLabel = (date, timeframe, time = null) => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+export const formatXAxisLabel = (date, timeframe, time = null, exchange = 'NASDAQ') => {
+  // Use parseExchangeTimestamp for 1D to preserve time, parseExchangeDate for others
+  const dateObj = typeof date === 'string'
+    ? (timeframe === '1D' ? parseExchangeTimestamp(date, exchange) : parseExchangeDate(date, exchange))
+    : date;
 
   switch (timeframe) {
     case '1D':
@@ -338,13 +344,17 @@ export const getMarketHours = (exchange) => {
 
 /**
  * Format tooltip date/time based on timeframe
- * @param {Date} date - Date object
+ * @param {Date|string} date - Date object or string
  * @param {string} timeframe - Timeframe
  * @param {string} time - Time string (for intraday)
+ * @param {string} exchange - Exchange code for timezone-aware parsing (default: 'NASDAQ')
  * @returns {string} Formatted tooltip string
  */
-export const formatTooltipDateTime = (date, timeframe, time = null) => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+export const formatTooltipDateTime = (date, timeframe, time = null, exchange = 'NASDAQ') => {
+  // Use parseExchangeTimestamp for 1D to preserve time, parseExchangeDate for others
+  const dateObj = typeof date === 'string'
+    ? (timeframe === '1D' ? parseExchangeTimestamp(date, exchange) : parseExchangeDate(date, exchange))
+    : date;
   const currentYear = new Date().getFullYear();
   const dateYear = dateObj.getFullYear();
 
@@ -392,10 +402,10 @@ export const formatTooltipDateTime = (date, timeframe, time = null) => {
  * @param {number} numPoints - Number of timeline points to generate (default 6)
  * @param {number} paddingLeft - Left padding in pixels (default 60)
  * @param {string} timeframe - Current timeframe for label formatting
- * @param {string} exchange - Exchange code for determining market hours (1D only)
+ * @param {string} exchange - Exchange code for determining market hours and timezone (default: 'NASDAQ')
  * @returns {Array} Timeline points with label and x position
  */
-export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60, timeframe = '1Y', exchange = '') => {
+export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60, timeframe = '1Y', exchange = 'NASDAQ') => {
   if (chartData.length === 0) return [];
 
   const effectiveWidth = chartWidth || 660; // Default width for entity
@@ -517,7 +527,7 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 
       let label = '';
       if (point.date) {
-        label = formatXAxisLabel(point.date, timeframe, point.time);
+        label = formatXAxisLabel(point.date, timeframe, point.time, exchange);
       } else {
         label = `Point ${i + 1}`;
       }
@@ -546,7 +556,7 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
     let label = '';
 
     if (point.date) {
-      label = formatXAxisLabel(point.date, timeframe, point.time);
+      label = formatXAxisLabel(point.date, timeframe, point.time, exchange);
     } else {
       label = `Point ${i + 1}`;
     }
@@ -691,9 +701,10 @@ export const calculateFillPath = (
  * Generate daily sentiment bar chart data
  * @param {Object} dailySentiment - Daily sentiment data keyed by date
  * @param {number} daysToShow - Number of days to include (default 7)
+ * @param {string} exchange - Exchange code for timezone-aware parsing (default: 'NASDAQ')
  * @returns {Array} Bar chart data with date, label, score, count, headlines, index
  */
-export const generateDailySentimentBars = (dailySentiment, daysToShow = 7) => {
+export const generateDailySentimentBars = (dailySentiment, daysToShow = 7, exchange = 'NASDAQ') => {
   if (!dailySentiment || Object.keys(dailySentiment).length === 0) {
     return [];
   }
@@ -707,7 +718,7 @@ export const generateDailySentimentBars = (dailySentiment, daysToShow = 7) => {
     const score = dayData.score || 0;
     const count = dayData.count || 0;
     const headlines = dayData.headlines || [];
-    const dateObj = new Date(date);
+    const dateObj = parseExchangeDate(date, exchange);
     const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return {

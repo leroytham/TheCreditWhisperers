@@ -14,8 +14,12 @@
 
 import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
+import { parseExchangeDate, getExchangeTimezone } from '../../shared/utils/formatters';
 
-export const usePortfolioSentiment = (username, accountName, holdings, timeframe = '1W', enabled = true) => {
+// Default exchange for portfolio chart labels (portfolios can contain mixed exchanges)
+const DEFAULT_EXCHANGE = 'NYSE';
+
+export const usePortfolioSentiment = (username, accountName, holdings, timeframe = '1W', enabled = true, exchange = 'US') => {
   const [sentimentData, setSentimentData] = useState(null);
   const [holdingsSentiment, setHoldingsSentiment] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +93,11 @@ export const usePortfolioSentiment = (username, accountName, holdings, timeframe
           return {
             date: day.date,
             timestamp: day.date,
-            label: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            label: parseExchangeDate(day.date, exchange).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              timeZone: getExchangeTimezone(exchange)
+            }),
             avg_sentiment: day.avg_sentiment,
             sentiment: day.avg_sentiment, // For chart compatibility
             fast_sentiment: fastAvg,

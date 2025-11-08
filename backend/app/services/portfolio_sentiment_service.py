@@ -320,10 +320,10 @@ class PortfolioSentimentService:
                 # Add top headlines for this date (sorted by relevance * weight)
                 date_headlines = [h for d, h in all_headlines if d == date_str]
                 date_headlines.sort(
-                    key=lambda x: abs(x.get("sentiment_score", 0)) * x.get("weight", 0),
+                    key=lambda x: abs(x.get("sentiment_score", 0)) * max(0.0001, x.get("relevance_score", 1.0)) * x.get("weight", 0),
                     reverse=True
                 )
-                day_data["headlines"] = date_headlines[:10]  # Top 10 headlines
+                day_data["headlines"] = date_headlines  # Return all headlines
 
             # Finalize metadata
             if total_weight_with_data > 0:
@@ -637,46 +637,73 @@ class PortfolioSentimentService:
 
                 # Aggregate each time point
                 for point in sentiment_data["data"]:
-                    timestamp = point.get("timestamp")
-                    if not timestamp:
+                    timestamp_str = point.get("timestamp")
+                    if not timestamp_str:
                         continue
 
-                    if timestamp not in aggregated_series:
-                        aggregated_series[timestamp] = {
-                            "timestamp": timestamp,
+                    try:
+                        timestamp_dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    except ValueError:
+                        continue
+
+                    canonical_dt = timestamp_dt.replace(second=0, microsecond=0)
+                    timestamp_key = canonical_dt.isoformat()
+
+                    if timestamp_key not in aggregated_series:
+                        aggregated_series[timestamp_key] = {
+                            "timestamp": timestamp_dt,
                             "weighted_score": 0,
                             "article_count": 0,
                             "momentum": 0,
-                            "holdings_with_data": 0
+                            "holdings_with_data": 0,
+                            "weight_total": 0.0,
+                            "headlines": []
                         }
+                    else:
+                        # Preserve the latest precise timestamp for accurate detail-panel display
+                        if timestamp_dt > aggregated_series[timestamp_key]["timestamp"]:
+                            aggregated_series[timestamp_key]["timestamp"] = timestamp_dt
 
                     score = point.get("score", 0)
-                    aggregated_series[timestamp]["weighted_score"] += score * weight
-                    aggregated_series[timestamp]["article_count"] += point.get("article_count", 0)
-                    aggregated_series[timestamp]["holdings_with_data"] += 1
+                    aggregated_series[timestamp_key]["weighted_score"] += score * weight
+                    aggregated_series[timestamp_key]["article_count"] += point.get("article_count", 0)
+                    aggregated_series[timestamp_key]["holdings_with_data"] += 1
+                    aggregated_series[timestamp_key]["weight_total"] += weight
 
                     # Weighted momentum (if available)
                     if "momentum" in point:
-                        aggregated_series[timestamp]["momentum"] += point["momentum"] * weight
+                        aggregated_series[timestamp_key]["momentum"] += point["momentum"] * weight
+
+                    # Collect headlines with symbol and weight
+                    for headline in point.get("headlines", []):
+                        headline_copy = headline.copy()
+                        headline_copy["symbol"] = symbol
+                        headline_copy["weight"] = weight
+                        aggregated_series[timestamp_key]["headlines"].append(headline_copy)
 
             # Normalize and convert to list
             data_points = []
-            for timestamp in sorted(aggregated_series.keys()):
-                point = aggregated_series[timestamp]
-
-                if total_weight_with_data > 0 and point["holdings_with_data"] > 0:
-                    normalized_score = point["weighted_score"] / total_weight_with_data
-                    normalized_momentum = point["momentum"] / total_weight_with_data
+            for point in sorted(aggregated_series.values(), key=lambda item: item["timestamp"]):
+                window_weight = point.get("weight_total", 0.0)
+                if window_weight > 0:
+                    normalized_score = point["weighted_score"] / window_weight
+                    normalized_momentum = point["momentum"] / window_weight
                 else:
                     normalized_score = 0
                     normalized_momentum = 0
 
                 data_points.append({
-                    "timestamp": timestamp,
+                    "timestamp": point["timestamp"].isoformat(),
                     "score": normalized_score,
                     "article_count": point["article_count"],
                     "momentum": normalized_momentum,
-                    "holdings_with_data": point["holdings_with_data"]
+                    "holdings_with_data": point["holdings_with_data"],
+                    "timezone": "UTC",
+                    "headlines": sorted(
+                        point["headlines"],
+                        key=lambda x: abs(x.get("sentiment_score", 0)) * max(0.0001, x.get("relevance_score", 1.0)) * x.get("weight", 0),
+                        reverse=True
+                    )  # Return all headlines
                 })
 
             return {
@@ -834,7 +861,7 @@ class PortfolioSentimentService:
             for date, data in daily_data.items():
                 if data["count"] > 0:
                     data["score"] = data["score"] / data["count"]
-                data["headlines"].sort(key=lambda x: abs(x["sentiment_score"]), reverse=True)
+                data["headlines"].sort(key=lambda x: abs(x.get("sentiment_score", 0)) * max(0.0001, x.get("relevance_score", 1.0)), reverse=True)
 
             return {
                 "ticker": ticker,
@@ -965,11 +992,28 @@ class PortfolioSentimentService:
                 if prev_score is not None:
                     momentum = avg_score - prev_score
 
+                # Extract headline details from articles
+                headlines = []
+                for article in window['articles']:
+                    headlines.append({
+                        "title": article.get("title", ""),
+                        "provider": article.get("provider", "Unknown"),
+                        "sentiment_score": article.get("sentiment_score_raw", 0),
+                        "sentiment_label": article.get("sentiment_label", "Neutral"),
+                        "link": article.get("link", ""),
+                        "relevance_score": article.get("ticker_relevance_score", 0),
+                        "publish_date": article.get("publish_date", "")
+                    })
+
+                # Sort headlines by absolute sentiment score and relevance
+                headlines.sort(key=lambda x: abs(x.get("sentiment_score", 0)) * max(0.0001, x.get("relevance_score", 1.0)), reverse=True)
+
                 data_points.append({
                     'timestamp': window['timestamp'],
                     'score': avg_score,
                     'article_count': window['article_count'],
-                    'momentum': momentum
+                    'momentum': momentum,
+                    'headlines': headlines
                 })
 
                 prev_score = avg_score

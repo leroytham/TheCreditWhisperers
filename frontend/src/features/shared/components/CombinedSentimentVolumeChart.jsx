@@ -1,5 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { formatTimestampWithTimezone, getExchangeTimezone, getTimezoneAbbreviation } from '../utils/formatters';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { getExchangeTimezone, getTimezoneAbbreviation, parseExchangeDate, parseExchangeTimestamp, getWeekStartInTimezone, getMonthKeyInTimezone, getMonthStartInTimezone, addDaysInTimezone } from '../utils/formatters';
+
+/**
+ * Helper to detect if a timestamp contains a time component
+ * @param {string} timestamp - Timestamp string
+ * @returns {boolean} True if timestamp has time component (e.g., "2024-11-01T14:30:00"), false for date-only (e.g., "2024-11-01")
+ */
+const hasTimeComponent = (timestamp) => {
+  return timestamp && typeof timestamp === 'string' && timestamp.includes('T');
+};
 
 /**
  * CombinedSentimentVolumeChart Component
@@ -34,7 +43,10 @@ const CombinedSentimentVolumeChart = ({
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [pinnedIndex, setPinnedIndex] = useState(null);
   const [showAllHeadlines, setShowAllHeadlines] = useState(false);
+  const [dynamicChartWidth, setDynamicChartWidth] = useState(650);
+  const resetTimeoutIdRef = useRef(null);
   const chartRef = useRef(null);
+  const chartContainerRef = useRef(null);
 
   // Handle click outside to close pinned tooltip
   useEffect(() => {
@@ -51,6 +63,23 @@ const CombinedSentimentVolumeChart = ({
       };
     }
   }, [pinnedIndex]);
+
+  // Responsive width calculation
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = chartContainerRef.current;
+      if (!el) return;
+      // Use container width minus padding for dual Y-axis labels
+      const containerWidth = el.clientWidth;
+      const availableWidth = containerWidth - 120; // Space for left + right Y-axis
+      // Cap at max width for very large screens, min width for small screens
+      const w = Math.min(1200, Math.max(300, availableWidth));
+      setDynamicChartWidth(w);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // Helper function to get sentiment label based on score
   const getSentimentLabel = (sentiment) => {
@@ -75,19 +104,35 @@ const CombinedSentimentVolumeChart = ({
     // Ensure all data has proper label format for display with exchange timezone
     const normalizeData = (dataArray) => {
       return dataArray.map(point => {
-        // For 1D with hourly data, ensure label shows time in exchange timezone
+        // For 1D timeframe, distinguish between intraday (hourly) and daily data
         if (timeframe === '1D' && point.timestamp) {
-          const date = new Date(point.timestamp);
           const timezone = getExchangeTimezone(exchange);
-          return {
-            ...point,
-            label: date.toLocaleTimeString('en-US', { 
-              hour: 'numeric', 
-              minute: '2-digit', 
-              hour12: true,
-              timeZone: timezone
-            })
-          };
+
+          // Check if timestamp has a time component (intraday data) or is date-only (daily data)
+          if (hasTimeComponent(point.timestamp)) {
+            // Intraday data: show time of day
+            const date = parseExchangeTimestamp(point.timestamp, exchange);
+            return {
+              ...point,
+              label: date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+                timeZone: timezone
+              })
+            };
+          } else {
+            // Daily data: show date
+            const date = parseExchangeDate(point.timestamp, exchange);
+            return {
+              ...point,
+              label: date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                timeZone: timezone
+              })
+            };
+          }
         }
         return point;
       });
@@ -104,12 +149,9 @@ const CombinedSentimentVolumeChart = ({
       const weekMap = new Map();
 
       rawData.forEach(point => {
-        const date = new Date(point.timestamp);
-        // Get week start (Monday)
-        const dayOfWeek = date.getDay();
-        const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-        const weekStart = new Date(date.setDate(diff));
-        weekStart.setHours(0, 0, 0, 0);
+        const date = parseExchangeDate(point.timestamp, exchange);
+        // Get week start (Monday) in exchange timezone
+        const weekStart = getWeekStartInTimezone(date, exchange);
         const weekKey = weekStart.toISOString();
 
         if (!weekMap.has(weekKey)) {
@@ -134,7 +176,11 @@ const CombinedSentimentVolumeChart = ({
 
         weeklyData.push({
           timestamp: weekData.timestamp,
-          label: new Date(weekData.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          label: new Date(weekData.timestamp).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            timeZone: getExchangeTimezone(exchange)
+          }),
           volume: Math.round(avgVolume),
           sentiment: avgSentiment,
           headlines: [] // Aggregated data doesn't preserve individual headlines
@@ -150,12 +196,17 @@ const CombinedSentimentVolumeChart = ({
       const monthMap = new Map();
 
       rawData.forEach(point => {
-        const date = new Date(point.timestamp);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const date = parseExchangeDate(point.timestamp, exchange);
+        // Get month key in exchange timezone (YYYY-MM format)
+        const monthKey = getMonthKeyInTimezone(date, exchange);
 
         if (!monthMap.has(monthKey)) {
+          // Parse year and month from monthKey to create month start timestamp
+          const [year, month] = monthKey.split('-').map(Number);
+          const monthStart = getMonthStartInTimezone(year, month - 1, exchange); // month - 1 because JS months are 0-indexed
+
           monthMap.set(monthKey, {
-            timestamp: new Date(date.getFullYear(), date.getMonth(), 1).toISOString(),
+            timestamp: monthStart.toISOString(),
             volumes: [],
             sentiments: [],
             headlinesList: []
@@ -175,7 +226,11 @@ const CombinedSentimentVolumeChart = ({
 
         monthlyData.push({
           timestamp: monthData.timestamp,
-          label: new Date(monthData.timestamp).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          label: new Date(monthData.timestamp).toLocaleDateString('en-US', {
+            month: 'short',
+            year: 'numeric',
+            timeZone: getExchangeTimezone(exchange)
+          }),
           volume: Math.round(avgVolume),
           sentiment: avgSentiment,
           headlines: [] // Aggregated data doesn't preserve individual headlines
@@ -192,11 +247,32 @@ const CombinedSentimentVolumeChart = ({
   // Apply aggregation to data
   const processedData = aggregateDataByTimeframe(data);
 
-  // Set initial hover to the latest (last) data point
+  // Set initial hover to the latest (last) data point with delay
+  // Delay allows users time to move mouse from chart to detail panel
   useEffect(() => {
-    if (processedData && processedData.length > 0 && hoveredIndex === null && pinnedIndex === null) {
-      setHoveredIndex(processedData.length - 1);
+    // Clear any existing timeout
+    if (resetTimeoutIdRef.current) {
+      clearTimeout(resetTimeoutIdRef.current);
+      resetTimeoutIdRef.current = null;
     }
+
+    // Only auto-reset if both are null AND there's data
+    if (processedData && processedData.length > 0 && hoveredIndex === null && pinnedIndex === null) {
+      // Delay the reset to allow users time to move to detail panel
+      const timeoutId = setTimeout(() => {
+        setHoveredIndex(processedData.length - 1);
+        resetTimeoutIdRef.current = null;
+      }, 750); // 750ms gives users time to move mouse
+
+      resetTimeoutIdRef.current = timeoutId;
+    }
+
+    return () => {
+      if (resetTimeoutIdRef.current) {
+        clearTimeout(resetTimeoutIdRef.current);
+        resetTimeoutIdRef.current = null;
+      }
+    };
   }, [processedData, hoveredIndex, pinnedIndex]);
 
   // Reset "Show All Headlines" when switching data points
@@ -204,22 +280,12 @@ const CombinedSentimentVolumeChart = ({
     setShowAllHeadlines(false);
   }, [hoveredIndex, pinnedIndex]);
 
-  // Debug: Log processed data to verify timestamps and labels match
+  // Reset pinned/hovered indices when data dependencies change
+  // This prevents stale indices from pointing to wrong data or out-of-range positions
   useEffect(() => {
-    if (processedData && processedData.length > 0 && timeframe === '1D') {
-      console.log('[CombinedChart] 1D Processed Data Sample:', {
-        first: { 
-          timestamp: processedData[0]?.timestamp, 
-          label: processedData[0]?.label 
-        },
-        last: { 
-          timestamp: processedData[processedData.length - 1]?.timestamp, 
-          label: processedData[processedData.length - 1]?.label 
-        },
-        totalPoints: processedData.length
-      });
-    }
-  }, [processedData, timeframe]);
+    setPinnedIndex(null);
+    setHoveredIndex(null);
+  }, [timeframe, viewMode, data, exchange]);
 
   // Chart dimensions - SINGLE combined chart with dual Y-axis
   const topPadding = 40;
@@ -227,7 +293,7 @@ const CombinedSentimentVolumeChart = ({
   const rightPadding = 60; // Increased for right Y-axis labels
   const bottomPadding = 50; // For X-axis labels
   const chartHeight = 400; // Taller single chart
-  const chartWidth = 650;
+  const chartWidth = dynamicChartWidth; // Responsive width
 
   // Find max volume for left Y-axis scaling
   const maxVolume = processedData.length > 0
@@ -243,8 +309,9 @@ const CombinedSentimentVolumeChart = ({
   const sentimentRange = sentimentMax - sentimentMin;
 
   // Generate Y-axis values for volume (left) - 5 levels
+  // Don't round so small volumes show distinct tick labels (e.g., 1.0, 0.8, 0.5 instead of 1, 1, 1)
   const volumeAxisValues = Array.from({ length: 5 }, (_, i) =>
-    Math.round(volumeMax * (1 - i / 4))
+    volumeMax * (1 - i / 4)
   );
 
   // Generate Y-axis values for sentiment (right) - 5 levels
@@ -252,6 +319,18 @@ const CombinedSentimentVolumeChart = ({
 
   // Calculate zero line Y position for sentiment chart
   const zeroY = topPadding + ((sentimentMax - 0) / sentimentRange) * chartHeight;
+
+  // Calculate step width for distributing points across chart
+  // Using length-1 ensures last point aligns with right edge
+  const stepWidth = chartWidth / Math.max(1, processedData.length - 1);
+
+  // Helper function to get x-position, centering single data points
+  const getXPosition = (index) => {
+    if (processedData.length === 1) {
+      return leftPadding + (chartWidth / 2);
+    }
+    return leftPadding + (index * stepWidth);
+  };
 
   // Determine number of X-axis labels based on timeframe and data length
   const getXAxisPoints = () => {
@@ -324,13 +403,43 @@ const CombinedSentimentVolumeChart = ({
 
   // Detail Panel Component
   const DetailPanel = ({ dataPoint }) => {
-    const timezone = getExchangeTimezone(exchange);
-    const tzAbbr = getTimezoneAbbreviation(exchange);
+    if (!dataPoint) return null;
+
+    const pointTimezone = dataPoint.timezone ? dataPoint.timezone.toUpperCase() : null;
+    const isUtcPoint = pointTimezone === 'UTC';
+    const exchangeTimezone = getExchangeTimezone(exchange);
+    const timezone = isUtcPoint ? 'UTC' : exchangeTimezone;
+    const tzAbbr = isUtcPoint ? 'UTC' : getTimezoneAbbreviation(exchange);
+
+    const parseTimestampForPoint = (timestamp) => {
+      if (!timestamp) return null;
+      return isUtcPoint ? new Date(timestamp) : parseExchangeTimestamp(timestamp, exchange);
+    };
+
+    const formatInTimezone = (date, options = {}) => {
+      if (!date) return '';
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: timezone,
+        ...options
+      }).format(date);
+    };
     
     // Determine aggregation type and format date accordingly
     const getDateDisplay = () => {
-      const date = new Date(dataPoint.timestamp);
-      
+      // Detect if timestamp has time component to determine parsing method
+      // Use parseExchangeTimestamp for timestamps with time (intraday/rolling),
+      // parseExchangeDate for date-only timestamps (daily aggregated)
+      const isIntraday = hasTimeComponent(dataPoint.timestamp);
+      const date = (viewMode === 'rolling' || isIntraday)
+        ? parseTimestampForPoint(dataPoint.timestamp)
+        : parseExchangeDate(dataPoint.timestamp, exchange);
+
       // Monthly aggregation for 1Y
       if (viewMode === 'monthly' || ['1Y'].includes(timeframe)) {
         return {
@@ -343,9 +452,8 @@ const CombinedSentimentVolumeChart = ({
       
       // Weekly aggregation for 3M, 6M, YTD
       if (viewMode === 'weekly' || ['3M', '6M', 'YTD'].includes(timeframe)) {
-        // Calculate week end date
-        const weekEnd = new Date(date);
-        weekEnd.setDate(date.getDate() + 6);
+        // Calculate week end date in exchange timezone
+        const weekEnd = addDaysInTimezone(date, 6, exchange);
         return {
           title: `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timezone })}`,
           subtitle: `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timezone })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone })}`,
@@ -356,43 +464,37 @@ const CombinedSentimentVolumeChart = ({
       
       // Rolling 24h window - show times in exchange timezone
       if (viewMode === 'rolling') {
-        const endTime = new Date(dataPoint.timestamp);
-        const startTime = new Date(endTime.getTime() - (24 * 60 * 60 * 1000));
-        
-        const formatDateTime = (d) => {
-          return d.toLocaleString('en-US', {
-            month: 'numeric',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true,
-            timeZone: timezone
-          });
-        };
-        
+        const startTime = date;
+        const endTime = new Date(startTime.getTime() + (24 * 60 * 60 * 1000));
+
         return {
-          title: formatTimestampWithTimezone(date, exchange, { 
-            month: 'short', 
-            day: 'numeric', 
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            second: '2-digit'
+          title: formatInTimezone(startTime, {
+            timeZoneName: 'short'
           }),
           subtitle: `Rolling 24h Window (${tzAbbr})`,
-          timeRange: `${formatDateTime(startTime)} - ${formatDateTime(endTime)}`,
+          timeRange: `${formatInTimezone(startTime, { second: '2-digit', timeZoneName: 'short' })} - ${formatInTimezone(endTime, { second: '2-digit', timeZoneName: 'short' })}`,
           isAggregated: false,
           aggregationType: 'rolling'
         };
       }
-      
+
+      // Intraday data (hourly data points) - show time in exchange timezone
+      if (isIntraday) {
+        return {
+          title: formatInTimezone(date, {
+            timeZoneName: 'short'
+          }),
+          subtitle: `Intraday Data (${tzAbbr})`,
+          isAggregated: false,
+          aggregationType: 'intraday'
+        };
+      }
+
       // Daily data (no aggregation) - show in exchange timezone
       return {
-        title: date.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric', 
+        title: date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
           year: 'numeric',
           timeZone: timezone
         }),
@@ -418,6 +520,19 @@ const CombinedSentimentVolumeChart = ({
           {dateDisplay.timeRange && (
             <div className="text-xs text-gray-400 mt-1 font-mono">
               {dateDisplay.timeRange}
+            </div>
+          )}
+          {/* Pin status indicators */}
+          {pinnedIndex !== null && (
+            <div className="text-xs text-blue-600 font-medium mt-2 flex items-center gap-1">
+              <span>📌</span>
+              <span>Pinned (click bar again to unpin)</span>
+            </div>
+          )}
+          {pinnedIndex === null && hoveredIndex !== null && (
+            <div className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+              <span>💡</span>
+              <span>Click a bar to pin this view</span>
             </div>
           )}
         </div>
@@ -660,11 +775,11 @@ const CombinedSentimentVolumeChart = ({
       )}
       
       {/* Flex container: Chart (2/3) + Detail Panel (1/3) */}
-      <div className="flex flex-col lg:flex-row gap-6" style={{ minHeight: '500px' }} ref={chartRef}>
+      <div className="flex flex-col lg:flex-row gap-6" style={{ minHeight: '400px' }} ref={chartRef}>
 
         {/* Left: Combined chart (2/3 on desktop, full width on mobile) */}
-        <div className="w-full lg:flex-[2]">
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6" style={{ height: '500px' }}>
+        <div ref={chartContainerRef} className="w-full lg:flex-[2]">
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6" style={{ minHeight: '400px' }}>
             <svg className="w-full h-full" viewBox={`0 0 ${leftPadding + chartWidth + rightPadding + 10} ${topPadding + chartHeight + bottomPadding}`} preserveAspectRatio="xMidYMid meet">
               
               {/* Y-axis label (Volume - Left) */}
@@ -697,6 +812,10 @@ const CombinedSentimentVolumeChart = ({
               <g>
                 {volumeAxisValues.map((value, i) => {
                   const yPos = topPadding + (i * (chartHeight / 4));
+                  // Use intelligent formatting: decimals for small volumes, integers for large
+                  const displayValue = volumeMax > 10
+                    ? Math.round(value).toString()
+                    : value.toFixed(1);
                   return (
                     <g key={`vol-${i}`}>
                       <line x1={leftPadding} y1={yPos} x2={leftPadding + chartWidth} y2={yPos} stroke="#e5e7eb" strokeWidth="1" />
@@ -708,7 +827,7 @@ const CombinedSentimentVolumeChart = ({
                         fontSize="11"
                         fontWeight="500"
                       >
-                        {value}
+                        {displayValue}
                       </text>
                     </g>
                   );
@@ -738,20 +857,45 @@ const CombinedSentimentVolumeChart = ({
               {/* Volume Area Chart (rendered first, as background) */}
               {(() => {
                 const baseline = topPadding + chartHeight;
-                let pathD = `M ${leftPadding} ${baseline}`;
+                let pathD = '';
 
+                // Build stepped area chart with explicit left/right edges for each bar
+                // This prevents triangular distortion with sparse data
                 processedData.forEach((point, i) => {
-                  const x = leftPadding + (i * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
+                  // Handle single-point case: center with narrow bar
+                  let xLeft, xRight;
+                  if (processedData.length === 1) {
+                    const centerX = getXPosition(i);
+                    const barHalfWidth = Math.min(50, chartWidth * 0.1);
+                    xLeft = centerX - barHalfWidth;
+                    xRight = centerX + barHalfWidth;
+                  } else {
+                    xLeft = getXPosition(i);
+                    xRight = leftPadding + ((i + 1) * stepWidth);
+                  }
                   const barHeight = point.volume > 0
                     ? (point.volume / volumeMax) * chartHeight
                     : 0;
                   const y = topPadding + chartHeight - barHeight;
 
-                  pathD += ` L ${x} ${y}`;
+                  if (i === 0) {
+                    // Start at left edge of first bar at baseline
+                    pathD = `M ${xLeft} ${baseline}`;
+                  } else {
+                    // Draw from previous bar's right edge at baseline to current bar's left edge
+                    pathD += ` L ${xLeft} ${baseline}`;
+                  }
+
+                  // Draw up to bar height at left edge
+                  pathD += ` L ${xLeft} ${y}`;
+                  // Draw across to right edge at bar height
+                  pathD += ` L ${xRight} ${y}`;
+                  // Draw down to baseline at right edge
+                  pathD += ` L ${xRight} ${baseline}`;
                 });
 
-                const lastX = leftPadding + ((processedData.length - 1) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
-                pathD += ` L ${lastX} ${baseline} Z`;
+                // Close the path
+                pathD += ' Z';
 
                 return (
                   <path
@@ -774,41 +918,90 @@ const CombinedSentimentVolumeChart = ({
                 let isInNegative = false;
 
                 processedData.forEach((point, i) => {
-                  const x = leftPadding + (i * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
-                  const normalizedSentiment = (sentimentMax - point.sentiment) / sentimentRange;
+                  const x = getXPosition(i);
+                  const sentiment = point.sentiment;
+                  const normalizedSentiment = (sentimentMax - sentiment) / sentimentRange;
                   const y = topPadding + (normalizedSentiment * chartHeight);
 
-                  if (point.sentiment > 0) {
-                    if (!isInPositive) {
+                  // Handle zero crossings between consecutive points
+                  if (i > 0) {
+                    const prevPoint = processedData[i - 1];
+                    const prevX = getXPosition(i - 1);
+                    const prevSentiment = prevPoint.sentiment;
+
+                    // Check if sentiment crosses zero between previous and current point
+                    const crossesZero = (prevSentiment > 0 && sentiment < 0) ||
+                                        (prevSentiment < 0 && sentiment > 0);
+
+                    if (crossesZero) {
+                      // Calculate exact X-coordinate where sentiment crosses zero using linear interpolation
+                      const xCross = prevX + (x - prevX) * (0 - prevSentiment) / (sentiment - prevSentiment);
+
+                      // Close current region at the crossing point
+                      if (isInPositive) {
+                        positivePath += `L ${xCross} ${zeroY} Z `;
+                        isInPositive = false;
+                      }
+                      if (isInNegative) {
+                        negativePath += `L ${xCross} ${zeroY} Z `;
+                        isInNegative = false;
+                      }
+
+                      // Start new region from the crossing point
+                      if (sentiment > 0) {
+                        positivePath += `M ${xCross} ${zeroY} L ${x} ${y} `;
+                        isInPositive = true;
+                      } else if (sentiment < 0) {
+                        negativePath += `M ${xCross} ${zeroY} L ${x} ${y} `;
+                        isInNegative = true;
+                      }
+                    } else {
+                      // No zero crossing, handle normally
+                      if (sentiment > 0) {
+                        if (!isInPositive) {
+                          positivePath += `M ${x} ${zeroY} L ${x} ${y} `;
+                          isInPositive = true;
+                        } else {
+                          positivePath += `L ${x} ${y} `;
+                        }
+                      } else if (sentiment < 0) {
+                        if (!isInNegative) {
+                          negativePath += `M ${x} ${zeroY} L ${x} ${y} `;
+                          isInNegative = true;
+                        } else {
+                          negativePath += `L ${x} ${y} `;
+                        }
+                      } else {
+                        // Sentiment exactly at zero, close any open paths
+                        if (isInPositive) {
+                          positivePath += `L ${x} ${zeroY} Z `;
+                          isInPositive = false;
+                        }
+                        if (isInNegative) {
+                          negativePath += `L ${x} ${zeroY} Z `;
+                          isInNegative = false;
+                        }
+                      }
+                    }
+                  } else {
+                    // First point - start a region if sentiment is non-zero
+                    if (sentiment > 0) {
                       positivePath += `M ${x} ${zeroY} L ${x} ${y} `;
                       isInPositive = true;
-                    } else {
-                      positivePath += `L ${x} ${y} `;
-                    }
-                  } else if (isInPositive) {
-                    positivePath += `L ${x} ${zeroY} Z `;
-                    isInPositive = false;
-                  }
-
-                  if (point.sentiment < 0) {
-                    if (!isInNegative) {
+                    } else if (sentiment < 0) {
                       negativePath += `M ${x} ${zeroY} L ${x} ${y} `;
                       isInNegative = true;
-                    } else {
-                      negativePath += `L ${x} ${y} `;
                     }
-                  } else if (isInNegative) {
-                    negativePath += `L ${x} ${zeroY} Z `;
-                    isInNegative = false;
                   }
                 });
 
+                // Close any remaining open paths at the end
                 if (isInPositive) {
-                  const lastX = leftPadding + ((processedData.length - 1) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
+                  const lastX = getXPosition(processedData.length - 1);
                   positivePath += `L ${lastX} ${zeroY} Z`;
                 }
                 if (isInNegative) {
-                  const lastX = leftPadding + ((processedData.length - 1) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
+                  const lastX = getXPosition(processedData.length - 1);
                   negativePath += `L ${lastX} ${zeroY} Z`;
                 }
 
@@ -851,8 +1044,8 @@ const CombinedSentimentVolumeChart = ({
               {processedData.map((point, i) => {
                 if (i === 0) return null;
 
-                const x1 = leftPadding + ((i - 1) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
-                const x2 = leftPadding + (i * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
+                const x1 = getXPosition(i - 1);
+                const x2 = getXPosition(i);
 
                 const normalizedSentiment1 = (sentimentMax - processedData[i - 1].sentiment) / sentimentRange;
                 const y1 = topPadding + (normalizedSentiment1 * chartHeight);
@@ -878,7 +1071,7 @@ const CombinedSentimentVolumeChart = ({
 
               {/* Sentiment data points (circles) */}
               {processedData.map((point, i) => {
-                const x = leftPadding + (i * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
+                const x = getXPosition(i);
                 const normalizedSentiment = (sentimentMax - point.sentiment) / sentimentRange;
                 const y = topPadding + (normalizedSentiment * chartHeight);
 
@@ -900,9 +1093,9 @@ const CombinedSentimentVolumeChart = ({
               {/* Hover/Pinned indicator line */}
               {(hoveredIndex !== null || pinnedIndex !== null) && (
                 <line
-                  x1={leftPadding + ((pinnedIndex !== null ? pinnedIndex : hoveredIndex) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2)}
+                  x1={getXPosition(pinnedIndex !== null ? pinnedIndex : hoveredIndex)}
                   y1={topPadding}
-                  x2={leftPadding + ((pinnedIndex !== null ? pinnedIndex : hoveredIndex) * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2)}
+                  x2={getXPosition(pinnedIndex !== null ? pinnedIndex : hoveredIndex)}
                   y2={topPadding + chartHeight}
                   stroke="#1d4ed8"
                   strokeWidth="2"
@@ -914,13 +1107,13 @@ const CombinedSentimentVolumeChart = ({
 
               {/* Invisible hover zones for interaction */}
               {processedData.map((point, i) => {
-                const barWidth = Math.max(chartWidth / processedData.length, 10);
-                const x = leftPadding + (i * (chartWidth / processedData.length));
+                const barWidth = Math.max(stepWidth, 10);
+                const x = getXPosition(i);
 
                 return (
                   <rect
                     key={`hover-${i}`}
-                    x={x}
+                    x={x - barWidth / 2}
                     y={topPadding}
                     width={barWidth}
                     height={chartHeight}
@@ -935,7 +1128,7 @@ const CombinedSentimentVolumeChart = ({
 
               {/* X-axis labels */}
               {xAxisPoints.map((point, idx) => {
-                const x = leftPadding + (point.index * (chartWidth / processedData.length)) + (chartWidth / processedData.length / 2);
+                const x = getXPosition(point.index);
                 return (
                   <text
                     key={`x-label-${idx}`}
@@ -955,7 +1148,7 @@ const CombinedSentimentVolumeChart = ({
         </div>
 
         {/* Right: Detail Panel (1/3 on desktop, below charts on mobile) */}
-        <div className="w-full lg:flex-[1] bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-200 rounded-lg p-5 overflow-y-auto shadow-sm" style={{ height: '550px' }}>
+        <div className="w-full lg:flex-[1] bg-gradient-to-br from-gray-50 to-gray-100/50 border border-gray-200 rounded-lg p-5 overflow-y-auto shadow-sm" style={{ minHeight: '400px', maxHeight: '600px' }}>
             {(pinnedIndex !== null && processedData[pinnedIndex]) ? (
               <DetailPanel dataPoint={processedData[pinnedIndex]} />
             ) : (hoveredIndex !== null && processedData[hoveredIndex]) ? (

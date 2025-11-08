@@ -1,3 +1,6 @@
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+import { startOfWeek, startOfMonth, addDays, getYear, getMonth, format } from 'date-fns';
+
 /**
  * Get timezone for a stock exchange
  * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE', 'LSE', 'HKEX')
@@ -77,16 +80,214 @@ export const formatTimestampWithTimezone = (timestamp, exchange, options = {}) =
 export const getTimezoneAbbreviation = (exchange) => {
   const date = new Date();
   const timezone = getExchangeTimezone(exchange);
-  
+
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     timeZoneName: 'short'
   });
-  
+
   const parts = formatter.formatToParts(date);
   const timezonePart = parts.find(part => part.type === 'timeZoneName');
-  
+
   return timezonePart?.value || 'UTC';
+};
+
+/**
+ * Parse a date string as midnight in the exchange's timezone
+ *
+ * This fixes the timezone shift issue where backend sends date strings like "2024-11-01"
+ * representing midnight in the exchange timezone, but JavaScript's new Date() interprets
+ * them incorrectly (as midnight UTC or local time), causing dates to shift by a day.
+ *
+ * @param {string|Date} dateString - Date string to parse (e.g., "2024-11-01" or "2024-11-01T00:00:00")
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE')
+ * @returns {Date} Date object properly parsed in the exchange's timezone
+ *
+ * @example
+ * // Without this function (WRONG):
+ * new Date("2024-11-01") // Parses as midnight local time, displays Oct 31 when formatted in America/New_York
+ *
+ * // With this function (CORRECT):
+ * parseExchangeDate("2024-11-01", "NASDAQ") // Parses as midnight America/New_York, displays Nov 1 correctly
+ */
+export const parseExchangeDate = (dateString, exchange) => {
+  if (!dateString) return null;
+
+  // If already a Date object, return it
+  if (dateString instanceof Date) return dateString;
+
+  const timezone = getExchangeTimezone(exchange);
+
+  // Extract just the date part (YYYY-MM-DD) from the string
+  // This handles both "2024-11-01" and "2024-11-01T00:00:00" formats
+  const dateOnlyMatch = String(dateString).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (!dateOnlyMatch) {
+    // If no date pattern found, fall back to standard parsing
+    console.warn(`Unable to parse date string: ${dateString}`);
+    return new Date(dateString);
+  }
+
+  const dateOnly = dateOnlyMatch[1]; // e.g., "2024-11-01"
+
+  // Create a date string that explicitly represents midnight in the exchange timezone
+  // We use ISO format with explicit time to ensure consistent parsing
+  const isoString = `${dateOnly}T00:00:00`;
+
+  // Parse as if the string represents a time in the exchange's timezone
+  // toZonedTime treats the input as being in the specified timezone
+  const zonedDate = toZonedTime(isoString, timezone);
+
+  return zonedDate;
+};
+
+/**
+ * Parse timestamp string preserving time information in exchange timezone
+ *
+ * This function is for intraday data (1D hourly timestamps) where the time component
+ * must be preserved. Unlike parseExchangeDate which anchors to midnight, this function
+ * keeps the exact hour/minute/second from the timestamp.
+ *
+ * @param {string|Date} timestampString - ISO timestamp with time (e.g., "2024-11-01T14:30:00")
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE')
+ * @returns {Date} Date object with time preserved in the exchange's timezone
+ *
+ * @example
+ * // Preserves 2:30 PM time
+ * parseExchangeTimestamp("2024-11-01T14:30:00", "NASDAQ")
+ * // Returns: Date representing 2:30 PM America/New_York on Nov 1, 2024
+ *
+ * // Compare with parseExchangeDate which would strip time to midnight:
+ * parseExchangeDate("2024-11-01T14:30:00", "NASDAQ")
+ * // Returns: Date representing 12:00 AM America/New_York on Nov 1, 2024
+ */
+export const parseExchangeTimestamp = (timestampString, exchange) => {
+  if (!timestampString) return null;
+
+  // If already a Date object, return it
+  if (timestampString instanceof Date) return timestampString;
+
+  const timezone = getExchangeTimezone(exchange);
+
+  // Parse the full timestamp, preserving the time component
+  // toZonedTime interprets the input as being in the specified timezone
+  const zonedDate = toZonedTime(timestampString, timezone);
+
+  return zonedDate;
+};
+
+/**
+ * Get the start of the week (Monday) for a date in the exchange timezone
+ *
+ * This function ensures week boundaries are calculated based on the exchange timezone,
+ * not the viewer's local timezone. Critical for correct weekly aggregation.
+ *
+ * @param {Date} date - Date object (should be from parseExchangeDate/parseExchangeTimestamp)
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE')
+ * @returns {Date} Date object representing Monday at midnight in the exchange timezone
+ *
+ * @example
+ * const date = parseExchangeDate("2024-11-06", "NASDAQ"); // Wednesday
+ * const weekStart = getWeekStartInTimezone(date, "NASDAQ");
+ * // Returns: Monday Nov 4, 2024 at midnight ET (not shifted to viewer's timezone)
+ */
+export const getWeekStartInTimezone = (date, exchange) => {
+  if (!date) return null;
+
+  const timezone = getExchangeTimezone(exchange);
+
+  // Convert the date to a plain UTC representation that preserves the "wall clock" time
+  // This ensures startOfWeek operates on the exchange timezone's date components
+  const utcDate = fromZonedTime(date, timezone);
+
+  // Get start of week (Monday) in UTC
+  const weekStart = startOfWeek(utcDate, { weekStartsOn: 1 }); // 1 = Monday
+
+  // Convert back to zoned time to preserve exchange timezone
+  return toZonedTime(weekStart, timezone);
+};
+
+/**
+ * Get YYYY-MM month key for a date in the exchange timezone
+ *
+ * Extracts year and month in the exchange timezone (not viewer's local timezone).
+ * Critical for correct monthly aggregation.
+ *
+ * @param {Date} date - Date object (should be from parseExchangeDate/parseExchangeTimestamp)
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE')
+ * @returns {string} Month key in format "YYYY-MM"
+ *
+ * @example
+ * const date = parseExchangeDate("2024-11-01", "NASDAQ");
+ * const monthKey = getMonthKeyInTimezone(date, "NASDAQ");
+ * // Returns: "2024-11" (even if viewer is in different timezone)
+ */
+export const getMonthKeyInTimezone = (date, exchange) => {
+  if (!date) return null;
+
+  const timezone = getExchangeTimezone(exchange);
+
+  // Format the date in the exchange timezone to extract year and month
+  // Using format from date-fns with timezone-aware date
+  const utcDate = fromZonedTime(date, timezone);
+
+  return format(utcDate, 'yyyy-MM');
+};
+
+/**
+ * Get the first day of a month in the exchange timezone
+ *
+ * Creates a date representing the 1st of the month at midnight in the exchange timezone.
+ * Used for monthly aggregation timestamps.
+ *
+ * @param {number} year - Full year (e.g., 2024)
+ * @param {number} month - Month (0-11, JavaScript convention)
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE')
+ * @returns {Date} Date object representing 1st of month at midnight in exchange timezone
+ *
+ * @example
+ * const monthStart = getMonthStartInTimezone(2024, 10, "NASDAQ"); // November 2024
+ * // Returns: Nov 1, 2024 at midnight ET
+ */
+export const getMonthStartInTimezone = (year, month, exchange) => {
+  const timezone = getExchangeTimezone(exchange);
+
+  // Create date string for the 1st of the month
+  const monthStr = String(month + 1).padStart(2, '0');
+  const dateString = `${year}-${monthStr}-01T00:00:00`;
+
+  // Parse in the exchange timezone
+  return toZonedTime(dateString, timezone);
+};
+
+/**
+ * Add days to a date while preserving the exchange timezone
+ *
+ * Adds the specified number of days without timezone shifting.
+ * Used for calculating week end dates in the exchange timezone.
+ *
+ * @param {Date} date - Starting date (should be from parseExchangeDate/parseExchangeTimestamp)
+ * @param {number} days - Number of days to add (can be negative)
+ * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE')
+ * @returns {Date} Date object with days added in the exchange timezone
+ *
+ * @example
+ * const monday = parseExchangeDate("2024-11-04", "NASDAQ");
+ * const sunday = addDaysInTimezone(monday, 6, "NASDAQ");
+ * // Returns: Sunday Nov 10, 2024 at midnight ET
+ */
+export const addDaysInTimezone = (date, days, exchange) => {
+  if (!date) return null;
+
+  const timezone = getExchangeTimezone(exchange);
+
+  // Convert to UTC representation preserving wall clock time
+  const utcDate = fromZonedTime(date, timezone);
+
+  // Add days
+  const newDate = addDays(utcDate, days);
+
+  // Convert back to zoned time
+  return toZonedTime(newDate, timezone);
 };
 
 /**

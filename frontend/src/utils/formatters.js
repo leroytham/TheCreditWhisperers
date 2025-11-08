@@ -426,18 +426,20 @@ export function normalizeToPercentageReturn(data, startValue = null) {
  * Normalize portfolio data to percentage return with capital flow adjustment.
  *
  * This function properly accounts for deposits and withdrawals when calculating
- * percentage returns, preventing capital injections from appearing as investment gains.
+ * percentage returns, preventing capital injections from appearing as investment gains
+ * while preserving gains earned before deposits.
  *
  * Algorithm:
  * 1. Start with initial portfolio value as baseline
  * 2. For each data point:
- *    - If capital flow occurred, adjust baseline by adding the flow amount
+ *    - If capital flow occurred, roll baseline forward from PREVIOUS market value + flow
  *    - Calculate return = (current value - adjusted baseline) / adjusted baseline
  *
  * Example:
  * - Day 1: Portfolio = $100k (baseline = $100k)
- * - Day 2: Deposit $50k, Portfolio = $150k (baseline = $150k, return = 0%)
- * - Day 3: Portfolio = $157.5k (baseline = $150k, return = +5%)
+ * - Day 2: Portfolio = $120k (baseline = $100k, return = +20%)
+ * - Day 3: Deposit $50k, Portfolio = $170k (baseline = $120k + $50k = $170k, return = 0%)
+ * - Day 4: Portfolio = $178.5k (baseline = $170k, return = +5%)
  *
  * @param {Array} data - Array of data points with portfolio_value and capital_flow fields
  * @param {number|null} startValue - Optional starting value override
@@ -481,7 +483,6 @@ export function normalizeToPercentageReturnWithCapitalFlows(data, startValue = n
 
   // Track running adjusted baseline
   let adjustedBaseline = baseline;
-  let cumulativeCapitalFlow = 0;
 
   return data.map((point, index) => {
     const currentValue = point.close || point.portfolio_value || 0;
@@ -489,10 +490,14 @@ export function normalizeToPercentageReturnWithCapitalFlows(data, startValue = n
 
     // If there's a capital flow at this point, adjust the baseline
     if (capitalFlow !== 0) {
-      cumulativeCapitalFlow += capitalFlow;
-      // Adjust baseline: new baseline = previous baseline + capital flow
-      // This prevents the capital injection from appearing as a gain
-      adjustedBaseline = baseline + cumulativeCapitalFlow;
+      // Roll baseline forward from PREVIOUS market value (not original baseline)
+      // This preserves gains earned before the deposit, preventing understatement
+      const prevValue = index > 0
+        ? (data[index - 1].close || data[index - 1].portfolio_value || adjustedBaseline)
+        : adjustedBaseline;
+
+      // New baseline = previous market value + new capital flow
+      adjustedBaseline = prevValue + capitalFlow;
     }
 
     // Calculate percentage return from adjusted baseline
@@ -509,7 +514,6 @@ export function normalizeToPercentageReturnWithCapitalFlows(data, startValue = n
       originalValue: currentValue,
       adjustedBaseline,
       capitalFlow,
-      cumulativeCapitalFlow,
       isCapitalAdjusted: true
     };
   });
@@ -670,10 +674,16 @@ export function normalizeToHybridReturn(data, periodStartDate, twrData = null) {
       const currentValue = point.close || point.portfolio_value || 0;
       const capitalFlow = point.capital_flow || 0;
 
-      // Update cumulative capital flow and adjusted baseline
+      // Update adjusted baseline when capital flow occurs
       if (capitalFlow !== 0) {
-        cumulativeCapitalFlow += capitalFlow;
-        adjustedBaseline = baseline + cumulativeCapitalFlow;
+        // Roll baseline forward from PREVIOUS market value (not original baseline)
+        // This preserves gains earned before the deposit, preventing understatement
+        const prevValue = index > 0
+          ? (data[index - 1].close || data[index - 1].portfolio_value || adjustedBaseline)
+          : adjustedBaseline;
+
+        // New baseline = previous market value + new capital flow
+        adjustedBaseline = prevValue + capitalFlow;
       }
 
       // Calculate percentage return from adjusted baseline
@@ -687,8 +697,7 @@ export function normalizeToHybridReturn(data, periodStartDate, twrData = null) {
         originalValue: currentValue,
         noLotData: true,
         usedFallback: true,
-        adjustedBaseline,
-        cumulativeCapitalFlow
+        adjustedBaseline
       };
     }
 

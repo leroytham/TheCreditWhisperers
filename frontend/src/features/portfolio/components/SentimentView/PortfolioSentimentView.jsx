@@ -54,7 +54,7 @@ import { parseNumericString } from '../../../../utils/formatters';
  * <PortfolioSentimentView isActive={activeSubTab === 'sentiment'} />
  */
 const PortfolioSentimentView = ({ isActive = true }) => {
-  const [timeframe, setTimeframe] = useState('1W');
+  const [timeframe, setTimeframe] = useState('1M');
   const [viewMode, setViewMode] = useState('rolling');
 
   // Backend fetches data for selected timeframe
@@ -98,60 +98,6 @@ const PortfolioSentimentView = ({ isActive = true }) => {
   // Lazy loading: only fetch data when tab is active
   const shouldFetchData = isActive && selectedAccount && holdings && holdings.length > 0;
 
-  // Use custom hooks for data fetching with new backend endpoints
-  const {
-    sentimentData: dailySentimentData,
-    holdingsSentiment: dailyHoldingsSentiment,
-    loading: dailySentimentLoading,
-    error: dailySentimentError,
-    failedHoldings: dailyFailedHoldings,
-    successCount: dailySuccessCount,
-    totalCount: dailyTotalCount
-  } = usePortfolioSentiment(
-    selectedAccount?.username,
-    selectedAccount?.accountName,
-    holdings,
-    dataTimeframe,
-    shouldFetchData
-  );
-
-  const {
-    data: rollingData,
-    hasData: hasRollingData,
-    loading: rollingSentimentLoading,
-    error: rollingSentimentError,
-    sourceEarliestDates,
-    failedHoldings: rollingFailedHoldings,
-    successCount: rollingSuccessCount,
-    totalCount: rollingTotalCount
-  } = usePortfolioRollingSentiment(
-    selectedAccount?.username,
-    selectedAccount?.accountName,
-    holdings,
-    dataTimeframe,
-    shouldFetchData
-  );
-
-  // Fetch sector breakdown data
-  const {
-    sectorData,
-    loading: sectorLoading,
-    error: sectorError
-  } = usePortfolioSectorSentiment(
-    selectedAccount?.username,
-    selectedAccount?.accountName,
-    shouldFetchData
-  );
-
-  // Select active data based on view mode
-  const activeSentimentLoading = viewMode === 'rolling' ? rollingSentimentLoading : dailySentimentLoading;
-  const activeSentimentError = viewMode === 'rolling' ? rollingSentimentError : dailySentimentError;
-  const rawActiveSentimentData = viewMode === 'rolling' ? rollingData : dailySentimentData?.timeSeries;
-  const activeHasData = viewMode === 'rolling' ? hasRollingData : (dailySentimentData?.timeSeries?.length > 0);
-
-  // Backend returns correctly filtered data for selected timeframe
-  const activeSentimentData = rawActiveSentimentData;
-
   // Determine primary exchange for portfolio based on holdings
   const portfolioExchange = useMemo(() => {
     if (!holdings || holdings.length === 0) return 'US';
@@ -192,6 +138,62 @@ const PortfolioSentimentView = ({ isActive = true }) => {
 
     return primaryExchange.exchange;
   }, [holdings]);
+
+  // Use custom hooks for data fetching with new backend endpoints
+  const {
+    sentimentData: dailySentimentData,
+    holdingsSentiment: dailyHoldingsSentiment,
+    loading: dailySentimentLoading,
+    error: dailySentimentError,
+    failedHoldings: dailyFailedHoldings,
+    successCount: dailySuccessCount,
+    totalCount: dailyTotalCount
+  } = usePortfolioSentiment(
+    selectedAccount?.username,
+    selectedAccount?.accountName,
+    holdings,
+    dataTimeframe,
+    shouldFetchData,
+    portfolioExchange
+  );
+
+  const {
+    data: rollingData,
+    hasData: hasRollingData,
+    loading: rollingSentimentLoading,
+    error: rollingSentimentError,
+    sourceEarliestDates,
+    failedHoldings: rollingFailedHoldings,
+    successCount: rollingSuccessCount,
+    totalCount: rollingTotalCount
+  } = usePortfolioRollingSentiment(
+    selectedAccount?.username,
+    selectedAccount?.accountName,
+    holdings,
+    dataTimeframe,
+    shouldFetchData,
+    portfolioExchange
+  );
+
+  // Fetch sector breakdown data
+  const {
+    sectorData,
+    loading: sectorLoading,
+    error: sectorError
+  } = usePortfolioSectorSentiment(
+    selectedAccount?.username,
+    selectedAccount?.accountName,
+    shouldFetchData
+  );
+
+  // Select active data based on view mode
+  const activeSentimentLoading = viewMode === 'rolling' ? rollingSentimentLoading : dailySentimentLoading;
+  const activeSentimentError = viewMode === 'rolling' ? rollingSentimentError : dailySentimentError;
+  const rawActiveSentimentData = viewMode === 'rolling' ? rollingData : dailySentimentData?.timeSeries;
+  const activeHasData = viewMode === 'rolling' ? hasRollingData : (dailySentimentData?.timeSeries?.length > 0);
+
+  // Backend returns correctly filtered data for selected timeframe
+  const activeSentimentData = rawActiveSentimentData;
 
   // Utility functions for sentiment display
   const getSentimentColor = (score) => {

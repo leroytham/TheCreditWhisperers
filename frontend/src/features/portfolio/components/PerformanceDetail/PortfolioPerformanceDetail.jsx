@@ -5,6 +5,7 @@ import LoadingSpinner from '../../../../components/LoadingSpinner';
 import { InlineError } from '../../../../components/ErrorDisplay';
 import { useAccountContext } from '../../../../hooks/usePortfolioData';
 import { formatCurrency, formatPercentage, normalizeToPercentageReturn, normalizeToPercentageReturnWithCapitalFlows, normalizeToTWR, normalizeToHybridReturn } from '../../../../utils/formatters';
+import { parseExchangeDate } from '../../../shared/utils/formatters';
 import apiService from '../../../../services/api';
 
 /**
@@ -26,6 +27,9 @@ import apiService from '../../../../services/api';
  * <PortfolioPerformanceDetail />
  */
 const PortfolioPerformanceDetail = () => {
+  // Default to NYSE timezone for portfolio data (US market standard)
+  const DEFAULT_EXCHANGE = 'NYSE';
+
   const [timeframe, setTimeframe] = useState('1M');
   const [showEvents, setShowEvents] = useState(true);
   const [performanceData, setPerformanceData] = useState(null);
@@ -154,11 +158,11 @@ const PortfolioPerformanceDetail = () => {
 
         // Calculate trend for each event based on portfolio value movement
         const eventsWithTrend = events.map(e => {
-          const eventDate = new Date(e.date);
+          const eventDate = parseExchangeDate(e.date, DEFAULT_EXCHANGE);
 
           // Find the event date in priceData
           const eventIndex = priceData.findIndex(p => {
-            const pointDate = new Date(p.date);
+            const pointDate = parseExchangeDate(p.date, DEFAULT_EXCHANGE);
             return pointDate.toISOString().slice(0, 10) === eventDate.toISOString().slice(0, 10);
           });
 
@@ -286,6 +290,29 @@ const PortfolioPerformanceDetail = () => {
       // Filter out pre-baseline points (close: null) to prevent hard zero-line rendering
       // normalizeToPercentageReturn emits close: null for points before first investment
       chartPriceData = chartPriceData.filter(point => point.close !== null && point.close !== undefined);
+
+      // Synchronize benchmark to match portfolio's date range
+      // Without this, portfolio and benchmark cover different date ranges after filtering,
+      // causing misleading comparisons (e.g., portfolio shows Jun-Dec while benchmark shows Jan-Dec)
+      if (chartPriceData.length > 0) {
+        // Create set of valid dates from filtered portfolio data
+        const validDates = new Set(chartPriceData.map(p => p.date));
+
+        // Filter benchmark to only include dates present in portfolio data
+        chartBenchmarkData = chartBenchmarkData.filter(point => validDates.has(point.date));
+
+        // Re-normalize benchmark to start from 0% at the new first point
+        // This ensures portfolio and benchmark have matching baselines for visual comparison
+        // Without this, benchmark retains its percentage relative to the original first date,
+        // causing visual and numerical comparison errors
+        if (chartBenchmarkData.length > 0) {
+          const benchmarkStartValue = chartBenchmarkData[0].close || 0;
+          chartBenchmarkData = chartBenchmarkData.map(point => ({
+            ...point,
+            close: point.close !== null ? point.close - benchmarkStartValue : null
+          }));
+        }
+      }
     }
 
     // Extract final chart return value to align summary cards with chart
@@ -294,11 +321,20 @@ const PortfolioPerformanceDetail = () => {
       ? chartPriceData[chartPriceData.length - 1]?.close || 0
       : null;
 
+    // Calculate chart-based outperformance when using normalized chart data
+    // This ensures outperformance matches the chart's calculation method (hybrid/TWR/capital-adjusted)
+    const chartOutperformance = displayMode === 'percent' &&
+      chartDisplayReturn !== null &&
+      chartBenchmarkData.length > 0
+        ? chartDisplayReturn - (chartBenchmarkData[chartBenchmarkData.length - 1]?.close || 0)
+        : null;
+
     return {
       ...performanceData,
       chartPriceData,
       chartBenchmarkData,
       chartDisplayReturn,  // Chart's calculated return for summary card alignment
+      chartOutperformance,  // Chart-based outperformance for consistency
       twrData: performanceData.twrData  // Ensure TWR data is available for display
     };
   }, [performanceData, displayMode]);
@@ -394,8 +430,20 @@ const PortfolioPerformanceDetail = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <div>
             <p className="text-sm text-gray-500">Outperformance</p>
-            <p className={`text-2xl font-bold ${performanceData?.outperformance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatPercentage(performanceData?.outperformance || 0)}
+            <p className={`text-2xl font-bold ${(() => {
+              // Use chart-based outperformance when available (e.g., hybrid mode), otherwise use original
+              const outperformanceValue = chartDisplayData?.chartOutperformance !== null && chartDisplayData?.chartOutperformance !== undefined
+                ? chartDisplayData.chartOutperformance
+                : (performanceData?.outperformance || 0);
+              return outperformanceValue >= 0 ? 'text-green-600' : 'text-red-600';
+            })()}`}>
+              {formatPercentage((() => {
+                // Use chart-based outperformance when available (e.g., hybrid mode), otherwise use original
+                const outperformanceValue = chartDisplayData?.chartOutperformance !== null && chartDisplayData?.chartOutperformance !== undefined
+                  ? chartDisplayData.chartOutperformance
+                  : (performanceData?.outperformance || 0);
+                return outperformanceValue;
+              })())}
             </p>
           </div>
         </div>
@@ -425,7 +473,13 @@ const PortfolioPerformanceDetail = () => {
                 {displayMode === 'percent' && showBenchmark && (
                   <div className="flex items-center space-x-3 text-xs">
                     <div className="flex items-center space-x-1">
-                      <div className={`w-4 h-0.5 ${performanceData?.percentReturn >= 0 ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      <div className={`w-4 h-0.5 ${(() => {
+                        // Use chart's calculated return for legend color to match actual plotted line
+                        const returnValue = displayMode === 'percent' && chartDisplayData?.chartDisplayReturn !== null && chartDisplayData?.chartDisplayReturn !== undefined
+                          ? chartDisplayData.chartDisplayReturn
+                          : (performanceData?.percentReturn || 0);
+                        return returnValue >= 0 ? 'bg-green-600' : 'bg-red-600';
+                      })()}`}></div>
                       <span className="text-gray-600">Portfolio</span>
                     </div>
                     <div className="flex items-center space-x-1">
@@ -549,7 +603,7 @@ const PortfolioPerformanceDetail = () => {
                       Portfolio started at $0. Percentage returns are calculated from the first investment of{' '}
                       <span className="font-semibold">${baselineValue?.toFixed(2)}</span>
                       {baselineDate && (
-                        <span> on {new Date(baselineDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <span> on {parseExchangeDate(baselineDate, DEFAULT_EXCHANGE).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       )}.
                     </p>
                   </div>

@@ -14,13 +14,26 @@
 
 import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
+import { parseExchangeTimestamp, getExchangeTimezone } from '../../shared/utils/formatters';
 
-export const usePortfolioRollingSentiment = (username, accountName, holdings, timeframe = '1D', enabled = true) => {
+// Default exchange for portfolio chart labels (portfolios can contain mixed exchanges)
+const DEFAULT_EXCHANGE = 'NYSE';
+
+export const usePortfolioRollingSentiment = (
+  username,
+  accountName,
+  holdings,
+  timeframe = '1D',
+  enabled = true,
+  exchange = DEFAULT_EXCHANGE
+) => {
   const [data, setData] = useState([]);
   const [hasData, setHasData] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sourceEarliestDates, setSourceEarliestDates] = useState(null);
+
+  const resolvedExchange = exchange || DEFAULT_EXCHANGE;
 
   useEffect(() => {
     // If not enabled (lazy loading - tab not active), set loading to false
@@ -58,25 +71,62 @@ export const usePortfolioRollingSentiment = (username, accountName, holdings, ti
         const result = response.data;
 
         // Process the data from backend
-        const processedData = (result.data || []).map(point => ({
-          timestamp: point.timestamp,
-          date: point.timestamp,
-          label: new Date(point.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          sentiment: point.score || 0,
-          fast_sentiment: point.score || 0,  // Backend should provide these if available
-          slow_sentiment: point.score || 0,  // Backend should provide these if available
-          volume: point.article_count || 0,
-          news_volume: point.article_count || 0,
-          momentum: point.momentum || 0,
-          confidence: point.holdings_with_data ?
-            (point.holdings_with_data / result.holdings_count) : 0,
-          headlines: []  // Rolling data doesn't have individual headlines (aggregated across holdings)
-        }));
+        const getDisplayTimezone = (pointTimezone) => {
+          if (pointTimezone && pointTimezone.toUpperCase() === 'UTC') {
+            return 'UTC';
+          }
+          return getExchangeTimezone(resolvedExchange);
+        };
+
+        const parseTimestampForDisplay = (timestamp, pointTimezone) => {
+          if (!timestamp) return null;
+          if (pointTimezone && pointTimezone.toUpperCase() === 'UTC') {
+            return new Date(timestamp);
+          }
+          return parseExchangeTimestamp(timestamp, resolvedExchange);
+        };
+
+        const processedData = (result.data || []).map(point => {
+          const pointTimezone = point.timezone || null;
+          const displayDate = parseTimestampForDisplay(point.timestamp, pointTimezone);
+          const displayTimezone = getDisplayTimezone(pointTimezone);
+
+          return {
+            timestamp: point.timestamp,
+            date: point.timestamp,
+            timezone: pointTimezone || null,
+            label: displayDate
+              ? new Intl.DateTimeFormat('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
+                  timeZone: displayTimezone
+                }).format(displayDate)
+              : point.timestamp,
+            sentiment: point.score || 0,
+            fast_sentiment: point.score || 0,  // Backend should provide these if available
+            slow_sentiment: point.score || 0,  // Backend should provide these if available
+            volume: point.article_count || 0,
+            news_volume: point.article_count || 0,
+            momentum: point.momentum || 0,
+            confidence: point.holdings_with_data ?
+              (point.holdings_with_data / result.holdings_count) : 0,
+            headlines: point.headlines || []  // Headlines from rolling window (once backend implements aggregation)
+          };
+        });
+
+        // Sort by timestamp to ensure ascending chronological order
+        // Defensive: guards against backend changes and ensures consistency with chart expectations
+        const sortedData = processedData.sort((a, b) =>
+          new Date(a.timestamp) - new Date(b.timestamp)
+        );
 
         // Check if we have meaningful data
-        const hasValidData = processedData.length > 0 && result.valid_holdings > 0;
+        const hasValidData = sortedData.length > 0 && result.valid_holdings > 0;
 
-        setData(processedData);
+        setData(sortedData);
         setHasData(hasValidData);
 
         // Source earliest dates might be included in future backend updates
@@ -105,7 +155,7 @@ export const usePortfolioRollingSentiment = (username, accountName, holdings, ti
     return () => {
       controller.abort();
     };
-  }, [username, accountName, timeframe, enabled]);
+  }, [username, accountName, timeframe, enabled, resolvedExchange]);
 
   return {
     data,
