@@ -15,6 +15,56 @@ class PortfolioTimeseriesService:
     Fetches historical prices for all holdings and calculates daily portfolio values.
     """
 
+    def __init__(self):
+        # Cache resolved yfinance ticker aliases to avoid repeated fallback lookups
+        self._ticker_alias_cache: dict[str, str] = {}
+
+    def _get_ticker_candidates(self, ticker: str) -> List[str]:
+        """
+        Generate yfinance-friendly ticker candidates for symbols that include
+        characters like '.' which often need to be converted to '-' for class shares.
+
+        Args:
+            ticker: Original ticker symbol from holdings data
+
+        Returns:
+            Ordered list of candidate ticker strings (deduplicated)
+        """
+        if not ticker:
+            return []
+
+        base_symbol = ticker.strip().upper()
+        candidates: List[str] = []
+
+        # If we already resolved an alias for this ticker, try it first
+        cached_alias = self._ticker_alias_cache.get(base_symbol)
+        if cached_alias:
+            candidates.append(cached_alias)
+
+        candidates.append(base_symbol)
+
+        # Replace dot notation used by custodians for share classes with yfinance dash
+        if '.' in base_symbol:
+            candidates.append(base_symbol.replace('.', '-'))
+
+        # Replace space-delimited class notation (e.g. "BRK B") with dash
+        if ' ' in base_symbol:
+            candidates.append(base_symbol.replace(' ', '-'))
+
+        # Handle preferred share notation that sometimes arrives as "PR" suffix
+        if '/PR' in base_symbol:
+            candidates.append(base_symbol.replace('/PR', '-P'))
+
+        # Deduplicate while preserving order
+        deduped: List[str] = []
+        seen = set()
+        for candidate in candidates:
+            if candidate and candidate not in seen:
+                deduped.append(candidate)
+                seen.add(candidate)
+
+        return deduped
+
     def parse_timeframe_to_delta(self, timeframe: str) -> timedelta:
         """
         Converts timeframe string to timedelta.
@@ -73,22 +123,33 @@ class PortfolioTimeseriesService:
             else:
                 interval = "1d"  # Daily intervals for longer periods
 
-            stock = yf.Ticker(ticker)
-            hist = stock.history(start=start_date, end=end_date, interval=interval)
+            last_error = None
+            for candidate in self._get_ticker_candidates(ticker):
+                try:
+                    stock = yf.Ticker(candidate)
+                    hist = stock.history(start=start_date, end=end_date, interval=interval)
 
-            if hist.empty:
-                print(f"⚠️ No historical data for {ticker}")
-                return None
+                    if hist.empty:
+                        continue
 
-            # Keep timezone info for intraday data (needed for time display)
-            # For daily data, remove timezone
-            if interval in ["1m", "5m", "15m", "1h"]:
-                # Return Close with datetime index (includes time)
-                return hist[['Close']]
+                    # Drop timezone info so downstream date comparisons stay naive
+                    if hasattr(hist.index, "tz") and hist.index.tz is not None:
+                        hist.index = hist.index.tz_localize(None)
+
+                    if candidate != ticker:
+                        print(f"🔁 Using ticker alias '{candidate}' for '{ticker}' historical data")
+                        self._ticker_alias_cache[ticker.strip().upper()] = candidate
+
+                    return hist[["Close"]]
+                except Exception as candidate_error:  # pragma: no cover - defensive logging
+                    last_error = candidate_error
+                    continue
+
+            if last_error:
+                print(f"❌ Error fetching historical prices for {ticker}: {last_error}")
             else:
-                # For daily data, remove timezone
-                hist.index = hist.index.tz_localize(None)
-                return hist[['Close']]
+                print(f"⚠️ No historical data for {ticker}")
+            return None
 
         except Exception as e:
             print(f"❌ Error fetching historical prices for {ticker}: {e}")
@@ -101,33 +162,17 @@ class PortfolioTimeseriesService:
         date: datetime
     ) -> float:
         """
-        Calculates the value of a position on a specific date.
+        Calculates the value of a position on a specific date using lot-level tracking.
 
         Args:
-            holding: Holding dict with symbol, quantity, purchase_price, purchase_date
+            holding: Holding dict with symbol, quantity, purchase_price, purchase_date, and lots array
             price_data: DataFrame with historical prices
             date: Date to calculate value for
 
         Returns:
             Position value in dollars
         """
-        quantity = float(holding.get("quantity", 0))
-
-        if quantity == 0:
-            return 0.0
-
-        # Check if holding was owned on this date
-        purchase_date_str = holding.get("purchase_date")
-        if purchase_date_str:
-            try:
-                purchase_date = pd.to_datetime(purchase_date_str).to_pydatetime()
-                # If not yet purchased, position value is 0
-                if date < purchase_date:
-                    return 0.0
-            except:
-                pass  # If parse fails, assume holding was always owned
-
-        # Get price for this date
+        # Get price for this date first
         if price_data is None or price_data.empty:
             return 0.0
 
@@ -145,28 +190,207 @@ class PortfolioTimeseriesService:
             closest_date = available_dates[-1]
             price = float(price_data.loc[closest_date, 'Close'])
 
-            return quantity * price
+            # Calculate quantity owned on this date using lot-level data
+            lots = holding.get("lots", [])
+            total_quantity = 0.0
+
+            if lots:
+                # Use lot-level tracking for accurate position calculation
+                for lot in lots:
+                    lot_purchase_date_str = lot.get("purchase_date")
+                    lot_quantity = float(lot.get("quantity", 0))
+
+                    if lot_purchase_date_str:
+                        try:
+                            lot_purchase_date = pd.to_datetime(lot_purchase_date_str).to_pydatetime()
+                            # Only count this lot if it was purchased on or before this date
+                            if date >= lot_purchase_date:
+                                total_quantity += lot_quantity
+                        except:
+                            # If parse fails, include the lot (conservative approach)
+                            total_quantity += lot_quantity
+                    else:
+                        # If no purchase date, include the lot
+                        total_quantity += lot_quantity
+            else:
+                # Fallback for backward compatibility: Use aggregate purchase_date
+                # This handles holdings that haven't been migrated to lot tracking yet
+                quantity = float(holding.get("quantity", 0))
+                purchase_date_str = holding.get("purchase_date")
+
+                if purchase_date_str:
+                    try:
+                        purchase_date = pd.to_datetime(purchase_date_str).to_pydatetime()
+                        # Only count position if purchased on or before this date
+                        if date >= purchase_date:
+                            total_quantity = quantity
+                    except:
+                        total_quantity = quantity
+                else:
+                    total_quantity = quantity
+
+            return total_quantity * price
 
         except Exception as e:
             print(f"⚠️ Error calculating position value for {holding.get('symbol')}: {e}")
             return 0.0
 
+    def calculate_lot_breakdown(
+        self,
+        holding: Dict,
+        price_data: Optional[pd.DataFrame],
+        date: datetime,
+        period_start_date: datetime
+    ) -> List[Dict]:
+        """
+        Calculate per-lot breakdown for hybrid denominator calculation.
+
+        Args:
+            holding: Holding dict with symbol, quantity, purchase_price, purchase_date, and lots
+            price_data: DataFrame with historical prices
+            date: Current date to calculate value for
+            period_start_date: Start date of the period (for determining pre/in-period)
+
+        Returns:
+            List of lot details with market value, cost basis, and start value
+        """
+        if price_data is None or price_data.empty:
+            return []
+
+        try:
+            # Get current price for this date
+            date_normalized = pd.Timestamp(date).normalize()
+            available_dates = price_data.index[price_data.index <= date_normalized]
+
+            if len(available_dates) == 0:
+                return []
+
+            closest_date = available_dates[-1]
+            current_price = float(price_data.loc[closest_date, 'Close'])
+
+            # Get price at period start for pre-period holdings
+            start_date_normalized = pd.Timestamp(period_start_date).normalize()
+            start_dates = price_data.index[price_data.index <= start_date_normalized]
+
+            start_price = current_price  # Default to current if no start data
+            if len(start_dates) > 0:
+                start_closest = start_dates[-1]
+                start_price = float(price_data.loc[start_closest, 'Close'])
+
+            lot_breakdown = []
+            lots = holding.get("lots", [])
+            symbol = holding.get("symbol", "")
+
+            if lots:
+                # Use lot-level data
+                for lot in lots:
+                    lot_purchase_date_str = lot.get("purchase_date")
+                    lot_quantity = float(lot.get("quantity", 0))
+                    lot_cost_basis = float(lot.get("purchase_price", 0))
+
+                    if lot_purchase_date_str:
+                        try:
+                            lot_purchase_date = pd.to_datetime(lot_purchase_date_str).to_pydatetime()
+
+                            # Only include if lot was owned on this date
+                            if date < lot_purchase_date:
+                                continue
+
+                            # Determine if this is a pre-period lot
+                            is_pre_period = lot_purchase_date < period_start_date
+
+                            # Calculate start value using hybrid logic
+                            if is_pre_period:
+                                # Use market value at period start
+                                start_value = lot_quantity * start_price
+                            else:
+                                # Use cost basis for in-period purchases
+                                start_value = lot_quantity * lot_cost_basis
+
+                            lot_breakdown.append({
+                                "symbol": symbol,
+                                "lot_id": lot.get("lot_id", ""),
+                                "quantity": lot_quantity,
+                                "market_value": lot_quantity * current_price,
+                                "cost_basis": lot_quantity * lot_cost_basis,
+                                "purchase_date": lot_purchase_date.strftime("%Y-%m-%d"),
+                                "is_pre_period": is_pre_period,
+                                "start_value": start_value,
+                                "current_price": current_price,
+                                "purchase_price": lot_cost_basis
+                            })
+                        except:
+                            # If date parsing fails, include the lot conservatively
+                            lot_breakdown.append({
+                                "symbol": symbol,
+                                "lot_id": lot.get("lot_id", ""),
+                                "quantity": lot_quantity,
+                                "market_value": lot_quantity * current_price,
+                                "cost_basis": lot_quantity * lot_cost_basis,
+                                "purchase_date": lot_purchase_date_str,
+                                "is_pre_period": True,
+                                "start_value": lot_quantity * start_price,
+                                "current_price": current_price,
+                                "purchase_price": lot_cost_basis
+                            })
+            else:
+                # Fallback: No lots array, use aggregate data
+                quantity = float(holding.get("quantity", 0))
+                purchase_price = float(holding.get("purchase_price", 0))
+                purchase_date_str = holding.get("purchase_date")
+
+                if quantity > 0:
+                    is_pre_period = True
+                    if purchase_date_str:
+                        try:
+                            purchase_date = pd.to_datetime(purchase_date_str).to_pydatetime()
+                            is_pre_period = purchase_date < period_start_date
+                        except:
+                            pass
+
+                    start_value = quantity * start_price if is_pre_period else quantity * purchase_price
+
+                    lot_breakdown.append({
+                        "symbol": symbol,
+                        "lot_id": "aggregate",
+                        "quantity": quantity,
+                        "market_value": quantity * current_price,
+                        "cost_basis": quantity * purchase_price,
+                        "purchase_date": purchase_date_str or "",
+                        "is_pre_period": is_pre_period,
+                        "start_value": start_value,
+                        "current_price": current_price,
+                        "purchase_price": purchase_price
+                    })
+
+            return lot_breakdown
+
+        except Exception as e:
+            print(f"⚠️ Error calculating lot breakdown for {holding.get('symbol')}: {e}")
+            return []
+
     async def generate_portfolio_timeseries(
         self,
         holdings_list: List[Dict],
         timeframe: str = "1Y",
-        open_date: Optional[str] = None
+        open_date: Optional[str] = None,
+        db = None,
+        username: str = None,
+        account_name: str = None
     ) -> Dict:
         """
-        Generates historical time-series data for a portfolio.
+        Generates historical time-series data for a portfolio with capital flow tracking and TWR.
 
         Args:
             holdings_list: List of holdings with symbol, quantity, purchase_price, purchase_date
             timeframe: Time period for historical data
             open_date: Portfolio open date (optional, for ITD calculation)
+            db: Database connection (optional, required for capital flow tracking)
+            username: Username (optional, required for capital flow tracking)
+            account_name: Account name (optional, required for capital flow tracking)
 
         Returns:
-            Dictionary with timeframe and data_points array
+            Dictionary with timeframe, data_points array, and optional TWR data
         """
         try:
             end_date = datetime.now()
@@ -178,7 +402,7 @@ class PortfolioTimeseriesService:
             print(f"Start: {start_date.date()}, End: {end_date.date()}")
             print(f"Holdings: {len(holdings_list)}")
 
-            # Aggregate holdings by symbol (handle duplicates)
+            # Aggregate holdings by symbol (handle duplicates, preserve lots)
             aggregated_holdings = {}
             for h in holdings_list:
                 symbol = h.get("symbol", "").upper()
@@ -188,17 +412,31 @@ class PortfolioTimeseriesService:
                 qty = float(h.get("quantity", 0))
                 purchase_price = float(h.get("purchase_price", 0))
                 purchase_date = h.get("purchase_date")
+                lots = h.get("lots", [])  # Get lot-level data
 
                 if symbol not in aggregated_holdings:
                     aggregated_holdings[symbol] = {
                         "symbol": symbol,
                         "quantity": 0,
                         "total_cost": 0,
-                        "purchase_date": purchase_date  # Use first purchase date
+                        "purchase_date": purchase_date,  # Use earliest purchase date
+                        "lots": []  # Preserve lot-level information
                     }
 
                 aggregated_holdings[symbol]["quantity"] += qty
                 aggregated_holdings[symbol]["total_cost"] += qty * purchase_price
+
+                # Preserve lot-level data for accurate position tracking
+                if lots:
+                    aggregated_holdings[symbol]["lots"].extend(lots)
+                else:
+                    # Fallback: If no lots array, create a single lot from aggregate data
+                    # This handles backward compatibility with existing holdings
+                    aggregated_holdings[symbol]["lots"].append({
+                        "quantity": qty,
+                        "purchase_price": purchase_price,
+                        "purchase_date": purchase_date
+                    })
 
             # Calculate average cost for each holding
             for symbol, data in aggregated_holdings.items():
@@ -216,12 +454,23 @@ class PortfolioTimeseriesService:
 
             historical_prices = await asyncio.gather(*tasks)
 
-            # Map ticker to its price data
-            price_data_map = {
-                holdings[i]["symbol"]: historical_prices[i]
-                for i in range(len(holdings))
-                if historical_prices[i] is not None
-            }
+            price_data_map: Dict[str, pd.DataFrame] = {}
+            missing_price_symbols: List[str] = []
+
+            for holding, price_df in zip(holdings, historical_prices):
+                symbol = holding["symbol"]
+                if isinstance(price_df, Exception) or price_df is None:
+                    missing_price_symbols.append(symbol)
+                    continue
+
+                if hasattr(price_df, "empty") and price_df.empty:
+                    missing_price_symbols.append(symbol)
+                    continue
+
+                price_data_map[symbol] = price_df
+
+            if missing_price_symbols:
+                print(f"⚠️ Missing historical data for symbols: {missing_price_symbols}")
 
             print(f"Successfully fetched price data for {len(price_data_map)} holdings")
 
@@ -235,6 +484,7 @@ class PortfolioTimeseriesService:
             for date in date_range:
                 # Calculate total portfolio value for this date
                 portfolio_value = 0.0
+                all_lot_breakdowns = []  # Collect lot breakdowns for all holdings
 
                 for holding in holdings:
                     symbol = holding["symbol"]
@@ -248,31 +498,41 @@ class PortfolioTimeseriesService:
                         )
                         portfolio_value += position_value
 
-                # Only include dates where portfolio had value
-                if portfolio_value > 0:
-                    # Calculate daily return
-                    daily_return = None
-                    if prev_value is not None and prev_value > 0:
-                        daily_return = ((portfolio_value - prev_value) / prev_value) * 100
+                        # Calculate lot breakdown for this holding
+                        lot_breakdown = self.calculate_lot_breakdown(
+                            holding,
+                            price_data,
+                            date.to_pydatetime(),
+                            start_date
+                        )
+                        all_lot_breakdowns.extend(lot_breakdown)
 
-                    # Include time fields for intraday data (1D, 1W)
-                    if timeframe in ["1D", "1W"]:
-                        data_points.append({
-                            "date": date.strftime("%Y-%m-%d"),
-                            "time": date.strftime("%H:%M:%S"),
-                            "datetime": date.strftime("%Y-%m-%d %H:%M:%S"),
-                            "portfolio_value": round(portfolio_value, 2),
-                            "daily_return": round(daily_return, 4) if daily_return is not None else None
-                        })
-                    else:
-                        # Regular daily data
-                        data_points.append({
-                            "date": date.strftime("%Y-%m-%d"),
-                            "portfolio_value": round(portfolio_value, 2),
-                            "daily_return": round(daily_return, 4) if daily_return is not None else None
-                        })
+                # Include all dates, even when portfolio value is zero (e.g., fully liquidated)
+                # Calculate daily return
+                daily_return = None
+                if prev_value is not None and prev_value > 0:
+                    daily_return = ((portfolio_value - prev_value) / prev_value) * 100
 
-                    prev_value = portfolio_value
+                # Include time fields for intraday data (1D, 1W)
+                if timeframe in ["1D", "1W"]:
+                    data_points.append({
+                        "date": date.strftime("%Y-%m-%d"),
+                        "time": date.strftime("%H:%M:%S"),
+                        "datetime": date.strftime("%Y-%m-%d %H:%M:%S"),
+                        "portfolio_value": round(portfolio_value, 2),
+                        "daily_return": round(daily_return, 4) if daily_return is not None else None,
+                        "lot_breakdown": all_lot_breakdowns  # Include lot-level data
+                    })
+                else:
+                    # Regular daily data
+                    data_points.append({
+                        "date": date.strftime("%Y-%m-%d"),
+                        "portfolio_value": round(portfolio_value, 2),
+                        "daily_return": round(daily_return, 4) if daily_return is not None else None,
+                        "lot_breakdown": all_lot_breakdowns  # Include lot-level data
+                    })
+
+                prev_value = portfolio_value
 
             # Calculate cumulative return from start to end
             if len(data_points) > 0:
@@ -285,12 +545,72 @@ class PortfolioTimeseriesService:
 
             print(f"Generated {len(data_points)} data points")
 
-            return {
+            # Add capital flow tracking and TWR calculation if db connection provided
+            twr_data = None
+            if db is not None and username and account_name:
+                try:
+                    # Query transactions for capital flows (DEPOSIT, WITHDRAWAL)
+                    from app.models.transaction import get_cash_flows_between_dates
+                    from app.services.twr_calculator_service import twr_calculator_service
+                    from datetime import date as date_type
+
+                    # Get cash flows for the period
+                    cash_flows = await get_cash_flows_between_dates(
+                        db,
+                        username,
+                        account_name,
+                        start_date.date() if isinstance(start_date, datetime) else start_date,
+                        end_date.date() if isinstance(end_date, datetime) else end_date
+                    )
+
+                    # Create a map of date -> capital_flow
+                    capital_flow_map = {}
+                    for flow in cash_flows:
+                        flow_date = flow["date"]
+                        date_str = flow_date.isoformat() if hasattr(flow_date, 'isoformat') else str(flow_date)
+                        if date_str not in capital_flow_map:
+                            capital_flow_map[date_str] = 0.0
+                        capital_flow_map[date_str] += flow["amount"]
+
+                    # Add capital_flow field to each data point
+                    for point in data_points:
+                        point_date = point["date"]
+                        point["capital_flow"] = capital_flow_map.get(point_date, 0.0)
+
+                    # Calculate TWR using the TWR calculator service
+                    twr_result = await twr_calculator_service.calculate_twr(
+                        username,
+                        account_name,
+                        start_date.date() if isinstance(start_date, datetime) else start_date,
+                        end_date.date() if isinstance(end_date, datetime) else end_date,
+                        db
+                    )
+
+                    twr_data = twr_result
+
+                    print(f"✅ Added capital flow tracking: {len(cash_flows)} flows")
+                    if twr_result.get("twr_return") is not None:
+                        print(f"✅ Calculated TWR: {twr_result['twr_return']:.2f}%")
+
+                except Exception as e:
+                    print(f"⚠️ Error adding capital flow/TWR data: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue without capital flow data
+
+            result = {
                 "timeframe": timeframe,
                 "data_points": data_points,
                 "start_date": start_date.strftime("%Y-%m-%d"),
-                "end_date": end_date.strftime("%Y-%m-%d")
+                "end_date": end_date.strftime("%Y-%m-%d"),
+                "missing_price_symbols": missing_price_symbols
             }
+
+            # Add TWR data if available
+            if twr_data:
+                result["twr"] = twr_data
+
+            return result
 
         except Exception as e:
             print(f"❌ Error generating portfolio timeseries: {e}")

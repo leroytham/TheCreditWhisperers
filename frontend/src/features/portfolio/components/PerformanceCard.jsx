@@ -492,7 +492,7 @@ const PerformanceCard = ({ onViewPerformance }) => {
       )}
 
       {/* Add keyframes for animations */}
-      <style jsx>{`
+      <style>{`
         @keyframes slideUp {
           from {
             opacity: 0;

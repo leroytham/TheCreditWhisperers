@@ -5,6 +5,7 @@ from datetime import datetime
 from pymongo import MongoClient
 import certifi
 import asyncio
+import uuid
 
 import msal
 import os
@@ -1467,6 +1468,163 @@ async def azure_auth_callback(request: Request):
         return RedirectResponse("http://localhost:3000/login?error=azure_failed")
 
 
+# ============================================================================
+# HELPER FUNCTIONS FOR LOT TRACKING
+# ============================================================================
+
+def reduce_lots_fifo(lots: list, quantity_to_reduce: float) -> tuple[list, float]:
+    """
+    Reduces lots using FIFO (First In, First Out) method.
+
+    Args:
+        lots: List of lot dictionaries with quantity, purchase_price, purchase_date
+        quantity_to_reduce: Number of shares to sell
+
+    Returns:
+        Tuple of (updated_lots, realized_gain_loss)
+
+    Raises:
+        ValueError: If insufficient shares to sell
+    """
+    from copy import deepcopy
+
+    # Calculate total available quantity
+    total_quantity = sum(float(lot.get("quantity", 0)) for lot in lots)
+
+    if quantity_to_reduce > total_quantity:
+        raise ValueError(
+            f"Insufficient shares to sell. Available: {total_quantity}, "
+            f"Requested: {quantity_to_reduce}"
+        )
+
+    # Sort lots by purchase_date (oldest first) for FIFO
+    sorted_lots = sorted(
+        deepcopy(lots),
+        key=lambda x: x.get("purchase_date", "9999-12-31")
+    )
+
+    updated_lots = []
+    remaining_to_reduce = quantity_to_reduce
+    realized_gain_loss = 0.0
+
+    for lot in sorted_lots:
+        lot_quantity = float(lot.get("quantity", 0))
+        lot_price = float(lot.get("purchase_price", 0))
+
+        if remaining_to_reduce <= 0:
+            # No more to reduce, keep this lot as-is
+            updated_lots.append(lot)
+        elif lot_quantity <= remaining_to_reduce:
+            # Fully consume this lot
+            remaining_to_reduce -= lot_quantity
+            # Don't add to updated_lots (lot is fully sold)
+        else:
+            # Partially consume this lot
+            quantity_sold_from_lot = remaining_to_reduce
+            lot["quantity"] = lot_quantity - quantity_sold_from_lot
+            updated_lots.append(lot)
+            remaining_to_reduce = 0
+
+    return updated_lots, realized_gain_loss
+
+
+def apply_sell_transaction(
+    holdings_col,
+    username: str,
+    account_name: str,
+    account_no: str,
+    symbol: str,
+    quantity_to_sell: float,
+    sell_price: float = None
+) -> dict:
+    """
+    Applies a SELL transaction to reduce holdings using FIFO lot tracking.
+
+    Args:
+        holdings_col: MongoDB Stock_Holding collection
+        username: Username
+        account_name: Account name
+        account_no: Account number
+        symbol: Stock symbol to sell
+        quantity_to_sell: Number of shares to sell
+        sell_price: Optional sell price (for realized gain/loss calculation)
+
+    Returns:
+        Dict with result status and details
+
+    Raises:
+        ValueError: If holding not found or insufficient shares
+    """
+    # Find existing holding
+    holding = holdings_col.find_one({
+        "username": username,
+        "client_account_name": account_name,
+        "account_no": account_no,
+        "symbol": symbol.upper()
+    })
+
+    if not holding:
+        raise ValueError(f"No holding found for {symbol}")
+
+    current_quantity = float(holding.get("quantity", 0))
+    current_lots = holding.get("lots", [])
+
+    if quantity_to_sell > current_quantity:
+        raise ValueError(
+            f"Insufficient shares to sell. Available: {current_quantity}, "
+            f"Requested: {quantity_to_sell}"
+        )
+
+    # Apply FIFO reduction
+    updated_lots, realized_gain_loss = reduce_lots_fifo(current_lots, quantity_to_sell)
+
+    new_quantity = current_quantity - quantity_to_sell
+
+    if new_quantity <= 0:
+        # Completely sold out - delete holding
+        holdings_col.delete_one({"_id": holding["_id"]})
+        return {
+            "status": "deleted",
+            "symbol": symbol,
+            "quantity_sold": quantity_to_sell,
+            "remaining_quantity": 0,
+            "realized_gain_loss": realized_gain_loss
+        }
+    else:
+        # Partial sale - update holding
+        # Recalculate weighted average price from remaining lots
+        total_cost = sum(
+            float(lot.get("quantity", 0)) * float(lot.get("purchase_price", 0))
+            for lot in updated_lots
+        )
+        new_avg_price = total_cost / new_quantity if new_quantity > 0 else 0
+
+        # Find earliest remaining purchase date
+        earliest_date = min(
+            lot.get("purchase_date", "9999-12-31")
+            for lot in updated_lots
+        ) if updated_lots else holding.get("purchase_date")
+
+        holdings_col.update_one(
+            {"_id": holding["_id"]},
+            {
+                "$set": {
+                    "quantity": new_quantity,
+                    "purchase_price": round(new_avg_price, 2),
+                    "purchase_date": earliest_date,
+                    "lots": updated_lots,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        return {
+            "status": "updated",
+            "symbol": symbol,
+            "quantity_sold": quantity_to_sell,
+            "remaining_quantity": new_quantity,
+            "realized_gain_loss": realized_gain_loss
+        }
 
 
 @router.post("/portfolio/save")
@@ -1556,6 +1714,22 @@ async def save_portfolio(data: dict):
                 new_qty = old_qty + quantity
                 new_price = ((old_qty * old_price) + (quantity * purchase_price)) / new_qty
 
+                # Create new lot entry
+                new_lot = {
+                    "lot_id": str(uuid.uuid4()),
+                    "quantity": quantity,
+                    "purchase_price": purchase_price,
+                    "purchase_date": purchase_date,
+                    "created_at": datetime.utcnow()
+                }
+
+                # Get existing lots array (or initialize empty)
+                existing_lots = existing_holding.get("lots", [])
+
+                # Determine earliest purchase date (preserve for backward compatibility)
+                existing_purchase_date = existing_holding.get("purchase_date", purchase_date)
+                earliest_date = min(existing_purchase_date, purchase_date) if existing_purchase_date else purchase_date
+
                 holdings_col.update_one(
                     {
                         "username": username,
@@ -1563,15 +1737,29 @@ async def save_portfolio(data: dict):
                         "account_no": account_no,
                         "symbol": symbol
                     },
-                    {"$set": {
-                        "quantity": new_qty,
-                        "purchase_price": round(new_price, 2),
-                        "purchase_date": purchase_date,
-                        "updated_at": datetime.utcnow()
-                    }}
+                    {
+                        "$set": {
+                            "quantity": new_qty,
+                            "purchase_price": round(new_price, 2),
+                            "purchase_date": earliest_date,  # Preserve earliest, not latest
+                            "updated_at": datetime.utcnow()
+                        },
+                        "$push": {
+                            "lots": new_lot
+                        }
+                    }
                 )
                 holdings_updated += 1
             else:
+                # Initialize first lot
+                first_lot = {
+                    "lot_id": str(uuid.uuid4()),
+                    "quantity": quantity,
+                    "purchase_price": purchase_price,
+                    "purchase_date": purchase_date,
+                    "created_at": datetime.utcnow()
+                }
+
                 holding_record = {
                     "username": username,
                     "client_account_name": account_name,
@@ -1580,6 +1768,7 @@ async def save_portfolio(data: dict):
                     "quantity": quantity,
                     "purchase_price": purchase_price,
                     "purchase_date": purchase_date,
+                    "lots": [first_lot],  # Initialize lots array
                     "created_at": datetime.utcnow()
                 }
                 holdings_col.insert_one(holding_record)
@@ -2194,7 +2383,10 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             portfolio_task = portfolio_timeseries_service.generate_portfolio_timeseries(
                 holdings_list=holdings_list,
                 timeframe=timeframe,
-                open_date=open_date
+                open_date=open_date,
+                db=db,  # Pass db for capital flow tracking
+                username=username,
+                account_name=account_name
             )
             benchmark_task = portfolio_timeseries_service.fetch_benchmark_timeseries(
                 timeframe=timeframe,

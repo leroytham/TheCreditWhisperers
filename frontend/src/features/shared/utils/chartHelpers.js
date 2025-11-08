@@ -129,7 +129,8 @@ export const generateChartData = (priceData) => {
 
     return {
       x: i,
-      y: !isNaN(closeValue) ? closeValue : (!isNaN(priceValue) ? priceValue : 0),
+      // Use null instead of 0 for missing values - charts render null as gaps, preventing artificial plunges
+      y: !isNaN(closeValue) ? closeValue : (!isNaN(priceValue) ? priceValue : null),
       date: point.date,
       time: point.time,
       volume: point.volume || 0,
@@ -494,19 +495,21 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
     const startOffset = Math.floor(chartData.length * offsetPercent);
     const remainingLength = chartData.length - startOffset - 1; // -1 to account for last index
 
-    // Distribute numPoints evenly from startOffset to end
+    // Limit numPoints to available data to prevent duplicates with short series
+    const effectiveNumPoints = Math.min(numPoints, chartData.length - startOffset);
+
+    // Distribute effectiveNumPoints evenly from startOffset to end
     const selectedIndices = [];
-    for (let i = 0; i < numPoints; i++) {
-      const index = startOffset + Math.floor((i * remainingLength) / (numPoints - 1));
+    for (let i = 0; i < effectiveNumPoints; i++) {
+      // Guard division by zero when effectiveNumPoints is 1
+      const index = startOffset + Math.floor((i * remainingLength) / Math.max(1, effectiveNumPoints - 1));
       selectedIndices.push(Math.min(index, chartData.length - 1));
     }
 
-    // Remove duplicate if last two indices are the same
-    if (selectedIndices.length > 1 && selectedIndices[selectedIndices.length - 1] === selectedIndices[selectedIndices.length - 2]) {
-      selectedIndices.pop();
-    }
+    // Deduplicate indices using Set to prevent stacked labels
+    const uniqueIndices = [...new Set(selectedIndices)];
 
-    const selectedPoints = selectedIndices.map(index => chartData[index]).filter(Boolean);
+    const selectedPoints = uniqueIndices.map(index => chartData[index]).filter(Boolean);
 
     return selectedPoints.map((point, i) => {
       const dataIndex = chartData.indexOf(point);
@@ -745,7 +748,8 @@ export const findEventPosition = (event, chartData, chartWidth = 660, paddingLef
 
   if (!pricePoint || pricePoint.index === undefined) return null;
 
-  const xPos = paddingLeft + ((pricePoint.index / (chartData.length - 1)) * chartWidth);
+  // Clamp denominator to at least 1 to prevent division by zero when chartData has single point
+  const xPos = paddingLeft + ((pricePoint.index / Math.max(1, chartData.length - 1)) * chartWidth);
 
   return {
     xPos,

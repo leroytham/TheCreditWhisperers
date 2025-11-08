@@ -422,6 +422,319 @@ export function normalizeToPercentageReturn(data, startValue = null) {
   });
 }
 
+/**
+ * Normalize portfolio data to percentage return with capital flow adjustment.
+ *
+ * This function properly accounts for deposits and withdrawals when calculating
+ * percentage returns, preventing capital injections from appearing as investment gains.
+ *
+ * Algorithm:
+ * 1. Start with initial portfolio value as baseline
+ * 2. For each data point:
+ *    - If capital flow occurred, adjust baseline by adding the flow amount
+ *    - Calculate return = (current value - adjusted baseline) / adjusted baseline
+ *
+ * Example:
+ * - Day 1: Portfolio = $100k (baseline = $100k)
+ * - Day 2: Deposit $50k, Portfolio = $150k (baseline = $150k, return = 0%)
+ * - Day 3: Portfolio = $157.5k (baseline = $150k, return = +5%)
+ *
+ * @param {Array} data - Array of data points with portfolio_value and capital_flow fields
+ * @param {number|null} startValue - Optional starting value override
+ * @returns {Array} Normalized data with percentage returns
+ */
+export function normalizeToPercentageReturnWithCapitalFlows(data, startValue = null) {
+  if (!data || data.length === 0) {
+    return [];
+  }
+
+  // Determine the starting value
+  const firstPoint = data[0];
+  let baseline = startValue !== null
+    ? startValue
+    : (firstPoint.close || firstPoint.portfolio_value || 0);
+
+  // Handle zero-baseline portfolios
+  if (baseline === 0 || baseline < 0.01) {
+    console.warn('Portfolio starts at $0. Using first non-zero value as baseline.');
+
+    // Find first non-zero value
+    for (let i = 0; i < data.length; i++) {
+      const currentValue = data[i].close || data[i].portfolio_value || 0;
+      if (currentValue > 0.01) {
+        baseline = currentValue;
+        break;
+      }
+    }
+
+    // If still zero, return zeros
+    if (baseline === 0 || baseline < 0.01) {
+      return data.map(point => ({
+        ...point,
+        close: 0,
+        originalValue: point.close || point.portfolio_value || 0,
+        isZeroBaseline: true,
+        hasNoInvestments: true
+      }));
+    }
+  }
+
+  // Track running adjusted baseline
+  let adjustedBaseline = baseline;
+  let cumulativeCapitalFlow = 0;
+
+  return data.map((point, index) => {
+    const currentValue = point.close || point.portfolio_value || 0;
+    const capitalFlow = point.capital_flow || 0;
+
+    // If there's a capital flow at this point, adjust the baseline
+    if (capitalFlow !== 0) {
+      cumulativeCapitalFlow += capitalFlow;
+      // Adjust baseline: new baseline = previous baseline + capital flow
+      // This prevents the capital injection from appearing as a gain
+      adjustedBaseline = baseline + cumulativeCapitalFlow;
+    }
+
+    // Calculate percentage return from adjusted baseline
+    const percentReturn = adjustedBaseline > 0
+      ? ((currentValue - adjustedBaseline) / adjustedBaseline) * 100
+      : 0;
+
+    // Remove 'price' field to prevent fallback contamination
+    const { price, ...pointWithoutPrice } = point;
+
+    return {
+      ...pointWithoutPrice,
+      close: percentReturn,
+      originalValue: currentValue,
+      adjustedBaseline,
+      capitalFlow,
+      cumulativeCapitalFlow,
+      isCapitalAdjusted: true
+    };
+  });
+}
+
+/**
+ * Normalize data using Time-Weighted Return (TWR) from backend.
+ *
+ * This is the most accurate method for portfolios with cash flows,
+ * as it uses the Modified Dietz method to isolate investment performance
+ * from capital contributions/withdrawals.
+ *
+ * @param {Array} data - Array of data points
+ * @param {Object} twrData - TWR calculation result from backend
+ * @returns {Array} Normalized data with TWR-based returns
+ */
+export function normalizeToTWR(data, twrData) {
+  if (!data || data.length === 0 || !twrData) {
+    return normalizeToPercentageReturn(data);
+  }
+
+  // If TWR calculation failed, fall back to regular normalization
+  if (twrData.error || twrData.twr_return === null) {
+    console.warn('TWR calculation unavailable, falling back to simple return');
+    return normalizeToPercentageReturn(data);
+  }
+
+  // If no sub-periods, use simple approach with final TWR
+  const subPeriods = twrData.sub_periods || [];
+
+  if (subPeriods.length === 0) {
+    // No sub-periods data, apply final TWR uniformly (scaled by position in timeline)
+    const totalPoints = data.length;
+    const finalTWR = twrData.twr_return || 0;
+
+    return data.map((point, index) => {
+      const { price, ...pointWithoutPrice } = point;
+      // Linear interpolation from 0 to final TWR
+      const progressRatio = totalPoints > 1 ? (index / (totalPoints - 1)) : 0;
+      const interpolatedTWR = finalTWR * progressRatio;
+
+      return {
+        ...pointWithoutPrice,
+        close: interpolatedTWR,
+        originalValue: point.close || point.portfolio_value || 0,
+        hasTWR: true,
+        twrReturn: interpolatedTWR,
+        isTWRCalculated: true
+      };
+    });
+  }
+
+  // Enhanced: Interpolate TWR across sub-periods for smooth visualization
+  // Create a map of date -> cumulative TWR by chaining sub-period returns
+  const twrByDate = new Map();
+  let cumulativeTWR = 0;
+
+  // Build cumulative TWR at each sub-period end date
+  for (const period of subPeriods) {
+    const periodReturn = period.return || 0;
+    // Chain this period's return with previous cumulative
+    // Formula: (1 + cumulative) * (1 + period) - 1
+    cumulativeTWR = ((1 + cumulativeTWR / 100) * (1 + periodReturn / 100) - 1) * 100;
+    twrByDate.set(period.end_date, cumulativeTWR);
+
+    // Also set the start date if it's the first period
+    if (twrByDate.size === 1 && period.start_date) {
+      twrByDate.set(period.start_date, 0); // Start at 0% return
+    }
+  }
+
+  // Convert to sorted array for interpolation
+  const twrPoints = Array.from(twrByDate.entries())
+    .sort((a, b) => new Date(a[0]) - new Date(b[0]));
+
+  // Map each data point to its interpolated TWR value
+  return data.map(point => {
+    const { price, ...pointWithoutPrice } = point;
+    const pointDate = new Date(point.date);
+
+    let interpolatedTWR = 0;
+
+    // Find where this date falls in the TWR points
+    for (let i = 0; i < twrPoints.length; i++) {
+      const [twrDate, twrValue] = twrPoints[i];
+      const twrDateTime = new Date(twrDate);
+
+      if (pointDate <= twrDateTime) {
+        if (i === 0) {
+          // Before first TWR point, use 0
+          interpolatedTWR = 0;
+        } else {
+          // Interpolate between previous and current TWR points
+          const [prevDate, prevTWR] = twrPoints[i - 1];
+          const prevDateTime = new Date(prevDate);
+
+          // Linear interpolation
+          const totalDays = (twrDateTime - prevDateTime) / (1000 * 60 * 60 * 24);
+          const daysFromPrev = (pointDate - prevDateTime) / (1000 * 60 * 60 * 24);
+
+          if (totalDays > 0) {
+            const ratio = daysFromPrev / totalDays;
+            interpolatedTWR = prevTWR + (twrValue - prevTWR) * ratio;
+          } else {
+            interpolatedTWR = twrValue;
+          }
+        }
+        break;
+      } else if (i === twrPoints.length - 1) {
+        // After last TWR point, use final value
+        interpolatedTWR = twrValue;
+      }
+    }
+
+    return {
+      ...pointWithoutPrice,
+      close: interpolatedTWR,
+      originalValue: point.close || point.portfolio_value || 0,
+      hasTWR: true,
+      twrReturn: interpolatedTWR,
+      isTWRCalculated: true,
+      capital_flow: point.capital_flow || 0
+    };
+  });
+}
+
+/**
+ * Normalize data using hybrid denominator calculation.
+ *
+ * This function implements the documented hybrid logic:
+ * - Holdings purchased BEFORE the period start: Use market value at period start as denominator
+ * - Holdings purchased WITHIN the period: Use cost basis as denominator
+ *
+ * This provides the most accurate representation of returns, showing:
+ * - Real gains for recent purchases (YOUR money at risk)
+ * - Fair performance for older holdings (comparable to benchmarks)
+ *
+ * @param {Array} data - Array of data points with lot_breakdown field
+ * @param {Date|String} periodStartDate - Start date of the period
+ * @returns {Array} Normalized data with hybrid percentage returns
+ */
+export function normalizeToHybridReturn(data, periodStartDate, twrData = null) {
+  if (!data || data.length === 0) {
+    return [];
+  }
+
+  // Initialize baseline and capital flow tracking for fallback calculation
+  const firstPoint = data[0];
+  let baseline = firstPoint.close || firstPoint.portfolio_value || 0;
+  let adjustedBaseline = baseline;
+  let cumulativeCapitalFlow = 0;
+
+  return data.map((point, index) => {
+    const lotBreakdown = point.lot_breakdown || [];
+
+    if (lotBreakdown.length === 0) {
+      // No lot data, fall back to capital-flow-adjusted percentage return
+      const currentValue = point.close || point.portfolio_value || 0;
+      const capitalFlow = point.capital_flow || 0;
+
+      // Update cumulative capital flow and adjusted baseline
+      if (capitalFlow !== 0) {
+        cumulativeCapitalFlow += capitalFlow;
+        adjustedBaseline = baseline + cumulativeCapitalFlow;
+      }
+
+      // Calculate percentage return from adjusted baseline
+      const percentReturn = adjustedBaseline > 0
+        ? ((currentValue - adjustedBaseline) / adjustedBaseline) * 100
+        : 0;
+
+      return {
+        ...point,
+        close: percentReturn,
+        originalValue: currentValue,
+        noLotData: true,
+        usedFallback: true,
+        adjustedBaseline,
+        cumulativeCapitalFlow
+      };
+    }
+
+    // Calculate hybrid denominator and current value from lots
+    let hybridDenominator = 0;
+    let currentMarketValue = 0;
+    let prePeriodValue = 0;
+    let inPeriodCost = 0;
+    let prePeriodLots = 0;
+    let inPeriodLots = 0;
+
+    for (const lot of lotBreakdown) {
+      currentMarketValue += lot.market_value || 0;
+      hybridDenominator += lot.start_value || 0;  // Pre-period uses start market, in-period uses cost basis
+
+      if (lot.is_pre_period) {
+        prePeriodValue += lot.start_value || 0;
+        prePeriodLots++;
+      } else {
+        inPeriodCost += lot.start_value || 0;  // For in-period, start_value = cost basis
+        inPeriodLots++;
+      }
+    }
+
+    // Calculate percentage return using hybrid denominator
+    const percentReturn = hybridDenominator > 0
+      ? ((currentMarketValue - hybridDenominator) / hybridDenominator) * 100
+      : 0;
+
+    // Remove 'price' field to prevent contamination
+    const { price, ...pointWithoutPrice } = point;
+
+    return {
+      ...pointWithoutPrice,
+      close: percentReturn,
+      originalValue: currentMarketValue,
+      hybridDenominator,
+      prePeriodValue,
+      inPeriodCost,
+      prePeriodLots,
+      inPeriodLots,
+      isHybridCalculated: true
+    };
+  });
+}
+
 export default {
   formatCurrency,
   formatCompactCurrency,
@@ -435,4 +748,7 @@ export default {
   truncateText,
   parseNumericString,
   normalizeToPercentageReturn,
+  normalizeToPercentageReturnWithCapitalFlows,
+  normalizeToTWR,
+  normalizeToHybridReturn,
 };

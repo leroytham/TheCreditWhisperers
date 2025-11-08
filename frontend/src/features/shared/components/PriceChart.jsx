@@ -138,6 +138,13 @@ const PriceChart = ({
     return () => window.removeEventListener('resize', measure);
   }, []);
 
+  // Reset hover states when dataset changes
+  useEffect(() => {
+    setHoveredPoint(null);
+    setHoveredEvent(null);
+    setSelectedArticle(null);
+  }, [priceData, benchmarkData, showBenchmark, significantEvents, showEvents, showSignificantEvents, timeframe, displayMode]);
+
   // Calculate chart data based on mode
   const chartData = preProcessedChartData || generateChartData(priceData);
 
@@ -567,20 +574,23 @@ const PriceChart = ({
           });
 
           return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }) => {
-            const handleClick = () => {
-              const url = event.link || event.url;
-              if (url) {
-                window.open(url, '_blank', 'noopener,noreferrer');
-              }
-            };
-
             return (
               <g
                 key={`event-${index}`}
                 className="cursor-pointer group"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Toggle tooltip: if clicking same icon, close it; otherwise open new one
+
+                  // Cmd/Ctrl+click opens URL in new tab
+                  if (e.metaKey || e.ctrlKey) {
+                    const url = event.link || event.url;
+                    if (url) {
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                    }
+                    return;
+                  }
+
+                  // Regular click toggles tooltip
                   if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
                     setHoveredEvent(null);
                   } else {
@@ -678,7 +688,6 @@ const PriceChart = ({
                   height="34"
                   fill="transparent"
                   className="cursor-pointer"
-                  onClick={handleClick}
                 />
               </g>
             );
@@ -738,19 +747,23 @@ const PriceChart = ({
           });
 
           return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }) => {
-            const handleClick = () => {
-              const url = event.link || event.url;
-              if (url) {
-                window.open(url, '_blank', 'noopener,noreferrer');
-              }
-            };
-
             return (
               <g
                 key={`event-${index}`}
                 className="cursor-pointer group"
                 onClick={(e) => {
                   e.stopPropagation();
+
+                  // Cmd/Ctrl+click opens URL in new tab
+                  if (e.metaKey || e.ctrlKey) {
+                    const url = event.link || event.url;
+                    if (url) {
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                    }
+                    return;
+                  }
+
+                  // Regular click toggles tooltip
                   if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
                     setHoveredEvent(null);
                   } else {
@@ -826,7 +839,6 @@ const PriceChart = ({
                   height="34"
                   fill="transparent"
                   className="cursor-pointer"
-                  onClick={handleClick}
                 />
               </g>
             );
@@ -910,8 +922,8 @@ const PriceChart = ({
         <div
           className="absolute bg-white border border-gray-300 rounded shadow-lg"
           style={{
-            left: `${Math.min(hoveredEvent.xPos - 110, (hoveredEvent.chartWidth || chartWidth) - 220)}px`,
-            top: `${hoveredEvent.iconY - 260}px`,
+            left: `${Math.max(hoveredEvent.paddingLeft || paddingLeft, Math.min(hoveredEvent.xPos - 110, (hoveredEvent.chartWidth || chartWidth) + (hoveredEvent.paddingLeft || paddingLeft) - 220))}px`,
+            top: `${Math.max(paddingTop, Math.min(hoveredEvent.iconY - 260, paddingTop + chartHeight - 240))}px`,
             width: '220px',
             maxHeight: '240px',
             overflowY: 'scroll',

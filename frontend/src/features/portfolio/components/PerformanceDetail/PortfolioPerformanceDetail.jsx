@@ -4,7 +4,7 @@ import TimeRangeSelector from '../../../shared/components/TimeRangeSelector';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 import { InlineError } from '../../../../components/ErrorDisplay';
 import { useAccountContext } from '../../../../hooks/usePortfolioData';
-import { formatCurrency, formatPercentage, normalizeToPercentageReturn } from '../../../../utils/formatters';
+import { formatCurrency, formatPercentage, normalizeToPercentageReturn, normalizeToPercentageReturnWithCapitalFlows, normalizeToTWR, normalizeToHybridReturn } from '../../../../utils/formatters';
 import apiService from '../../../../services/api';
 
 /**
@@ -34,12 +34,17 @@ const PortfolioPerformanceDetail = () => {
   const [retryTrigger, setRetryTrigger] = useState(0);
 
   // Display mode: 'value' (Portfolio Value $) or 'percent' (% Return)
-  const [displayMode, setDisplayMode] = useState(
-    localStorage.getItem('portfolioDisplayMode') || 'value'
+  // Use lazy initializer with SSR guard to prevent crashes in SSR/test environments
+  const [displayMode, setDisplayMode] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('portfolioDisplayMode') || 'value'
+      : 'value'
   );
   // Show S&P 500 benchmark overlay (only in percent mode)
-  const [showBenchmark, setShowBenchmark] = useState(
-    localStorage.getItem('portfolioShowBenchmark') === 'true'
+  const [showBenchmark, setShowBenchmark] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('portfolioShowBenchmark') === 'true'
+      : false
   );
 
   // Use hooks for context
@@ -94,7 +99,10 @@ const PortfolioPerformanceDetail = () => {
         const priceData = (historicalData.data_points || []).map(point => ({
           date: point.date,
           close: point.portfolio_value, // Required by generateChartData
-          price: point.portfolio_value  // Fallback field
+          price: point.portfolio_value,  // Fallback field
+          capital_flow: point.capital_flow || 0,  // Track capital flows for normalization
+          portfolio_value: point.portfolio_value,   // Preserve original for clarity
+          lot_breakdown: point.lot_breakdown || []  // Preserve lot-level data for hybrid calculation
         }));
 
         // Backend provides two formats for benchmark data:
@@ -115,12 +123,25 @@ const PortfolioPerformanceDetail = () => {
         const currentValue = priceData.length > 0 ? priceData[priceData.length - 1].close : 0;
         const previousClose = priceData.length > 0 ? priceData[0].close : 0;
 
-        // Always calculate return from chart data (first to last point)
+        // Calculate cumulative capital flow across the period
+        const cumulativeCapitalFlow = priceData.reduce((sum, point) => sum + (point.capital_flow || 0), 0);
+
+        // Always calculate simple return from chart data (first to last point)
         const absoluteReturn = currentValue - previousClose;
+        // Adjust absolute return for capital flows (subtract deposits, add withdrawals)
+        const adjustedAbsoluteReturn = absoluteReturn - cumulativeCapitalFlow;
         const percentReturn = previousClose > 0 ? ((currentValue - previousClose) / previousClose) * 100 : 0;
 
+        // Extract TWR data if available
+        const twrData = historicalData.twr || null;
+        const twrReturn = twrData?.twr_return || null;
+        const hasCashFlows = twrData?.has_cash_flows || false;
+
+        // Use TWR return if available and has cash flows, otherwise use simple return
+        const displayReturn = (hasCashFlows && twrReturn !== null) ? twrReturn : percentReturn;
+
         // Calculate outperformance for selected timeframe
-        const outperformance = percentReturn - benchmarkReturn;
+        const outperformance = displayReturn - benchmarkReturn;
 
         // Map timeframe to closest API period for attribution data only
         // API provides: MTD, QTD, YTD, ITD (only used for top_gainers/top_losers)
@@ -131,25 +152,58 @@ const PortfolioPerformanceDetail = () => {
 
         const benchmarkApiData = data.performance?.find(p => p.period === periodForBenchmark) || data.performance?.[0] || {};
 
+        // Calculate trend for each event based on portfolio value movement
+        const eventsWithTrend = events.map(e => {
+          const eventDate = new Date(e.date);
+
+          // Find the event date in priceData
+          const eventIndex = priceData.findIndex(p => {
+            const pointDate = new Date(p.date);
+            return pointDate.toISOString().slice(0, 10) === eventDate.toISOString().slice(0, 10);
+          });
+
+          let trend = 'Upward'; // Default to upward
+
+          if (eventIndex >= 0) {
+            // Look at the day-over-day change at the event date
+            const currentValue = priceData[eventIndex].close || 0;
+            const prevValue = eventIndex > 0 ? (priceData[eventIndex - 1].close || 0) : currentValue;
+
+            // Calculate percentage move
+            const movePct = prevValue > 0 ? ((currentValue - prevValue) / prevValue) * 100 : 0;
+            trend = movePct >= 0 ? 'Upward' : 'Downward';
+          }
+
+          return {
+            ...e,
+            start_date: e.date, // PriceChart expects 'start_date' field
+            label: e.type === 'dividend' ? '💰' : e.type === 'split' ? '📊' : '🛒',
+            trend
+          };
+        });
+
         setPerformanceData({
           priceData,                    // Raw $ values
           benchmarkPriceData,           // Raw benchmark data
-          events: events.map(e => ({
-            ...e,
-            start_date: e.date, // PriceChart expects 'start_date' field
-            label: e.type === 'dividend' ? '💰' : e.type === 'split' ? '📊' : '🛒'
-          })),
+          events: eventsWithTrend,
           timeframe,
           currentValue,
           previousClose,
           absoluteReturn,
-          percentReturn,
+          adjustedAbsoluteReturn,       // Absolute return adjusted for capital flows
+          cumulativeCapitalFlow,        // Total capital flows during period
+          percentReturn,                // Simple return (money-weighted)
+          twrReturn,                    // Time-weighted return (accurate with cash flows)
+          hasCashFlows,                 // Flag indicating if TWR is different from simple
+          displayReturn,                // The return to display (TWR if available, else simple)
+          twrData,                      // Full TWR data including sub-periods for visualization
           benchmarkReturn: benchmarkReturn,  // Calculated from actual timeframe data
           outperformance: outperformance,    // Calculated from actual timeframe data
           holdingsCount: benchmarkApiData?.holdings_count || 0,  // Actual number of holdings from API
           period: timeframe, // Show actual timeframe, not API period
           apiData: benchmarkApiData,         // Only used for attribution (top_gainers/losers)
-          apiPeriod: periodForBenchmark      // Track which API period attribution data is from
+          apiPeriod: periodForBenchmark,     // Track which API period attribution data is from
+          missingSymbols: historicalData.missing_price_symbols || []
         });
 
         setLoading(false);
@@ -192,17 +246,60 @@ const PortfolioPerformanceDetail = () => {
     // Normalize to percentage if in percent mode
     if (displayMode === 'percent') {
       if (performanceData.priceData.length > 0) {
-        chartPriceData = normalizeToPercentageReturn(performanceData.priceData);
+        // Check for available normalization methods
+        // Check actual capital flow data instead of relying on hasCashFlows flag (which requires TWR success)
+        const hasCapitalFlows = performanceData.priceData.some(p => p.capital_flow && p.capital_flow !== 0);
+        const hasTWRData = performanceData.twrData && !performanceData.twrData.error;
+
+        // Calculate lot coverage to avoid using hybrid mode prematurely
+        const pointsWithLots = performanceData.priceData.filter(p => p.lot_breakdown && p.lot_breakdown.length > 0).length;
+        const totalPoints = performanceData.priceData.length;
+        const lotCoveragePercent = totalPoints > 0 ? (pointsWithLots / totalPoints) * 100 : 0;
+        const hasAdequateLotCoverage = lotCoveragePercent > 80;
+
+        if (hasAdequateLotCoverage) {
+          // Best: Use hybrid normalization with lot-level tracking
+          // This correctly handles pre-period vs in-period purchases
+          // Only used when >80% of points have lot data to avoid chart collapse
+          const periodStartDate = performanceData.priceData[0]?.date;
+          chartPriceData = normalizeToHybridReturn(performanceData.priceData, periodStartDate, performanceData.twrData);
+        } else if (hasTWRData && hasCapitalFlows) {
+          // Good: Use TWR-based normalization if available
+          chartPriceData = normalizeToTWR(
+            performanceData.priceData,
+            performanceData.twrData
+          );
+        } else if (hasCapitalFlows) {
+          // Decent: Use capital flow adjustment
+          chartPriceData = normalizeToPercentageReturnWithCapitalFlows(performanceData.priceData);
+        } else {
+          // Simple: No capital flows, use basic normalization
+          chartPriceData = normalizeToPercentageReturn(performanceData.priceData);
+        }
       }
+
+      // Benchmark always uses simple normalization (no capital flows in S&P 500)
       if (performanceData.benchmarkPriceData.length > 0) {
         chartBenchmarkData = normalizeToPercentageReturn(performanceData.benchmarkPriceData);
       }
+
+      // Filter out pre-baseline points (close: null) to prevent hard zero-line rendering
+      // normalizeToPercentageReturn emits close: null for points before first investment
+      chartPriceData = chartPriceData.filter(point => point.close !== null && point.close !== undefined);
     }
+
+    // Extract final chart return value to align summary cards with chart
+    // This ensures the "Period Return" card shows the same value as the chart endpoint
+    const chartDisplayReturn = displayMode === 'percent' && chartPriceData.length > 0
+      ? chartPriceData[chartPriceData.length - 1]?.close || 0
+      : null;
 
     return {
       ...performanceData,
       chartPriceData,
-      chartBenchmarkData
+      chartBenchmarkData,
+      chartDisplayReturn,  // Chart's calculated return for summary card alignment
+      twrData: performanceData.twrData  // Ensure TWR data is available for display
     };
   }, [performanceData, displayMode]);
 
@@ -232,17 +329,55 @@ const PortfolioPerformanceDetail = () => {
             <p className="text-2xl font-bold text-gray-900">
               {formatCurrency(performanceData?.currentValue || 0)}
             </p>
+            {performanceData?.adjustedAbsoluteReturn !== undefined && (
+              <p className={`text-sm mt-1 ${performanceData.adjustedAbsoluteReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {performanceData.adjustedAbsoluteReturn >= 0 ? '+' : ''}
+                {formatCurrency(performanceData.adjustedAbsoluteReturn)}
+                {performanceData?.cumulativeCapitalFlow !== 0 && (
+                  <span className="text-gray-500 text-xs ml-1" title="Capital flows netted out">
+                    (net of {formatCurrency(Math.abs(performanceData.cumulativeCapitalFlow))} {performanceData.cumulativeCapitalFlow > 0 ? 'deposits' : 'withdrawals'})
+                  </span>
+                )}
+              </p>
+            )}
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
           <div>
-            <p className="text-sm text-gray-500">{performanceData?.period || 'Period'} Return</p>
-            <p className={`text-2xl font-bold ${performanceData?.percentReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatPercentage(performanceData?.percentReturn || 0)}
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-500">{performanceData?.period || 'Period'} Return</p>
+              {performanceData?.hasCashFlows && performanceData?.twrReturn !== null && (
+                <span
+                  className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded"
+                  title="Time-Weighted Return: accounts for deposits/withdrawals"
+                >
+                  TWR
+                </span>
+              )}
+            </div>
+            <p className={`text-2xl font-bold ${(() => {
+              // Use chart's calculated value when in percent mode for alignment
+              const returnValue = displayMode === 'percent' && chartDisplayData?.chartDisplayReturn !== null && chartDisplayData?.chartDisplayReturn !== undefined
+                ? chartDisplayData.chartDisplayReturn
+                : (performanceData?.displayReturn || performanceData?.percentReturn || 0);
+              return returnValue >= 0 ? 'text-green-600' : 'text-red-600';
+            })()}`}>
+              {(() => {
+                // Use chart's calculated value when in percent mode for alignment
+                const returnValue = displayMode === 'percent' && chartDisplayData?.chartDisplayReturn !== null && chartDisplayData?.chartDisplayReturn !== undefined
+                  ? chartDisplayData.chartDisplayReturn
+                  : (performanceData?.displayReturn || performanceData?.percentReturn || 0);
+                return formatPercentage(returnValue);
+              })()}
             </p>
             <p className="text-xs text-gray-500 mt-1">
               {formatCurrency(performanceData?.absoluteReturn || 0)}
+              {performanceData?.hasCashFlows && performanceData?.twrReturn !== performanceData?.percentReturn && (
+                <span className="ml-2 text-xs text-gray-400">
+                  (Simple: {formatPercentage(performanceData?.percentReturn || 0)})
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -423,23 +558,92 @@ const PortfolioPerformanceDetail = () => {
             );
           })()}
 
+          {/* Missing Symbols Warning - Shows when chart has partial data */}
+          {chartDisplayData && (() => {
+            const missingSymbols = chartDisplayData?.missingSymbols || performanceData?.missingSymbols || [];
+            const hasChartPoints = Array.isArray(chartDisplayData.chartPriceData)
+              && chartDisplayData.chartPriceData.length > 0;
+
+            // Show warning when chart renders but some symbols are missing
+            if (hasChartPoints && missingSymbols.length > 0) {
+              return (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <h4 className="text-sm font-semibold text-amber-900">Incomplete Price Data</h4>
+                      <p className="text-xs text-amber-700 mt-1">
+                        Missing historical prices for: <span className="font-semibold">{missingSymbols.join(', ')}</span>.
+                        Performance shown reflects only holdings with available data.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           {/* Chart Container */}
           <div className="h-96">
-            {chartDisplayData && (
-              <PriceChart
-                priceData={chartDisplayData.chartPriceData}
-                benchmarkData={chartDisplayData.chartBenchmarkData || []}
-                showBenchmark={displayMode === 'percent' && showBenchmark}
-                significantEvents={showEvents ? chartDisplayData.events : []}
-                ticker={selectedAccount?.accountNumber || 'Portfolio'}
-                companyName={selectedAccount?.accountName || 'Portfolio'}
-                timeframe={timeframe}
-                showSignificantEvents={showEvents}
-                currency="USD"
-                displayMode={displayMode}
-                prevClose={timeframe === '1D' ? chartDisplayData.previousClose : null}
-              />
-            )}
+            {(() => {
+              if (!chartDisplayData) {
+                return (
+                  <div className="flex h-full items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                      <div>Loading chart data...</div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const missingSymbols = chartDisplayData?.missingSymbols || performanceData?.missingSymbols || [];
+
+              const hasChartPoints = Array.isArray(chartDisplayData.chartPriceData)
+                && chartDisplayData.chartPriceData.length > 0;
+
+              if (!hasChartPoints) {
+                return (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="text-center max-w-md">
+                      <p className="text-sm font-medium text-gray-700">
+                        No performance history available
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        We couldn’t find any historical values for this portfolio in the selected timeframe.
+                        Try a longer timeframe or confirm the holdings have market data.
+                      </p>
+                      {missingSymbols.length > 0 && (
+                        <p className="mt-3 text-xs text-gray-500">
+                          Missing price data for: {missingSymbols.join(', ')}. We’ll show the chart as soon as
+                          we can retrieve pricing for these holdings.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <PriceChart
+                  priceData={chartDisplayData.chartPriceData}
+                  benchmarkData={chartDisplayData.chartBenchmarkData || []}
+                  showBenchmark={displayMode === 'percent' && showBenchmark}
+                  significantEvents={showEvents ? chartDisplayData.events : []}
+                  ticker={selectedAccount?.accountNumber || 'Portfolio'}
+                  companyName={selectedAccount?.accountName || 'Portfolio'}
+                  timeframe={timeframe}
+                  showSignificantEvents={showEvents}
+                  currency="USD"
+                  displayMode={displayMode}
+                  prevClose={timeframe === '1D' ? chartDisplayData.previousClose : null}
+                  mode="entity"
+                />
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -472,8 +676,8 @@ const PortfolioPerformanceDetail = () => {
               </h3>
               <div className="space-y-3">
                 {performanceData.apiData?.top_gainers && performanceData.apiData.top_gainers.length > 0 ? (
-                  performanceData.apiData.top_gainers.slice(0, 3).map((holding) => (
-                    <div key={holding.symbol} className="flex justify-between items-center">
+                  performanceData.apiData.top_gainers.slice(0, 3).map((holding, index) => (
+                    <div key={`gainer-${holding.symbol}-${index}`} className="flex justify-between items-center">
                       <div>
                         <p className="font-medium text-gray-900">{holding.symbol}</p>
                         <p className="text-sm text-gray-500">{holding.quantity} shares</p>
@@ -500,8 +704,8 @@ const PortfolioPerformanceDetail = () => {
               </h3>
               <div className="space-y-3">
                 {performanceData.apiData?.top_losers && performanceData.apiData.top_losers.length > 0 ? (
-                  performanceData.apiData.top_losers.slice(0, 3).map((holding) => (
-                    <div key={holding.symbol} className="flex justify-between items-center">
+                  performanceData.apiData.top_losers.slice(0, 3).map((holding, index) => (
+                    <div key={`loser-${holding.symbol}-${index}`} className="flex justify-between items-center">
                       <div>
                         <p className="font-medium text-gray-900">{holding.symbol}</p>
                         <p className="text-sm text-gray-500">{holding.quantity} shares</p>
