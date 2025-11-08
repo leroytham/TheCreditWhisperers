@@ -101,14 +101,23 @@ async def websocket_route(websocket: WebSocket, client_id: str):
 # 2. React Router client-side routing (catch-all route)
 # 3. Proper static asset serving (JS, CSS, images)
 
-# Get the static directory path
+# Get the static directory paths
+# React build creates: build/index.html and build/static/js/, build/static/css/
+# After copying to backend/app/static/, we have:
+#   - backend/app/static/index.html (for catch-all route)
+#   - backend/app/static/static/js/ (for asset files)
 STATIC_DIR = Path(__file__).parent / "static"
+STATIC_ASSETS_DIR = STATIC_DIR / "static"  # The nested static folder from React build
 
-# Mount static files (JS, CSS, images, etc.) at /static
-# This serves files like /static/js/main.js, /static/css/main.css
-if STATIC_DIR.exists():
+# Mount the React build's static assets (JS, CSS, images) at /static
+# This serves files like /static/js/main.js → backend/app/static/static/js/main.js
+if STATIC_ASSETS_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_ASSETS_DIR)), name="static")
+    logger.info(f"Mounted static assets directory: {STATIC_ASSETS_DIR}")
+elif STATIC_DIR.exists():
+    # Fallback: mount the outer directory if inner doesn't exist (for dev)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-    logger.info(f"Mounted static directory: {STATIC_DIR}")
+    logger.warning(f"Using fallback static directory: {STATIC_DIR}")
 else:
     logger.warning(f"Static directory not found: {STATIC_DIR}")
     logger.warning("Frontend will not be served. Run 'npm run build' in frontend/")
