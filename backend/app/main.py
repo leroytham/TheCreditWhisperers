@@ -45,10 +45,12 @@ if settings.FRONTEND_URL not in allowed_origins:
     ws_url = settings.FRONTEND_URL.replace("http://", "ws://").replace("https://", "wss://")
     allowed_origins.append(ws_url)
 
-if settings.API_BASE_URL not in allowed_origins:
-    allowed_origins.append(settings.API_BASE_URL)
+# Get API base URL (supports both API_BASE_URL and API_BASE for backward compatibility)
+api_base_url = settings.get_api_base_url()
+if api_base_url not in allowed_origins:
+    allowed_origins.append(api_base_url)
     # Also add WebSocket variant
-    ws_url = settings.API_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
+    ws_url = api_base_url.replace("http://", "ws://").replace("https://", "wss://")
     allowed_origins.append(ws_url)
 
 logger.info(f"CORS allowed origins: {allowed_origins}")

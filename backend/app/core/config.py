@@ -56,11 +56,20 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
 
     # API Base URL (where the backend is hosted)
-    API_BASE_URL: str = "http://localhost:8000"
+    # Supports both API_BASE_URL (new) and API_BASE (legacy for backward compatibility)
+    API_BASE_URL: Optional[str] = None
+    API_BASE: Optional[str] = None  # Legacy variable name for backward compatibility
 
     # Azure OAuth
     AZURE_AUTHORITY: str = "https://login.microsoftonline.com/common"
     AZURE_REDIRECT_URI: Optional[str] = None  # Auto-generated if not provided
+
+    def get_api_base_url(self) -> str:
+        """
+        Get the API base URL, supporting both new (API_BASE_URL) and legacy (API_BASE) variable names.
+        Prefers API_BASE_URL if set, falls back to API_BASE, then to default localhost.
+        """
+        return self.API_BASE_URL or self.API_BASE or "http://localhost:8000"
 
     def get_redirect_uri(self) -> str:
         """
@@ -71,7 +80,7 @@ class Settings(BaseSettings):
             return self.AZURE_REDIRECT_URI
         # Auto-generate: {API_BASE_URL}/auth/callback
         # Note: The /api prefix is handled by frontend proxy in dev, not needed here
-        return f"{self.API_BASE_URL}/auth/callback"
+        return f"{self.get_api_base_url()}/auth/callback"
 
     class Config:
         env_file = ".env"
