@@ -7,6 +7,7 @@ from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
 from .api.websocket import websocket_endpoint
 from .database import create_indexes
+from .core.config import settings
 import logging
 import warnings
 import os
@@ -29,14 +30,32 @@ app = FastAPI(title="Financial Analysis API", version="1.0.0")
 
 # Configure CORS (Cross-Origin Resource Sharing)
 # Note: WebSocket connections also need proper CORS configuration
+# Supports both localhost and production Azure deployment
+allowed_origins = [
+    "http://localhost:3000",      # React dev server
+    "ws://localhost:3000",        # WebSocket dev
+    "http://localhost:8000",      # Backend dev
+    "ws://localhost:8000",        # WebSocket backend dev
+]
+
+# Add production URLs from settings if different from localhost
+if settings.FRONTEND_URL not in allowed_origins:
+    allowed_origins.append(settings.FRONTEND_URL)
+    # Also add WebSocket variant
+    ws_url = settings.FRONTEND_URL.replace("http://", "ws://").replace("https://", "wss://")
+    allowed_origins.append(ws_url)
+
+if settings.API_BASE_URL not in allowed_origins:
+    allowed_origins.append(settings.API_BASE_URL)
+    # Also add WebSocket variant
+    ws_url = settings.API_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
+    allowed_origins.append(ws_url)
+
+logger.info(f"CORS allowed origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "ws://localhost:3000",
-        "http://localhost:8000",
-        "ws://localhost:8000"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

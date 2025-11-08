@@ -1366,8 +1366,10 @@ def search_ticker(q: str):
 
 
 
-REDIRECT_URI = os.getenv("AZURE_REDIRECT_URI", "http://localhost:8000/api/auth/callback")
-AUTHORITY = os.getenv("AZURE_AUTHORITY", "https://login.microsoftonline.com/common")
+# Use settings from config.py for environment-aware configuration
+REDIRECT_URI = settings.get_redirect_uri()
+AUTHORITY = settings.AZURE_AUTHORITY
+FRONTEND_URL = settings.FRONTEND_URL
 SCOPES = ["user.read"]
 
 # Initialize MSAL Confidential Client only if credentials are valid
@@ -1382,6 +1384,7 @@ if CLIENT_ID and CLIENT_ID != "<your-client-id>" and CLIENT_SECRET:
         print(f"✓ Azure AD authentication initialized")
         print(f"  Redirect URI: {REDIRECT_URI}")
         print(f"  Authority: {AUTHORITY}")
+        print(f"  Frontend URL: {FRONTEND_URL}")
     except Exception as e:
         print(f"ERROR: Failed to initialize Azure AD authentication: {str(e)}")
 else:
@@ -1416,10 +1419,11 @@ async def azure_auth_callback(request: Request):
     """
     Handles redirect from Azure after login.
     Exchanges authorization code for access token, then redirects to frontend.
+    Uses FRONTEND_URL from settings to support both localhost and production.
     """
     if not cca:
         print("ERROR: Azure callback called but cca is not initialized")
-        return RedirectResponse("http://localhost:3000/login?error=not_configured")
+        return RedirectResponse(f"{FRONTEND_URL}/login?error=not_configured")
 
     try:
         # Check for error from Azure
@@ -1429,7 +1433,7 @@ async def azure_auth_callback(request: Request):
         if error:
             print(f"Azure returned error: {error}")
             print(f"Error description: {error_description}")
-            return RedirectResponse(f"http://localhost:3000/login?error={error}")
+            return RedirectResponse(f"{FRONTEND_URL}/login?error={error}")
 
         code = request.query_params.get("code")
         if not code:
@@ -1450,7 +1454,7 @@ async def azure_auth_callback(request: Request):
             error_desc = result.get("error_description", "No description")
             print(f"Azure token exchange error: {error_msg}")
             print(f"Error description: {error_desc}")
-            return RedirectResponse(f"http://localhost:3000/login?error=azure_token_failed&msg={error_msg}")
+            return RedirectResponse(f"{FRONTEND_URL}/login?error=azure_token_failed&msg={error_msg}")
 
         account = result.get("id_token_claims", {})
         username = account.get("preferred_username", "unknown")
@@ -1458,14 +1462,14 @@ async def azure_auth_callback(request: Request):
         print(f"✓ Azure Login Success: {username}")
 
         return RedirectResponse(
-            f"http://localhost:3000/portfolio?user={username}"
+            f"{FRONTEND_URL}/portfolio?user={username}"
         )
 
     except Exception as e:
         print(f"Azure login callback exception: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
-        return RedirectResponse("http://localhost:3000/login?error=azure_failed")
+        return RedirectResponse(f"{FRONTEND_URL}/login?error=azure_failed")
 
 
 # ============================================================================

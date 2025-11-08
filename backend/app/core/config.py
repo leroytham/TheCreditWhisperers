@@ -52,12 +52,26 @@ class Settings(BaseSettings):
     MOMENTUM_THRESHOLD_WEAK: float = 0.10          # Weak momentum threshold
     MOMENTUM_THRESHOLD_STRONG: float = 0.20        # Strong momentum threshold
 
-    # Frontend URL (for CORS)
+    # Frontend URL (for CORS and redirects)
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # API Base URL (where the backend is hosted)
+    API_BASE_URL: str = "http://localhost:8000"
 
     # Azure OAuth
     AZURE_AUTHORITY: str = "https://login.microsoftonline.com/common"
-    AZURE_REDIRECT_URI: str = "http://localhost:8000/api/auth/callback"
+    AZURE_REDIRECT_URI: Optional[str] = None  # Auto-generated if not provided
+
+    def get_redirect_uri(self) -> str:
+        """
+        Get the OAuth redirect URI. Auto-generates from API_BASE_URL if not explicitly set.
+        This allows seamless switching between localhost and production.
+        """
+        if self.AZURE_REDIRECT_URI:
+            return self.AZURE_REDIRECT_URI
+        # Auto-generate: {API_BASE_URL}/auth/callback
+        # Note: The /api prefix is handled by frontend proxy in dev, not needed here
+        return f"{self.API_BASE_URL}/auth/callback"
 
     class Config:
         env_file = ".env"
