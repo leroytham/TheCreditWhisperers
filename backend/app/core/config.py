@@ -75,12 +75,23 @@ class Settings(BaseSettings):
         """
         Get the OAuth redirect URI. Auto-generates from API_BASE_URL if not explicitly set.
         This allows seamless switching between localhost and production.
+
+        Important: Backend routes are registered TWICE (with and without /api prefix):
+        - Localhost: /auth/callback (proxy strips /api)
+        - Production: /api/auth/callback (frontend calls /api/* directly)
         """
         if self.AZURE_REDIRECT_URI:
             return self.AZURE_REDIRECT_URI
-        # Auto-generate: {API_BASE_URL}/auth/callback
-        # Note: The /api prefix is handled by frontend proxy in dev, not needed here
-        return f"{self.get_api_base_url()}/auth/callback"
+
+        # Determine environment based on API_BASE_URL
+        api_base = self.get_api_base_url()
+
+        # If localhost, use /auth/callback (proxy strips /api prefix)
+        if "localhost" in api_base or "127.0.0.1" in api_base:
+            return f"{api_base}/auth/callback"
+
+        # If production (Azure or other), use /api/auth/callback
+        return f"{api_base}/api/auth/callback"
 
     class Config:
         env_file = ".env"
