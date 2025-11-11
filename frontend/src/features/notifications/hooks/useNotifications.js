@@ -4,7 +4,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
-import { notificationApi, preferencesApi, priceAlertApi } from '../../../services/notificationApi';
+import { notificationApi, preferencesApi, priceAlertApi, sentimentAlertApi } from '../../../services/notificationApi';
 import useAppStore from '../../../store/useAppStore';
 import { useCallback } from 'react';
 
@@ -16,6 +16,8 @@ export const QUERY_KEYS = {
   preferences: ['notifications', 'preferences'],
   priceAlerts: ['price-alerts'],
   priceAlert: (id) => ['price-alerts', id],
+  sentimentAlerts: ['sentiment-alerts'],
+  sentimentAlert: (id) => ['sentiment-alerts', id],
 };
 
 /**
@@ -32,8 +34,11 @@ export const useNotifications = (filters = {}) => {
   } = useQuery({
     queryKey: [...QUERY_KEYS.notifications, filters],
     queryFn: () => notificationApi.getNotifications(filters),
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 0, // Always consider data stale so refetchInterval works
     gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
+    refetchInterval: 30 * 1000, // Poll every 30 seconds for new notifications
+    refetchOnWindowFocus: true, // Refetch when user switches back to tab
+    refetchIntervalInBackground: true, // Continue polling even when window is not focused
   });
 
   // Mutations
@@ -247,8 +252,10 @@ export const useUnreadCount = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.unreadCount,
     queryFn: notificationApi.getUnreadCount,
-    staleTime: 60 * 1000, // 1 minute
-    refetchInterval: 60 * 1000, // Refetch every minute
+    staleTime: 0, // Always consider data stale so refetchInterval works
+    refetchInterval: 30 * 1000, // Poll every 30 seconds
+    refetchOnWindowFocus: true, // Refetch when user switches back to tab
+    refetchIntervalInBackground: true, // Continue polling even when window is not focused
   });
 
   return {
@@ -407,6 +414,109 @@ export const usePriceAlerts = (filters = {}) => {
 };
 
 /**
+ * Hook to manage sentiment alerts
+ */
+export const useSentimentAlerts = (filters = {}) => {
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: [...QUERY_KEYS.sentimentAlerts, filters],
+    queryFn: () => sentimentAlertApi.getAlerts(filters),
+    staleTime: 30 * 1000, // 30 seconds
+  });
+
+  const createMutation = useMutation({
+    mutationFn: sentimentAlertApi.createAlert,
+    onSuccess: (newAlert) => {
+      // Add the new alert to the cache
+      queryClient.setQueryData([...QUERY_KEYS.sentimentAlerts, filters], (old) => {
+        if (!old) return { alerts: [newAlert], total_count: 1 };
+        return {
+          alerts: [newAlert, ...old.alerts],
+          total_count: old.total_count + 1,
+        };
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sentimentAlerts });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ alertId, updates }) => sentimentAlertApi.updateAlert(alertId, updates),
+    onMutate: async ({ alertId, updates }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.sentimentAlerts });
+
+      const previousAlerts = queryClient.getQueryData([...QUERY_KEYS.sentimentAlerts, filters]);
+
+      queryClient.setQueryData([...QUERY_KEYS.sentimentAlerts, filters], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          alerts: old.alerts.map((alert) =>
+            alert.id === alertId ? { ...alert, ...updates } : alert
+          ),
+        };
+      });
+
+      return { previousAlerts };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousAlerts) {
+        queryClient.setQueryData([...QUERY_KEYS.sentimentAlerts, filters], context.previousAlerts);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sentimentAlerts });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: sentimentAlertApi.deleteAlert,
+    onMutate: async (alertId) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.sentimentAlerts });
+
+      const previousAlerts = queryClient.getQueryData([...QUERY_KEYS.sentimentAlerts, filters]);
+
+      queryClient.setQueryData([...QUERY_KEYS.sentimentAlerts, filters], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          alerts: old.alerts.filter((alert) => alert.id !== alertId),
+          total_count: old.total_count - 1,
+        };
+      });
+
+      return { previousAlerts };
+    },
+    onError: (_err, _alertId, context) => {
+      if (context?.previousAlerts) {
+        queryClient.setQueryData([...QUERY_KEYS.sentimentAlerts, filters], context.previousAlerts);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sentimentAlerts });
+    },
+  });
+
+  return {
+    alerts: data?.alerts || [],
+    totalCount: data?.total_count || 0,
+    isLoading,
+    error,
+    refetch,
+    // Mutations
+    createAlert: createMutation.mutate,
+    updateAlert: updateMutation.mutate,
+    deleteAlert: deleteMutation.mutate,
+    // Mutation states
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+  };
+};
+
+/**
  * Hook to sync server notifications with local Zustand store
  * This maintains backward compatibility with existing components
  */
@@ -450,5 +560,6 @@ export default {
   useUnreadCount,
   useNotificationPreferences,
   usePriceAlerts,
+  useSentimentAlerts,
   useNotificationSync,
 };

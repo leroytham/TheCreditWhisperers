@@ -102,23 +102,24 @@ const NotificationList = ({
               {subcategoryTitles[subcategory] || subcategory} ({notifs.length})
             </h3>
             <ul className="mt-4 space-y-2">
-              {notifs.map((notif) => (
-                <li
-                  key={notif.id}
-                  onMouseEnter={() => setHoveredId(notif.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  className={`flex items-start p-3 rounded-lg hover:bg-gray-100 cursor-pointer relative group ${
-                    !notif.isRead ? 'bg-blue-100 border border-blue-300' : ''
-                  }`}
-                >
-                  <div onClick={() => onNotificationClick(notif)} className="flex items-start flex-1">
-                    <input
-                      type="checkbox"
-                      checked={!notif.isRead}
-                      readOnly
-                      className="h-4 w-4 mt-1 text-gray-600 border-gray-300 rounded focus:ring-gray-500 pointer-events-none"
-                    />
-                    <div className="ml-3 text-sm flex-1">
+              {notifs.map((notif) => {
+                // Handle both camelCase and snake_case field naming
+                const isRead = notif.isRead || notif.is_read;
+                return (
+                  <li
+                    key={notif.id}
+                    onMouseEnter={() => setHoveredId(notif.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    className={`flex items-start p-3 rounded-lg hover:bg-gray-100 cursor-pointer relative group ${
+                      !isRead ? 'bg-blue-100 border border-blue-300' : ''
+                    }`}
+                  >
+                    <div onClick={() => onNotificationClick(notif)} className="flex items-start flex-1">
+                      {/* Unread Indicator Dot */}
+                      {!isRead && (
+                        <span className="flex-shrink-0 inline-block h-2 w-2 rounded-full bg-blue-500 mt-2 mr-3" />
+                      )}
+                    <div className="flex-1 text-sm">
                       {/* Title and Badges Row */}
                       <div className="flex items-start gap-2 flex-wrap">
                         <p className="font-medium text-gray-900 flex-1 min-w-0">{notif.title}</p>
@@ -195,7 +196,8 @@ const NotificationList = ({
                     </div>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         ))}

@@ -5,7 +5,7 @@ Notification models for MongoDB with Pydantic validation.
 
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from bson import ObjectId
 from enum import Enum
 
@@ -37,6 +37,21 @@ class AlertCondition(str, Enum):
     BELOW = "below"
     PERCENT_INCREASE = "percent_increase"
     PERCENT_DECREASE = "percent_decrease"
+
+class SentimentAlertCondition(str, Enum):
+    """Sentiment alert condition types."""
+    BECOMES_BULLISH = "becomes_bullish"  # Sentiment >= 0.35
+    BECOMES_BEARISH = "becomes_bearish"  # Sentiment <= -0.35
+    BECOMES_NEUTRAL = "becomes_neutral"  # Sentiment between -0.15 and 0.15
+    CROSSES_ABOVE = "crosses_above"  # Custom threshold (e.g., > 0.5)
+    CROSSES_BELOW = "crosses_below"  # Custom threshold (e.g., < -0.5)
+    MOMENTUM_POSITIVE = "momentum_positive"  # Positive momentum > threshold
+    MOMENTUM_NEGATIVE = "momentum_negative"  # Negative momentum < threshold
+
+class AlertType(str, Enum):
+    """Alert type enumeration."""
+    PRICE = "price"
+    SENTIMENT = "sentiment"
 
 
 class NotificationModel(BaseModel):
@@ -247,18 +262,6 @@ class PriceAlertModel(BaseModel):
             return str(v)
         return v
 
-    @validator('condition')
-    def validate_condition_fields(cls, v, values):
-        """Validate that required fields are present for the condition."""
-        if v in [AlertCondition.ABOVE, AlertCondition.BELOW]:
-            if 'target_price' not in values or values['target_price'] is None:
-                raise ValueError(f"target_price is required for {v} condition")
-        elif v in [AlertCondition.PERCENT_INCREASE, AlertCondition.PERCENT_DECREASE]:
-            if 'percent_change' not in values or values['percent_change'] is None:
-                raise ValueError(f"percent_change is required for {v} condition")
-            if 'base_price' not in values or values['base_price'] is None:
-                raise ValueError(f"base_price is required for {v} condition")
-        return v
 
     def check_condition(self, current_price: float) -> bool:
         """Check if the alert condition is met."""
@@ -291,6 +294,131 @@ class PriceAlertModel(BaseModel):
 
     @classmethod
     def from_mongo(cls, doc: Dict) -> 'PriceAlertModel':
+        """Create model from MongoDB document."""
+        if doc and '_id' in doc:
+            doc['_id'] = str(doc['_id'])
+        return cls(**doc)
+
+
+class SentimentAlertModel(BaseModel):
+    """
+    Sentiment alert configuration stored in MongoDB.
+    """
+    id: Optional[str] = Field(default=None, alias="_id")
+    user_id: str = Field(..., description="User ID who created the alert")
+    ticker: str = Field(..., description="Stock ticker symbol")
+
+    # Portfolio context
+    portfolio_id: Optional[str] = Field(None, description="Portfolio ID this alert belongs to")
+    portfolio_name: Optional[str] = Field(None, description="Portfolio name for display")
+    is_global: bool = Field(False, description="True if alert applies to ticker across all portfolios")
+
+    # Alert configuration
+    condition: SentimentAlertCondition
+    threshold: Optional[float] = Field(None, ge=-1.0, le=1.0, description="Sentiment threshold for crosses_above/below")
+    momentum_threshold: Optional[float] = Field(None, ge=-1.0, le=1.0, description="Momentum threshold")
+
+    # Previous state tracking for cross detection
+    last_sentiment_score: Optional[float] = None
+    last_momentum: Optional[float] = None
+    last_checked_at: Optional[datetime] = None
+
+    # State
+    is_active: bool = True
+    triggered: bool = False
+    triggered_at: Optional[datetime] = None
+    triggered_sentiment: Optional[float] = None
+
+    # Notification settings
+    notification_title: Optional[str] = None
+    notification_message: Optional[str] = None
+    priority: NotificationPriority = NotificationPriority.HIGH
+
+    # Metadata
+    notes: Optional[str] = Field(None, max_length=500)
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        populate_by_name = True
+        json_encoders = {
+            ObjectId: str,
+            datetime: lambda v: v.isoformat()
+        }
+
+    @validator('id', pre=True)
+    def convert_object_id(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+    def check_condition(self, current_sentiment: float, current_momentum: Optional[float] = None) -> bool:
+        """Check if the sentiment alert condition is met."""
+        if not self.is_active or self.triggered:
+            return False
+
+        # Sentiment thresholds from scoring config
+        BULLISH = 0.35
+        BEARISH = -0.35
+        NEUTRAL_LOW = -0.15
+        NEUTRAL_HIGH = 0.15
+
+        if self.condition == SentimentAlertCondition.BECOMES_BULLISH:
+            # Check if crossed into bullish territory
+            return (current_sentiment >= BULLISH and
+                   (self.last_sentiment_score is None or self.last_sentiment_score < BULLISH))
+
+        elif self.condition == SentimentAlertCondition.BECOMES_BEARISH:
+            # Check if crossed into bearish territory
+            return (current_sentiment <= BEARISH and
+                   (self.last_sentiment_score is None or self.last_sentiment_score > BEARISH))
+
+        elif self.condition == SentimentAlertCondition.BECOMES_NEUTRAL:
+            # Check if crossed into neutral territory
+            return (NEUTRAL_LOW <= current_sentiment <= NEUTRAL_HIGH and
+                   (self.last_sentiment_score is None or
+                    self.last_sentiment_score < NEUTRAL_LOW or
+                    self.last_sentiment_score > NEUTRAL_HIGH))
+
+        elif self.condition == SentimentAlertCondition.CROSSES_ABOVE:
+            # Check if crossed above custom threshold
+            if self.threshold is not None:
+                return (current_sentiment >= self.threshold and
+                       (self.last_sentiment_score is None or self.last_sentiment_score < self.threshold))
+
+        elif self.condition == SentimentAlertCondition.CROSSES_BELOW:
+            # Check if crossed below custom threshold
+            if self.threshold is not None:
+                return (current_sentiment <= self.threshold and
+                       (self.last_sentiment_score is None or self.last_sentiment_score > self.threshold))
+
+        elif self.condition == SentimentAlertCondition.MOMENTUM_POSITIVE:
+            # Check if momentum crossed above threshold
+            if current_momentum is not None and self.momentum_threshold is not None:
+                return (current_momentum >= self.momentum_threshold and
+                       (self.last_momentum is None or self.last_momentum < self.momentum_threshold))
+
+        elif self.condition == SentimentAlertCondition.MOMENTUM_NEGATIVE:
+            # Check if momentum crossed below threshold
+            if current_momentum is not None and self.momentum_threshold is not None:
+                return (current_momentum <= self.momentum_threshold and
+                       (self.last_momentum is None or self.last_momentum > self.momentum_threshold))
+
+        return False
+
+    def to_mongo(self) -> Dict:
+        """Convert to MongoDB document format."""
+        doc = self.dict(by_alias=True, exclude_none=True)
+        if 'id' in doc and doc['id']:
+            doc['_id'] = ObjectId(doc['id'])
+        else:
+            doc.pop('_id', None)
+        return doc
+
+    @classmethod
+    def from_mongo(cls, doc: Dict) -> 'SentimentAlertModel':
         """Create model from MongoDB document."""
         if doc and '_id' in doc:
             doc['_id'] = str(doc['_id'])
@@ -553,6 +681,125 @@ async def delete_price_alert(alert_id: str, user_id: str) -> bool:
     from app.database import get_price_alerts_collection
 
     collection = get_price_alerts_collection()
+    result = collection.delete_one(
+        {"_id": ObjectId(alert_id), "user_id": user_id}
+    )
+    return result.deleted_count > 0
+
+
+# Sentiment Alert Functions
+
+async def create_sentiment_alert(alert: SentimentAlertModel) -> str:
+    """Create a new sentiment alert."""
+    from app.database import get_sentiment_alerts_collection
+
+    collection = get_sentiment_alerts_collection()
+    doc = alert.to_mongo()
+    result = collection.insert_one(doc)
+    return str(result.inserted_id)
+
+
+async def get_sentiment_alerts(
+    user_id: str,
+    is_active: Optional[bool] = None,
+    ticker: Optional[str] = None,
+    portfolio_id: Optional[str] = None,
+    include_global: bool = True
+) -> List[SentimentAlertModel]:
+    """Get sentiment alerts for a user."""
+    from app.database import get_sentiment_alerts_collection
+
+    collection = get_sentiment_alerts_collection()
+
+    # Build query
+    query = {"user_id": user_id}
+    if is_active is not None:
+        query["is_active"] = is_active
+    if ticker:
+        query["ticker"] = ticker.upper()
+
+    # Portfolio filtering
+    if portfolio_id:
+        if include_global:
+            query["$or"] = [
+                {"portfolio_id": portfolio_id},
+                {"is_global": True}
+            ]
+        else:
+            query["portfolio_id"] = portfolio_id
+    elif not include_global:
+        query["is_global"] = False
+
+    # Execute query
+    cursor = collection.find(query).sort("created_at", -1)
+
+    alerts = []
+    for doc in cursor:
+        alerts.append(SentimentAlertModel.from_mongo(doc))
+
+    return alerts
+
+
+async def get_active_sentiment_alerts_for_ticker(ticker: str) -> List[SentimentAlertModel]:
+    """Get all active sentiment alerts for a specific ticker."""
+    from app.database import get_sentiment_alerts_collection
+
+    collection = get_sentiment_alerts_collection()
+    cursor = collection.find({
+        "ticker": ticker.upper(),
+        "is_active": True,
+        "triggered": False
+    })
+
+    alerts = []
+    for doc in cursor:
+        alerts.append(SentimentAlertModel.from_mongo(doc))
+
+    return alerts
+
+
+async def update_sentiment_alert_state(
+    alert_id: str,
+    current_sentiment: float,
+    current_momentum: Optional[float] = None
+) -> bool:
+    """Update sentiment alert's last checked state."""
+    from app.database import get_sentiment_alerts_collection
+
+    collection = get_sentiment_alerts_collection()
+    result = collection.update_one(
+        {"_id": ObjectId(alert_id)},
+        {"$set": {
+            "last_sentiment_score": current_sentiment,
+            "last_momentum": current_momentum,
+            "last_checked_at": datetime.utcnow()
+        }}
+    )
+    return result.modified_count > 0
+
+
+async def trigger_sentiment_alert(alert_id: str, triggered_sentiment: float) -> bool:
+    """Mark a sentiment alert as triggered."""
+    from app.database import get_sentiment_alerts_collection
+
+    collection = get_sentiment_alerts_collection()
+    result = collection.update_one(
+        {"_id": ObjectId(alert_id)},
+        {"$set": {
+            "triggered": True,
+            "triggered_at": datetime.utcnow(),
+            "triggered_sentiment": triggered_sentiment,
+            "is_active": False
+        }}
+    )
+    return result.modified_count > 0
+
+
+async def delete_sentiment_alert(alert_id: str, user_id: str) -> bool:
+    """Delete a sentiment alert."""
+    from app.database import get_sentiment_alerts_collection
+
+    collection = get_sentiment_alerts_collection()
     result = collection.delete_one(
         {"_id": ObjectId(alert_id), "user_id": user_id}
     )

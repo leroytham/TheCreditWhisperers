@@ -4,7 +4,7 @@ import { HelpCircle, Menu, Search } from 'lucide-react';
 import EntitySearch from '../../features/entity/components/EntitySearch/EntitySearch';
 import NotificationDropdown from '../../features/notifications/components/NotificationDropdown';
 import { useTickerSearch } from '../../features/entity/hooks/useTickerSearch';
-import useAppStore from '../../store/useAppStore';
+import { useNotifications } from '../../features/notifications/hooks/useNotifications';
 
 /**
  * AppHeader Component
@@ -21,7 +21,14 @@ import useAppStore from '../../store/useAppStore';
 const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntitySearch = false }) => {
   const navigate = useNavigate();
   const { searchTerm, setSearchTerm, suggestions, loading, clearSearch } = useTickerSearch();
-  const notifications = useAppStore(state => state.notifications);
+
+  // Fetch real notifications from backend
+  const { notifications: realNotifications, refetch: refetchNotifications } = useNotifications({
+    is_archived: false,
+    limit: 10, // Get latest 10 notifications for header
+  });
+
+  const notifications = realNotifications || [];
 
   // Handle ticker selection for general search
   const handleGeneralTickerSelect = (symbol) => {
@@ -92,7 +99,7 @@ const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntityS
               )}
 
               {/* Notification Dropdown */}
-              <NotificationDropdown notifications={notifications} />
+              <NotificationDropdown notifications={notifications} onRefetch={refetchNotifications} />
 
               {/* Help Icon */}
               <button className="p-1 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100">

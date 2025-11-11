@@ -235,7 +235,7 @@ class PriceAlertService:
         self.is_running = True
 
         try:
-            from .stock_data_service import stock_service
+            from .stock_data_service import stock_data_service
 
             while self.is_running:
                 # Get all tickers that have active alerts
@@ -244,17 +244,23 @@ class PriceAlertService:
                 if tickers:
                     logger.info(f"Monitoring {len(tickers)} tickers: {', '.join(sorted(tickers))}")
 
-                    # Fetch current prices for all monitored tickers
-                    for ticker in tickers:
+                    # Fetch current prices for all monitored tickers IN PARALLEL
+                    async def check_ticker_price(ticker: str):
                         try:
                             # Get current price
-                            price_data = await stock_service.get_current_price(ticker)
+                            price_data = await stock_data_service.get_current_market_price(ticker)
                             if price_data:
-                                current_price = price_data.get("price")
+                                current_price = price_data.get("market_price")
                                 if current_price:
+                                    logger.info(f"Current price for {ticker}: ${current_price:.2f}")
                                     await self.check_price_alerts(ticker, current_price)
+                                else:
+                                    logger.warning(f"No market_price in response for {ticker}: {price_data}")
                         except Exception as e:
                             logger.error(f"Error fetching price for {ticker}: {e}")
+
+                    # Process all tickers in parallel for faster execution
+                    await asyncio.gather(*[check_ticker_price(ticker) for ticker in tickers])
 
                     logger.debug(f"Completed price check cycle, sleeping for {interval} seconds")
                 else:

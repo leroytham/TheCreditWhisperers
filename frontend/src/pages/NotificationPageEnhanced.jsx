@@ -4,6 +4,8 @@ import { Bell, RefreshCw, AlertTriangle, Info, CheckCheck } from 'lucide-react';
 import AppHeader from '../components/layout/AppHeader';
 import NotificationList from '../features/notifications/components/NotificationList';
 import NotificationModal from '../features/notifications/components/NotificationModal';
+import UnifiedAlertModal from '../features/notifications/components/UnifiedAlertModal';
+import UnifiedAlertList from '../features/notifications/components/UnifiedAlertList';
 import useAppStore from '../store/useAppStore';
 import {
   useNotifications,
@@ -23,6 +25,7 @@ const NotificationPageEnhanced = () => {
   const [activeTab, setActiveTab] = useState('active');
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [isServerEnabled, setIsServerEnabled] = useState(true); // Feature flag for server mode
+  const [showAlertModal, setShowAlertModal] = useState(false);
 
   // Server-backed notifications (when enabled)
   const serverFilters = {
@@ -314,6 +317,16 @@ const NotificationPageEnhanced = () => {
                 </span>
               </button>
               <button
+                onClick={() => setActiveTab('alerts')}
+                className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'alerts'
+                    ? 'border-gray-900 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Alerts
+              </button>
+              <button
                 onClick={() => setActiveTab('subscriptions')}
                 className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'subscriptions'
@@ -327,7 +340,7 @@ const NotificationPageEnhanced = () => {
           </section>
 
           {/* Notification Status Bar */}
-          {activeTab !== 'subscriptions' && (
+          {activeTab !== 'subscriptions' && activeTab !== 'alerts' && (
             <section className="bg-white p-4 rounded-lg shadow my-8 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">
                 {displayedNotifications.length} Notifications{' '}
@@ -367,7 +380,11 @@ const NotificationPageEnhanced = () => {
           )}
 
           {/* Main Content */}
-          {activeTab === 'subscriptions' ? (
+          {activeTab === 'alerts' ? (
+            <div className="bg-white p-8 rounded-lg shadow">
+              <UnifiedAlertList onCreateNew={() => setShowAlertModal(true)} />
+            </div>
+          ) : activeTab === 'subscriptions' ? (
             <div className="bg-white p-8 rounded-lg shadow">
               <h2 className="text-xl font-semibold text-gray-900 mb-6">
                 Notification Preferences
@@ -544,6 +561,18 @@ const NotificationPageEnhanced = () => {
           onClose={handleCloseModal}
           onArchive={() => handleArchive(selectedNotification.id)}
           onDelete={() => handleDelete(selectedNotification.id)}
+        />
+      )}
+
+      {/* Unified Alert Modal */}
+      {showAlertModal && (
+        <UnifiedAlertModal
+          onClose={() => setShowAlertModal(false)}
+          onSuccess={() => {
+            setShowAlertModal(false);
+            // Optionally show success message
+          }}
+          defaultAlertType="price"
         />
       )}
     </div>

@@ -169,6 +169,22 @@ async def startup_event():
         logger.error(f"Failed to create database indexes: {e}")
         # Continue startup even if index creation fails
 
+    # Start price alert monitoring service
+    try:
+        from .services.price_alert_service import price_alert_service
+        price_alert_service.start_monitoring(interval=60)  # Check every 60 seconds
+        logger.info("Price alert monitoring service started (60s interval)")
+    except Exception as e:
+        logger.error(f"Failed to start price alert monitoring: {e}")
+
+    # Start sentiment alert monitoring service
+    try:
+        from .services.sentiment_alert_service import sentiment_alert_service
+        sentiment_alert_service.start_monitoring(interval=60)  # Check every 60 seconds
+        logger.info("Sentiment alert monitoring service started (60s interval)")
+    except Exception as e:
+        logger.error(f"Failed to start sentiment alert monitoring: {e}", exc_info=True)
+
     logger.info("Application startup complete")
 
 # Cleanup handler for multiprocessing resources
@@ -179,6 +195,14 @@ async def shutdown_event():
     This helps prevent resource_tracker warnings from loky.
     """
     logger.info("Shutting down application and cleaning up resources...")
+
+    # Stop price alert monitoring
+    try:
+        from .services.price_alert_service import price_alert_service
+        price_alert_service.stop_monitoring()
+        logger.info("Price alert monitoring service stopped")
+    except Exception as e:
+        logger.warning(f"Error stopping price alert monitoring: {e}")
 
     # Force cleanup of any remaining loky executors
     try:
