@@ -8,50 +8,86 @@ from pymongo.database import Database
 from pymongo.collection import Collection
 from typing import Optional
 import certifi
+import threading
+import time
 from app.core.config import settings
 
-# Global MongoDB client instance
-_client: Optional[MongoClient] = None
-_database: Optional[Database] = None
+# Thread-local storage for MongoDB connections
+# This ensures each worker process gets its own connection after fork
+_thread_local = threading.local()
 
 
 def get_client() -> MongoClient:
-    """Get or create MongoDB client singleton."""
-    global _client
-    if _client is None:
+    """Get or create MongoDB client per-worker/thread."""
+    if not hasattr(_thread_local, 'client') or _thread_local.client is None:
         # Determine if we should use TLS/SSL based on the connection string
         # MongoDB Atlas (mongodb+srv://) requires TLS, local MongoDB typically doesn't
-        use_tls = settings.MONGO_URI.startswith("mongodb+srv://") or settings.MONGO_URI.startswith("mongodb://") and "ssl=true" in settings.MONGO_URI.lower()
+        use_tls = settings.MONGO_URI.startswith("mongodb+srv://") or (
+            settings.MONGO_URI.startswith("mongodb://") and "ssl=true" in settings.MONGO_URI.lower()
+        )
+
+        # Connection parameters optimized for multi-worker environment
+        connection_params = {
+            "maxPoolSize": 10,  # Max connections per worker
+            "minPoolSize": 2,   # Min connections to maintain
+            "serverSelectionTimeoutMS": 30000,  # 30 seconds for Azure
+            "connectTimeoutMS": 30000,
+            "socketTimeoutMS": 30000,
+            "retryWrites": True,
+            "retryReads": True,
+            "maxIdleTimeMS": 60000,  # Close idle connections after 1 minute
+            "appName": "credit-fyp",
+        }
 
         if use_tls:
             # Cloud MongoDB (Atlas) - requires TLS
-            _client = MongoClient(
-                settings.MONGO_URI,
-                tls=True,
-                tlsCAFile=certifi.where(),
-                serverSelectionTimeoutMS=5000  # 5 second timeout
-            )
-            print(f"Connected to MongoDB (TLS enabled) at {settings.MONGO_URI}")
+            connection_params.update({
+                "tls": True,
+                "tlsCAFile": certifi.where(),
+            })
+            print(f"Connecting to MongoDB (TLS enabled) at {settings.MONGO_URI[:30]}...")
         else:
-            # Local MongoDB - no TLS
-            _client = MongoClient(
-                settings.MONGO_URI,
-                serverSelectionTimeoutMS=5000  # 5 second timeout
-            )
-            print(f"Connected to MongoDB (local) at {settings.MONGO_URI}")
+            print(f"Connecting to MongoDB (local) at {settings.MONGO_URI[:30]}...")
 
-        # Test connection
-        _client.server_info()
-    return _client
+        try:
+            _thread_local.client = MongoClient(settings.MONGO_URI, **connection_params)
+            # Test connection with retry
+            retry_connection(_thread_local.client)
+        except Exception as e:
+            print(f"❌ Failed to connect to MongoDB: {e}")
+            raise
+
+    return _thread_local.client
+
+
+def retry_connection(client: MongoClient, max_retries: int = 3):
+    """Test connection with retry logic and exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            client.admin.command('ping')
+            print(f"✅ MongoDB connected successfully (attempt {attempt + 1}/{max_retries})")
+            return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
+                print(f"⚠️ MongoDB connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+                print(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print(f"❌ MongoDB connection failed after {max_retries} attempts")
+                raise
 
 
 def get_database(database_name: str = "FYP") -> Database:
     """Get MongoDB database instance."""
-    global _database
-    if _database is None:
+    if not hasattr(_thread_local, 'databases'):
+        _thread_local.databases = {}
+
+    if database_name not in _thread_local.databases:
         client = get_client()
-        _database = client[database_name]
-    return _database
+        _thread_local.databases[database_name] = client[database_name]
+
+    return _thread_local.databases[database_name]
 
 
 def get_collection(collection_name: str, database_name: str = "FYP") -> Collection:
@@ -102,14 +138,53 @@ def get_news_articles_master_collection() -> Collection:
     return get_collection("news_articles_master")
 
 
+def reset_connections():
+    """
+    Reset all MongoDB connections for the current thread/worker.
+    This is called after Gunicorn forks a new worker process.
+    """
+    if hasattr(_thread_local, 'client') and _thread_local.client:
+        try:
+            _thread_local.client.close()
+        except Exception:
+            pass  # Ignore errors during cleanup
+
+    # Clear all thread-local data
+    _thread_local.client = None
+    if hasattr(_thread_local, 'databases'):
+        _thread_local.databases = {}
+
+    print("🔄 MongoDB connections reset for current worker")
+
+
+def ensure_connection() -> bool:
+    """
+    Ensure MongoDB connection is alive, reconnect if needed.
+    Returns True if connected, False otherwise.
+    """
+    try:
+        client = get_client()
+        client.admin.command('ping')
+        return True
+    except Exception as e:
+        print(f"❌ MongoDB connection check failed: {e}")
+        # Try to reset and reconnect
+        reset_connections()
+        try:
+            client = get_client()
+            return True
+        except Exception:
+            return False
+
+
 def close_database_connection():
     """Close MongoDB connection (for cleanup)."""
-    global _client, _database
-    if _client:
-        _client.close()
-        _client = None
-        _database = None
-        print("🔌 Closed MongoDB connection")
+    if hasattr(_thread_local, 'client') and _thread_local.client:
+        _thread_local.client.close()
+        _thread_local.client = None
+        if hasattr(_thread_local, 'databases'):
+            _thread_local.databases = {}
+        print("🔌 Closed MongoDB connection for current thread")
 
 
 # Create indexes for better performance

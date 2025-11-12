@@ -308,7 +308,15 @@ async def get_top_constituents_for_sector(sector_ticker: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+        import traceback
+        error_details = {
+            "error": str(e),
+            "type": type(e).__name__,
+            "sector_ticker": sector_ticker,
+            "traceback": traceback.format_exc()
+        }
+        print(f"❌ Error in get_top_constituents_for_sector: {error_details}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)} (Service may be having connection issues)")
 
 @router.get("/sectors/{sector_identifier}/aggregated-news")
 async def get_sector_aggregated_news(
@@ -1855,7 +1863,15 @@ async def get_accounts_for_user(username: str):
 
         return {"accounts": accounts}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch accounts: {str(e)}")
+        import traceback
+        error_details = {
+            "error": str(e),
+            "type": type(e).__name__,
+            "username": username,
+            "traceback": traceback.format_exc()
+        }
+        print(f"❌ Error in get_accounts_for_user: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch accounts: {str(e)} (MongoDB connection may be failing)")
 
 
 
@@ -1888,8 +1904,19 @@ async def get_portfolio_details(username: str, account_name: str):
 
         return {"account": account, "holdings": holdings}
 
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch portfolio: {str(e)}")
+        import traceback
+        error_details = {
+            "error": str(e),
+            "type": type(e).__name__,
+            "username": username,
+            "account_name": account_name,
+            "traceback": traceback.format_exc()
+        }
+        print(f"❌ Error in get_portfolio_details: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch portfolio: {str(e)} (MongoDB connection may be failing)")
 
 
 
@@ -2152,8 +2179,16 @@ async def get_portfolio_holdings(username: str, account_name: str):
         return {"holdings": holdings_results}
 
     except Exception as e:
-        print(f"❌ Error fetching holdings: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
+        import traceback
+        error_details = {
+            "error": str(e),
+            "type": type(e).__name__,
+            "username": username,
+            "account_name": account_name,
+            "traceback": traceback.format_exc()
+        }
+        print(f"❌ Error in get_portfolio_holdings: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)} (MongoDB connection may be failing)")
 
 
 @router.get("/portfolio/performance/{username}/{account_name}")
