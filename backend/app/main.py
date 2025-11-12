@@ -186,30 +186,33 @@ async def startup_event():
         logger.error(f"Failed to start sentiment alert monitoring: {e}", exc_info=True)
 
     # Warm up cache for Information Technology sector
-    try:
-        from .services.cache_warmer import cache_warmer
-        import asyncio
+    # TEMPORARILY DISABLED: Cache warming blocks server startup in development
+    # TODO: Re-enable in production or make truly non-blocking
+    # try:
+    #     from .services.cache_warmer import cache_warmer
+    #     import asyncio
 
-        # Create a background task for cache warming
-        async def warm_cache_background():
-            logger.info("Starting IT sector cache warming in background...")
-            try:
-                result = await cache_warmer.warm_it_sector_cache()
-                success_count = sum(1 for t in result.get("tasks", {}).values() if t.get("status") == "success")
-                total_count = len(result.get("tasks", {}))
-                logger.info(f"IT sector cache warming completed: {success_count}/{total_count} tasks successful")
-            except Exception as e:
-                logger.error(f"IT sector cache warming failed: {e}")
+    #     # Create a background task for cache warming
+    #     async def warm_cache_background():
+    #         logger.info("Starting IT sector cache warming in background...")
+    #         try:
+    #             result = await cache_warmer.warm_it_sector_cache()
+    #             success_count = sum(1 for t in result.get("tasks", {}).values() if t.get("status") == "success")
+    #             total_count = len(result.get("tasks", {}))
+    #             logger.info(f"IT sector cache warming completed: {success_count}/{total_count} tasks successful")
+    #         except Exception as e:
+    #             logger.error(f"IT sector cache warming failed: {e}")
 
-        # Start cache warming in background (non-blocking)
-        asyncio.create_task(warm_cache_background())
+    #     # Start cache warming in background (non-blocking)
+    #     asyncio.create_task(warm_cache_background())
 
-        # Also start periodic warming every hour
-        asyncio.create_task(cache_warmer.start_periodic_warming(interval_hours=1))
-        logger.info("Cache warming service started (IT sector focus, hourly refresh)")
+    #     # Also start periodic warming every hour
+    #     asyncio.create_task(cache_warmer.start_periodic_warming(interval_hours=1))
+    #     logger.info("Cache warming service started (IT sector focus, hourly refresh)")
 
-    except Exception as e:
-        logger.error(f"Failed to start cache warming: {e}")
+    # except Exception as e:
+    #     logger.error(f"Failed to start cache warming: {e}")
+    logger.info("Cache warming disabled for development - server will start faster")
 
     logger.info("Application startup complete")
 

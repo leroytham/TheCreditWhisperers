@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)",
+      "Bash(brew services:*)",
+      "Bash(redis-cli ping:*)"
     ],
     "deny": [],
     "ask": []

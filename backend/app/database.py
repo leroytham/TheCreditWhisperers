@@ -19,15 +19,29 @@ def get_client() -> MongoClient:
     """Get or create MongoDB client singleton."""
     global _client
     if _client is None:
-        _client = MongoClient(
-            settings.MONGO_URI,
-            tls=True,
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000  # 5 second timeout
-        )
+        # Determine if we should use TLS/SSL based on the connection string
+        # MongoDB Atlas (mongodb+srv://) requires TLS, local MongoDB typically doesn't
+        use_tls = settings.MONGO_URI.startswith("mongodb+srv://") or settings.MONGO_URI.startswith("mongodb://") and "ssl=true" in settings.MONGO_URI.lower()
+
+        if use_tls:
+            # Cloud MongoDB (Atlas) - requires TLS
+            _client = MongoClient(
+                settings.MONGO_URI,
+                tls=True,
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=5000  # 5 second timeout
+            )
+            print(f"Connected to MongoDB (TLS enabled) at {settings.MONGO_URI}")
+        else:
+            # Local MongoDB - no TLS
+            _client = MongoClient(
+                settings.MONGO_URI,
+                serverSelectionTimeoutMS=5000  # 5 second timeout
+            )
+            print(f"Connected to MongoDB (local) at {settings.MONGO_URI}")
+
         # Test connection
         _client.server_info()
-        print(f"Connected to MongoDB at {settings.MONGO_URI}")
     return _client
 
 
