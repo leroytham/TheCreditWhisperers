@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo } from 'react';
+import useAppStore from '../store/useAppStore';
 
 /**
  * PortfolioContext - Centralized state management for portfolio data
@@ -133,9 +134,13 @@ const PortfolioContext = createContext(null);
 export function PortfolioProvider({ children }) {
   const [state, dispatch] = useReducer(portfolioReducer, initialState);
 
-  // Initialize from sessionStorage on mount (one-time read for migration)
+  // Get user from Zustand store to properly sync with authentication
+  const { user } = useAppStore();
+
+  // Initialize from sessionStorage on mount and when user changes
   useEffect(() => {
-    const username = sessionStorage.getItem('user');
+    // Use user from Zustand store (already synchronized by AuthProvider)
+    const username = user?.username || sessionStorage.getItem('user');
     const accountName = sessionStorage.getItem('selectedAccountName');
     const accountNumber = sessionStorage.getItem('selectedAccountNo');
 
@@ -149,8 +154,15 @@ export function PortfolioProvider({ children }) {
       sessionStorage.removeItem('selectedAccountName');
       sessionStorage.removeItem('selectedAccountNo');
       // Keep 'user' for authentication purposes
+    } else if (username && !accountName) {
+      // User is authenticated but no account selected yet
+      // This happens on first login
+      dispatch({
+        type: ACTIONS.SELECT_ACCOUNT,
+        payload: { username, accountName: null, accountNumber: null },
+      });
     }
-  }, []);
+  }, [user]); // Re-run when user changes (this fixes the login issue!)
 
   // Action creators - memoized to prevent infinite re-renders
   const actions = useMemo(() => ({

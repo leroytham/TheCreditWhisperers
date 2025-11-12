@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useRequireAuth } from '../hooks/useAuth';
 import AppHeader from '../components/layout/AppHeader';
 import ErrorBoundary from '../components/ErrorBoundary';
 import ClientInfoBar from '../features/portfolio/components/ClientInfoBar';
@@ -52,8 +53,10 @@ import { useAccountContext } from '../hooks/usePortfolioData';
  */
 const PortfolioPage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [activeSubTab, setActiveSubTab] = useState('overview');
+
+  // Require authentication for this page
+  const { user, logout } = useRequireAuth();
 
   // Use PortfolioContext for centralized account state
   const { selectedAccount, selectAccount, clearAccount } = useAccountContext();
@@ -77,16 +80,6 @@ const PortfolioPage = () => {
   const [isAddPortfolioModalOpen, setIsAddPortfolioModalOpen] = useState(false);
   const [isEditPortfolioModalOpen, setIsEditPortfolioModalOpen] = useState(false);
 
-  // Session management
-  useEffect(() => {
-    const user = searchParams.get('user');
-    if (user) {
-      sessionStorage.setItem('user', user);
-    } else if (!sessionStorage.getItem('user')) {
-      navigate('/login');
-    }
-  }, [navigate, searchParams]);
-
   // Update view when account changes
   useEffect(() => {
     setView(selectedAccount ? 'detail' : 'select');
@@ -96,9 +89,8 @@ const PortfolioPage = () => {
   const handleLogout = () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
     if (confirmLogout) {
-      sessionStorage.removeItem('user');
-      clearAccount();
-      navigate('/login');
+      clearAccount(); // Clear portfolio state
+      logout(); // Use centralized logout from auth hook
     }
   };
 
@@ -228,7 +220,7 @@ const PortfolioPage = () => {
               >
                 <>
                   {/* Dashboard Grid Row 1: Profile, Performance, News */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                     {/* Left Column: Account Details and Performance */}
                     <div className="lg:col-span-1 space-y-8">
                       <ErrorBoundary errorMessage="Unable to load account details.">
@@ -240,7 +232,7 @@ const PortfolioPage = () => {
                     </div>
 
                     {/* Right Column: News Feed */}
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-2 flex flex-col">
                       <ErrorBoundary errorMessage="Unable to load news feed.">
                         <NewsFeedCard />
                       </ErrorBoundary>

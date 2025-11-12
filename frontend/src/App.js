@@ -12,6 +12,7 @@ import { usePriceAlerts } from "./features/notifications/hooks/usePriceAlerts";
 import { useNewsNotifications } from "./features/notifications/hooks/useNewsNotifications";
 import { useNotificationSocket } from "./features/notifications/hooks/useNotificationSocket";
 import { PortfolioProvider } from "./context/PortfolioContext";
+import AuthProvider from "./components/auth/AuthProvider";
 
 // Create a client with optimized defaults for performance
 const queryClient = new QueryClient({
@@ -74,18 +75,20 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <PortfolioProvider>
-          <Routes>
-            <Route path="/login" element={<LoginCard />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/entity" element={<EntityPage />} />
-            <Route path="/sector_page" element={<SectorPage />} />
-            <Route path="/notifications" element={<NotificationPageEnhanced />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
-          </Routes>
-          {/* Global Toast Notification Container */}
-          <ToastContainer />
-        </PortfolioProvider>
+        <AuthProvider>
+          <PortfolioProvider>
+            <Routes>
+              <Route path="/login" element={<LoginCard />} />
+              <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/entity" element={<EntityPage />} />
+              <Route path="/sector_page" element={<SectorPage />} />
+              <Route path="/notifications" element={<NotificationPageEnhanced />} />
+              <Route path="/" element={<Navigate to="/login" replace />} />
+            </Routes>
+            {/* Global Toast Notification Container */}
+            <ToastContainer />
+          </PortfolioProvider>
+        </AuthProvider>
       </Router>
       {/* React Query DevTools - only in development */}
       {process.env.NODE_ENV === 'development' && <ReactQueryDevtools initialIsOpen={false} />}

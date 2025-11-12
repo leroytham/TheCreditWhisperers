@@ -157,11 +157,10 @@ const NewsFeedCard = () => {
 
   return (
     <div
-      className="bg-white rounded-lg shadow-sm flex flex-col"
+      className="bg-white rounded-lg shadow-sm flex flex-col h-full"
       style={{
-        height: "100%",
         minHeight: "350px",
-        maxHeight: "595px",
+        maxHeight: "760px",
         fontFamily: "Arial, sans-serif",
       }}
     >

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useRequireAuth } from '../hooks/useAuth';
 import AppHeader from '../components/layout/AppHeader';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
 import EarningsTranscript from '../features/entity/components/EarningsTranscript';
@@ -39,15 +40,8 @@ const EntityPage = () => {
   const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
   const [priceTimeframe, setPriceTimeframe] = useState('1D'); // Add price chart timeframe state
 
-  // Session management
-  useEffect(() => {
-    const user = searchParams.get('user');
-    if (user) {
-      sessionStorage.setItem('user', user);
-    } else if (!sessionStorage.getItem('user')) {
-      navigate('/login');
-    }
-  }, [navigate, searchParams]);
+  // Require authentication for this page
+  const { user, logout } = useRequireAuth();
 
   // Update ticker from URL parameter
   useEffect(() => {
@@ -61,8 +55,7 @@ const EntityPage = () => {
   const handleLogout = () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
     if (confirmLogout) {
-      sessionStorage.removeItem('user');
-      navigate('/login');
+      logout(); // Use centralized logout from auth hook
     }
   };
 

@@ -1,7 +1,8 @@
 // src/pages/SectorPage.jsx
 
 import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useRequireAuth } from "../hooks/useAuth";
 import AppHeader from "../components/layout/AppHeader";
 import SectorSelector from "../features/sector/components/SectorSelector/SectorSelector";
 import PerformanceView from "../features/sector/components/PerformanceView/PerformanceView";
@@ -25,27 +26,18 @@ import { resolveDisplayTicker } from "../features/sector/utils/tickerResolver";
 
 const SectorPage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [view, setView] = useState('filter'); // 'filter' | 'performance'
   const [performanceContext, setPerformanceContext] = useState(null);
   const [activeSubTab, setActiveSubTab] = useState('overview');
 
-  // Session management
-  useEffect(() => {
-    const user = searchParams.get("user");
-    if (user) {
-      sessionStorage.setItem("user", user);
-    } else if (!sessionStorage.getItem("user")) {
-      navigate("/login");
-    }
-  }, [navigate, searchParams]);
+  // Require authentication for this page
+  const { user, logout } = useRequireAuth();
 
   // Logout handler
   const handleLogout = () => {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
     if (confirmLogout) {
-      sessionStorage.removeItem("user");
-      navigate("/login");
+      logout(); // Use centralized logout from auth hook
     }
   };
 
