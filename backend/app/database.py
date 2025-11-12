@@ -27,7 +27,7 @@ def get_client() -> MongoClient:
         )
         # Test connection
         _client.server_info()
-        print(f"✅ Connected to MongoDB at {settings.MONGO_URI}")
+        print(f"Connected to MongoDB at {settings.MONGO_URI}")
     return _client
 
 
@@ -60,6 +60,11 @@ def get_notification_preferences_collection() -> Collection:
 def get_price_alerts_collection() -> Collection:
     """Get price alerts collection."""
     return get_collection("price_alerts")
+
+
+def get_sentiment_alerts_collection() -> Collection:
+    """Get sentiment alerts collection."""
+    return get_collection("sentiment_alerts")
 
 
 def get_portfolios_collection() -> Collection:

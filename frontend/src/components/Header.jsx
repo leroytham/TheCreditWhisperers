@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, User, LogOut, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useNotifications, useUnreadCount } from '../features/notifications/hooks/useNotifications';
 
 export default function Header() {
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  
+
   const [userData, setUserData] = useState({
     name: "Loading...",
     email: "",
@@ -14,15 +15,36 @@ export default function Header() {
     avatar: "?"
   });
 
+  // Fetch real notifications from backend
+  const { notifications: realNotifications, isLoading: notificationsLoading, error: notificationsError } = useNotifications({
+    is_archived: false,
+    limit: 5, // Show only latest 5 in header dropdown
+  });
+
+  // Fetch unread count
+  const { unreadCount, error: unreadError } = useUnreadCount();
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Header - Notifications loaded:', {
+      notifications: realNotifications,
+      count: realNotifications?.length,
+      unreadCount,
+      isLoading: notificationsLoading,
+      error: notificationsError,
+      unreadError
+    });
+  }, [realNotifications, unreadCount, notificationsLoading, notificationsError, unreadError]);
+
   useEffect(() => {
     const userEmail = sessionStorage.getItem("user");
     if (userEmail) {
-      const name = userEmail.split('@')[0].split('.').map(word => 
+      const name = userEmail.split('@')[0].split('.').map(word =>
         word.charAt(0).toUpperCase() + word.slice(1)
       ).join(' ');
-      
+
       const initials = name.split(' ').map(n => n[0]).join('').toUpperCase();
-      
+
       setUserData({
         name: name,
         email: userEmail,
@@ -43,14 +65,25 @@ export default function Header() {
       navigate("/login");
     }
   };
-  
-  const notifications = [
-    { id: 1, title: "Monthly Report Ready", message: "Your September financial report is ready", time: "2 hours ago", unread: true },
-    { id: 2, title: "Budget Alert", message: "Marketing budget at 85%", time: "5 hours ago", unread: true },
-    { id: 3, title: "New Transaction", message: "Payment received: $5,420", time: "1 day ago", unread: false }
-  ];
-  
-  const unreadCount = notifications.filter(n => n.unread).length;
+
+  // Format timestamp to relative time
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+  };
+
+  const notifications = realNotifications || [];
 
   return (
     <div className="bg-white transition-colors border-b">
@@ -86,22 +119,47 @@ export default function Header() {
                   </div>
                 </div>
                 <div className="max-h-96 overflow-y-auto">
-                  {notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`p-4 border-b hover:bg-gray-50 cursor-pointer ${notif.unread ? 'bg-blue-50' : ''}`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">{notif.title}</div>
-                          <div className="text-sm text-gray-600 mt-1">{notif.message}</div>
-                          <div className="text-xs text-gray-500 mt-1">{notif.time}</div>
-                        </div>
-                        {notif.unread && <div className="w-2 h-2 bg-blue-500 rounded-full mt-1 ml-2"></div>}
-                      </div>
+                  {notificationsLoading ? (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      Loading notifications...
                     </div>
-                  ))}
+                  ) : notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-gray-500">
+                      No notifications yet
+                    </div>
+                  ) : (
+                    notifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => navigate('/notifications')}
+                        className={`p-4 border-b hover:bg-gray-50 cursor-pointer ${!notif.isRead && !notif.is_read ? 'bg-blue-50' : ''}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{notif.title}</div>
+                            <div className="text-sm text-gray-600 mt-1">{notif.message}</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {formatTimestamp(notif.createdAt || notif.created_at || notif.timestamp)}
+                            </div>
+                          </div>
+                          {(!notif.isRead && !notif.is_read) && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-1 ml-2"></div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
+                {notifications.length > 0 && (
+                  <div className="p-3 border-t bg-gray-50">
+                    <button
+                      onClick={() => navigate('/notifications')}
+                      className="w-full text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      View all notifications →
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

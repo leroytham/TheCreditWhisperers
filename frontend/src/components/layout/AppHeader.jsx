@@ -1,10 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HelpCircle, Menu, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import EntitySearch from '../../features/entity/components/EntitySearch/EntitySearch';
 import NotificationDropdown from '../../features/notifications/components/NotificationDropdown';
 import { useTickerSearch } from '../../features/entity/hooks/useTickerSearch';
-import useAppStore from '../../store/useAppStore';
+import { useNotifications } from '../../features/notifications/hooks/useNotifications';
 
 /**
  * AppHeader Component
@@ -21,7 +21,14 @@ import useAppStore from '../../store/useAppStore';
 const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntitySearch = false }) => {
   const navigate = useNavigate();
   const { searchTerm, setSearchTerm, suggestions, loading, clearSearch } = useTickerSearch();
-  const notifications = useAppStore(state => state.notifications);
+
+  // Fetch real notifications from backend
+  const { notifications: realNotifications, refetch: refetchNotifications } = useNotifications({
+    is_archived: false,
+    limit: 10, // Get latest 10 notifications for header
+  });
+
+  const notifications = realNotifications || [];
 
   // Handle ticker selection for general search
   const handleGeneralTickerSelect = (symbol) => {
@@ -92,12 +99,7 @@ const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntityS
               )}
 
               {/* Notification Dropdown */}
-              <NotificationDropdown notifications={notifications} />
-
-              {/* Help Icon */}
-              <button className="p-1 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100">
-                <HelpCircle className="h-6 w-6" />
-              </button>
+              <NotificationDropdown notifications={notifications} onRefetch={refetchNotifications} />
 
               {/* User Profile */}
               <button
@@ -115,11 +117,6 @@ const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntityS
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8 -mb-px">
-            {/* Hamburger Menu */}
-            <button className="text-gray-500 hover:text-gray-700 py-4">
-              <Menu className="h-6 w-6" />
-            </button>
-
             {/* Portfolio Tab */}
             <button
               onClick={() => navigate('/portfolio')}

@@ -13,6 +13,7 @@ from app.models.notification import (
     NotificationModel,
     NotificationPreferenceModel,
     PriceAlertModel,
+    SentimentAlertModel,
     create_notification,
     get_notifications,
     get_unread_count,
@@ -27,6 +28,10 @@ from app.models.notification import (
     delete_price_alert,
     get_active_alerts_for_ticker,
     trigger_price_alert,
+    # Sentiment alert functions
+    create_sentiment_alert,
+    get_sentiment_alerts,
+    delete_sentiment_alert,
     # Portfolio-specific functions
     get_portfolio_notifications,
     get_portfolio_unread_count,
@@ -46,15 +51,19 @@ from app.schemas.notification import (
     PriceAlertUpdateRequest,
     PriceAlertResponse,
     PriceAlertListResponse,
+    SentimentAlertCreateRequest,
+    SentimentAlertUpdateRequest,
+    SentimentAlertResponse,
+    SentimentAlertListResponse,
     BulkOperationResponse,
     ErrorResponse
 )
 
-from app.database import get_notifications_collection, get_price_alerts_collection
+from app.database import get_notifications_collection, get_price_alerts_collection, get_sentiment_alerts_collection
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/notifications", tags=["notifications"])
+router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 # Authentication dependency (placeholder - replace with real auth)
@@ -95,6 +104,7 @@ async def list_notifications(
     Supports portfolio-aware filtering.
     """
     try:
+        logger.info(f"📬 GET /notifications - user_id: {user_id}, is_archived: {is_archived}, limit: {limit}")
         notifications = await get_notifications(
             user_id=user_id,
             is_archived=is_archived,
@@ -105,6 +115,7 @@ async def list_notifications(
             limit=limit,
             offset=offset
         )
+        logger.info(f"📬 Found {len(notifications)} notifications for user {user_id}")
 
         # Get total count for pagination
         collection = get_notifications_collection()
@@ -655,6 +666,148 @@ async def get_alerts_for_ticker(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Sentiment Alert Endpoints
+
+@router.get("/sentiment-alerts", response_model=SentimentAlertListResponse)
+async def list_sentiment_alerts(
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    ticker: Optional[str] = Query(None, description="Filter by ticker symbol"),
+    portfolio_id: Optional[str] = Query(None, description="Filter by portfolio ID"),
+    include_global: bool = Query(True, description="Include global alerts"),
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Get sentiment alerts for the current user.
+    Supports portfolio-aware filtering.
+    """
+    try:
+        alerts = await get_sentiment_alerts(
+            user_id=user_id,
+            is_active=is_active,
+            ticker=ticker,
+            portfolio_id=portfolio_id,
+            include_global=include_global
+        )
+
+        # Convert to response models
+        alert_responses = [
+            SentimentAlertResponse(**alert.dict())
+            for alert in alerts
+        ]
+
+        return SentimentAlertListResponse(
+            alerts=alert_responses,
+            total_count=len(alert_responses)
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching sentiment alerts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sentiment-alerts", response_model=SentimentAlertResponse)
+async def create_sentiment_alert_endpoint(
+    alert_data: SentimentAlertCreateRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Create a new sentiment alert.
+    """
+    try:
+        # Create alert model
+        alert = SentimentAlertModel(
+            user_id=user_id,
+            **alert_data.dict()
+        )
+
+        # Save to database
+        alert_id = await create_sentiment_alert(alert)
+        alert.id = alert_id
+
+        logger.info(f"Created sentiment alert {alert_id} for user {user_id}: {alert.ticker} {alert.condition.value}")
+
+        return SentimentAlertResponse(**alert.dict())
+
+    except Exception as e:
+        logger.error(f"Error creating sentiment alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/sentiment-alerts/{alert_id}", response_model=SentimentAlertResponse)
+async def update_sentiment_alert_endpoint(
+    alert_id: str,
+    alert_data: SentimentAlertUpdateRequest,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Update a sentiment alert.
+    """
+    try:
+        # Validate ObjectId format
+        if not ObjectId.is_valid(alert_id):
+            raise HTTPException(status_code=400, detail="Invalid alert ID format")
+
+        collection = get_sentiment_alerts_collection()
+
+        # Filter out None values
+        updates = {k: v for k, v in alert_data.dict().items() if v is not None}
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
+
+        # Update the alert
+        result = collection.find_one_and_update(
+            {"_id": ObjectId(alert_id), "user_id": user_id},
+            {"$set": updates},
+            return_document=True
+        )
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Sentiment alert not found")
+
+        alert = SentimentAlertModel.from_mongo(result)
+        return SentimentAlertResponse(**alert.dict())
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating sentiment alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/sentiment-alerts/{alert_id}", response_model=BulkOperationResponse)
+async def delete_sentiment_alert_endpoint(
+    alert_id: str,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Delete a sentiment alert.
+    """
+    try:
+        # Validate ObjectId format
+        if not ObjectId.is_valid(alert_id):
+            raise HTTPException(status_code=400, detail="Invalid alert ID format")
+
+        success = await delete_sentiment_alert(alert_id, user_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Sentiment alert not found")
+
+        logger.info(f"Deleted sentiment alert {alert_id} for user {user_id}")
+
+        return BulkOperationResponse(
+            success=True,
+            affected_count=1,
+            message="Sentiment alert deleted"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting sentiment alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Test Endpoints (for development)
 
 @router.post("/test/create-sample", response_model=NotificationResponse)
@@ -683,4 +836,58 @@ async def create_sample_notification(
 
     except Exception as e:
         logger.error(f"Error creating sample notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/test/trigger-price-alert/{ticker}")
+async def test_price_alert_trigger(
+    ticker: str,
+    test_price: float = Query(..., description="Test price to check alerts against"),
+    user_id: str = Depends(get_current_user)
+):
+    """
+    TESTING ENDPOINT: Manually trigger price alert checks for a ticker with a test price.
+
+    This allows you to test if your price alerts work without waiting for the
+    background monitoring service or real market prices.
+
+    Example: POST /api/notifications/test/trigger-price-alert/AAPL?test_price=205.50
+    """
+    try:
+        from ..services.price_alert_service import price_alert_service
+
+        ticker = ticker.upper()
+
+        # Check price alerts for this ticker with the test price
+        await price_alert_service.check_price_alerts(ticker, test_price)
+
+        # Get updated alerts to return status
+        alerts = await get_price_alerts(user_id=user_id, ticker=ticker)
+
+        triggered_alerts = [a for a in alerts if a.triggered]
+        active_alerts = [a for a in alerts if a.is_active and not a.triggered]
+
+        return {
+            "success": True,
+            "message": f"Checked {len(alerts)} alert(s) for {ticker} at test price ${test_price:.2f}",
+            "ticker": ticker,
+            "test_price": test_price,
+            "triggered_count": len(triggered_alerts),
+            "active_count": len(active_alerts),
+            "triggered_alert_ids": [a.id for a in triggered_alerts],
+            "details": [
+                {
+                    "alert_id": a.id,
+                    "condition": a.condition,
+                    "target_price": a.target_price,
+                    "percent_change": a.percent_change,
+                    "triggered": a.triggered,
+                    "condition_met": a.check_condition(test_price)
+                }
+                for a in alerts
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"Error testing price alert trigger: {e}")
         raise HTTPException(status_code=500, detail=str(e))

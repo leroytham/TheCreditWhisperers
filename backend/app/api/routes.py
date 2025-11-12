@@ -3442,3 +3442,4 @@ async def get_portfolio_performance_twr(
 
 #python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 #source venv/bin/activate
+#venv\Scripts\activate

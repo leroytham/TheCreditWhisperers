@@ -1,6 +1,7 @@
 # app/core/config.py
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 
 
@@ -38,6 +39,19 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
+
+    @field_validator('DEBUG', mode='before')
+    @classmethod
+    def parse_debug(cls, v):
+        """Parse DEBUG from various string formats."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            # If DEBUG is set to logging level like "WARN", ignore it and use False
+            if v.upper() in ['WARN', 'WARNING', 'INFO', 'ERROR', 'DEBUG', 'CRITICAL']:
+                return False
+            return v.lower() in ('true', '1', 'yes', 'on')
+        return bool(v)
 
     # News Configuration
     RSS_URLS: str = "https://feeds.reuters.com/reuters/businessNews"

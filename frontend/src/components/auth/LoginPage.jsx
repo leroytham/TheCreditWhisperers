@@ -48,7 +48,6 @@ export default function LoginCard() {
     <div className="login-page">
       <header className="header">
         {/* REMOVED: UBS Logo */}
-        <span className="notif">Notification</span>
       </header>
 
       <main className="login-container">

@@ -1,19 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
+import { notificationApi } from '../../../services/notificationApi';
 
 /**
  * NotificationDropdown Component
  *
  * Bell icon with dropdown showing recent notifications
  */
-const NotificationDropdown = ({ notifications = [] }) => {
+const NotificationDropdown = ({ notifications = [], onRefetch }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [readNotifications, setReadNotifications] = useState(new Set());
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  const recentNotifications = notifications.filter(n => !n.isArchived).slice(0, 5);
-  const hasUnread = recentNotifications.some(n => !n.isRead);
+  const recentNotifications = notifications.filter(n => !n.isArchived && !n.is_archived).slice(0, 5);
+  const hasUnread = recentNotifications.some(n => {
+    const isRead = n.isRead || n.is_read || readNotifications.has(n.id);
+    return !isRead;
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -31,6 +36,34 @@ const NotificationDropdown = ({ notifications = [] }) => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen]);
+
+  const handleNotificationClick = async (notificationId, isAlreadyRead) => {
+    // Mark as read if unread
+    if (!isAlreadyRead) {
+      try {
+        // Optimistically update local state immediately
+        setReadNotifications(prev => new Set([...prev, notificationId]));
+
+        // Make API call to mark as read
+        await notificationApi.markAsRead(notificationId);
+
+        // Trigger refetch to update from server
+        if (onRefetch) {
+          onRefetch();
+        }
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+        // Rollback optimistic update on error
+        setReadNotifications(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(notificationId);
+          return newSet;
+        });
+      }
+    }
+    setIsOpen(false);
+    navigate('/notifications');
+  };
 
   const handleViewAll = () => {
     setIsOpen(false);
@@ -58,28 +91,31 @@ const NotificationDropdown = ({ notifications = [] }) => {
           </div>
           <div className="max-h-80 overflow-y-auto">
             {recentNotifications.length > 0 ? (
-              recentNotifications.map((notif) => (
-                <div
-                  key={notif.id}
-                  onClick={handleViewAll}
-                  className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
-                    !notif.isRead ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <div className="flex items-start">
-                    {!notif.isRead && (
-                      <span className="flex-shrink-0 inline-block h-2 w-2 rounded-full bg-blue-500 mt-2 mr-3" />
-                    )}
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{notif.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">{notif.message}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        {new Date(notif.timestamp).toLocaleString()}
-                      </p>
+              recentNotifications.map((notif) => {
+                const isRead = notif.isRead || notif.is_read || readNotifications.has(notif.id);
+                return (
+                  <div
+                    key={notif.id}
+                    onClick={() => handleNotificationClick(notif.id, isRead)}
+                    className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${
+                      !isRead ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    <div className="flex items-start">
+                      {!isRead && (
+                        <span className="flex-shrink-0 inline-block h-2 w-2 rounded-full bg-blue-500 mt-2 mr-3" />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{notif.title}</p>
+                        <p className="text-xs text-gray-500 mt-1">{notif.message}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(notif.timestamp || notif.created_at || notif.createdAt).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <p>No notifications</p>

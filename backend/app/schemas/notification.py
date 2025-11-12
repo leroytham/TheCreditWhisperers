@@ -5,12 +5,14 @@ Pydantic schemas for notification API request/response validation.
 
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 from app.models.notification import (
     NotificationType,
     NotificationCategory,
     NotificationPriority,
-    AlertCondition
+    AlertCondition,
+    SentimentAlertCondition,
+    AlertType
 )
 
 
@@ -86,23 +88,28 @@ class PriceAlertCreateRequest(BaseModel):
     priority: NotificationPriority = NotificationPriority.HIGH
     notes: Optional[str] = Field(None, max_length=500)
 
+    # Portfolio context (optional)
+    portfolio_id: Optional[str] = None
+    portfolio_name: Optional[str] = None
+    is_global: bool = False
+
     @validator('ticker')
     def uppercase_ticker(cls, v):
         """Ensure ticker is uppercase."""
         return v.upper()
 
-    @validator('condition')
-    def validate_condition_fields(cls, v, values):
+    @model_validator(mode='after')
+    def validate_condition_fields(self):
         """Validate required fields for condition type."""
-        if v in [AlertCondition.ABOVE, AlertCondition.BELOW]:
-            if 'target_price' not in values or values['target_price'] is None:
-                raise ValueError(f"target_price is required for {v} condition")
-        elif v in [AlertCondition.PERCENT_INCREASE, AlertCondition.PERCENT_DECREASE]:
-            if 'percent_change' not in values or values['percent_change'] is None:
-                raise ValueError(f"percent_change is required for {v} condition")
-            if 'base_price' not in values or values['base_price'] is None:
-                raise ValueError(f"base_price is required for {v} condition")
-        return v
+        if self.condition in [AlertCondition.ABOVE, AlertCondition.BELOW]:
+            if self.target_price is None:
+                raise ValueError(f"target_price is required for {self.condition} condition")
+        elif self.condition in [AlertCondition.PERCENT_INCREASE, AlertCondition.PERCENT_DECREASE]:
+            if self.percent_change is None:
+                raise ValueError(f"percent_change is required for {self.condition} condition")
+            if self.base_price is None:
+                raise ValueError(f"base_price is required for {self.condition} condition")
+        return self
 
 
 class PriceAlertUpdateRequest(BaseModel):
@@ -110,6 +117,50 @@ class PriceAlertUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
     target_price: Optional[float] = Field(None, gt=0)
     percent_change: Optional[float] = None
+    notification_title: Optional[str] = None
+    notification_message: Optional[str] = None
+    priority: Optional[NotificationPriority] = None
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class SentimentAlertCreateRequest(BaseModel):
+    """Schema for creating a sentiment alert."""
+    ticker: str = Field(..., min_length=1, max_length=10)
+    condition: SentimentAlertCondition
+    threshold: Optional[float] = Field(None, ge=-1.0, le=1.0, description="Custom threshold for crosses_above/below (-1 to 1)")
+    momentum_threshold: Optional[float] = Field(None, ge=-1.0, le=1.0, description="Momentum threshold")
+    notification_title: Optional[str] = None
+    notification_message: Optional[str] = None
+    priority: NotificationPriority = NotificationPriority.HIGH
+    notes: Optional[str] = Field(None, max_length=500)
+
+    # Portfolio context (optional)
+    portfolio_id: Optional[str] = None
+    portfolio_name: Optional[str] = None
+    is_global: bool = False
+
+    @validator('ticker')
+    def uppercase_ticker(cls, v):
+        """Ensure ticker is uppercase."""
+        return v.upper()
+
+    @model_validator(mode='after')
+    def validate_condition_fields(self):
+        """Validate required fields for condition type."""
+        if self.condition in [SentimentAlertCondition.CROSSES_ABOVE, SentimentAlertCondition.CROSSES_BELOW]:
+            if self.threshold is None:
+                raise ValueError(f"threshold is required for {self.condition} condition")
+        elif self.condition in [SentimentAlertCondition.MOMENTUM_POSITIVE, SentimentAlertCondition.MOMENTUM_NEGATIVE]:
+            if self.momentum_threshold is None:
+                raise ValueError(f"momentum_threshold is required for {self.condition} condition")
+        return self
+
+
+class SentimentAlertUpdateRequest(BaseModel):
+    """Schema for updating a sentiment alert."""
+    is_active: Optional[bool] = None
+    threshold: Optional[float] = Field(None, ge=-1.0, le=1.0)
+    momentum_threshold: Optional[float] = Field(None, ge=-1.0, le=1.0)
     notification_title: Optional[str] = None
     notification_message: Optional[str] = None
     priority: Optional[NotificationPriority] = None
@@ -217,8 +268,54 @@ class PriceAlertResponse(BaseModel):
     notification_message: Optional[str]
     priority: NotificationPriority
     notes: Optional[str]
+    portfolio_id: Optional[str] = None
+    portfolio_name: Optional[str] = None
+    is_global: bool = False
     created_at: datetime
     expires_at: Optional[datetime]
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+class SentimentAlertResponse(BaseModel):
+    """Schema for sentiment alert response."""
+    id: str
+    user_id: str
+    ticker: str
+    condition: SentimentAlertCondition
+    threshold: Optional[float]
+    momentum_threshold: Optional[float]
+    last_sentiment_score: Optional[float]
+    last_momentum: Optional[float]
+    last_checked_at: Optional[datetime]
+    is_active: bool
+    triggered: bool
+    triggered_at: Optional[datetime]
+    triggered_sentiment: Optional[float]
+    notification_title: Optional[str]
+    notification_message: Optional[str]
+    priority: NotificationPriority
+    notes: Optional[str]
+    portfolio_id: Optional[str] = None
+    portfolio_name: Optional[str] = None
+    is_global: bool = False
+    created_at: datetime
+    expires_at: Optional[datetime]
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+class SentimentAlertListResponse(BaseModel):
+    """Schema for sentiment alert list response."""
+    alerts: List[SentimentAlertResponse]
+    total_count: int
+    is_global: bool = False
 
     class Config:
         json_encoders = {
