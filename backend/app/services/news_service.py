@@ -20,6 +20,7 @@ from app.services.sector_sentiment_service import sector_sentiment_service
 from app.config.yfinance_sector_mapping import (
     is_all_sectors_identifier,
 )
+from app.services.sector_cache_service import sector_cache_service
 
 
 logger = logging.getLogger(__name__)
@@ -1312,7 +1313,54 @@ class NewsService:
             print(f"ERROR: Failed to fetch aggregated news for ALL SECTORS via {base_etf_ticker}: {exc}")
             raise
 
+    @async_cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_news")
     async def get_sector_news(
+        self,
+        sector_key: str,
+        limit: int = 100,
+        timeframe: str = "1W"
+    ) -> Dict[str, any]:
+        """
+        Get sector news with multi-layer caching:
+        1. Redis cache (handled by decorator) - fastest
+        2. MongoDB cache if Redis misses - persistent
+        3. Fetch from API if both caches miss - slowest
+        """
+        # Check MongoDB cache (Redis is handled by decorator)
+        cached_data = await sector_cache_service.get_cached_sector_news(
+            sector_key=sector_key,
+            timeframe=timeframe,
+            limit=limit
+        )
+
+        if cached_data:
+            print(f"[CACHE HIT] MongoDB cache hit for sector news: {sector_key}")
+            return cached_data
+
+        # If not in cache, fetch from API
+        print(f"[CACHE MISS] Fetching sector news from API: {sector_key}")
+        news_data = await self._fetch_sector_news_from_api(
+            sector_key=sector_key,
+            limit=limit,
+            timeframe=timeframe
+        )
+
+        # Store in MongoDB for persistence
+        await sector_cache_service.store_sector_news(
+            sector_key=sector_key,
+            timeframe=timeframe,
+            limit=limit,
+            news_data=news_data,
+            ttl_seconds=settings.SECTOR_CACHE_TTL
+        )
+
+        # Also store articles in master collection for deduplication
+        if news_data.get("articles"):
+            await sector_cache_service.store_articles_master(news_data["articles"])
+
+        return news_data
+
+    async def _fetch_sector_news_from_api(
         self,
         sector_key: str,
         limit: int = 100,

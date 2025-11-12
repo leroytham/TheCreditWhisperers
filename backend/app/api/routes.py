@@ -381,6 +381,69 @@ async def get_sector_aggregated_news(
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 
+# Import sector cache service for MongoDB operations
+from app.services.sector_cache_service import sector_cache_service
+
+# Helper function for cached daily sentiment calculation
+@async_cache_result(ttl=settings.SECTOR_CACHE_TTL, key_prefix="sector_daily_sent")
+async def get_cached_sector_daily_sentiment(sector_key: str, days: int) -> dict:
+    """
+    Cached helper function to fetch news and calculate daily sentiment.
+    Cache flow: Redis -> MongoDB -> Calculate from news
+    """
+    # Check MongoDB cache first (Redis is handled by decorator)
+    cached_sentiment = await sector_cache_service.get_cached_daily_sentiment(
+        sector_key=sector_key,
+        days=days
+    )
+
+    if cached_sentiment:
+        print(f"[CACHE HIT] MongoDB cache hit for daily sentiment: {sector_key}")
+        # Get sector metadata to add to response
+        sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
+        cached_sentiment["sector_name"] = sector_metadata['display_name']
+        return cached_sentiment
+
+    print(f"[CACHE MISS] Calculating daily sentiment for: {sector_key}")
+
+    # Get sector metadata
+    sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
+
+    # Get sector tickers
+    tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
+
+    # Fetch aggregated news (we need a larger timeframe to get enough days)
+    # For 30 days, fetch 1M of news
+    # Use higher limit (5000) to ensure full coverage for high-volume sectors
+    timeframe_map = {7: "1W", 14: "2W", 30: "1M", 60: "2M", 90: "3M"}
+    timeframe = timeframe_map.get(days, "1M")
+
+    news_result = await news_service_instance.get_sector_news(
+        sector_key=sector_key,
+        limit=5000,  # Higher limit to ensure full coverage for high-volume sectors
+        timeframe=timeframe
+    )
+
+    # Calculate daily sentiment
+    daily_sentiment = sector_sentiment_service.calculate_daily_sector_sentiment(
+        articles=news_result['articles'],
+        sector_tickers=tickers,
+        days=days
+    )
+
+    # Store in MongoDB for persistence
+    await sector_cache_service.store_daily_sentiment(
+        sector_key=sector_key,
+        daily_sentiment_data=daily_sentiment
+    )
+
+    return {
+        "sector_key": sector_key,
+        "sector_name": sector_metadata['display_name'],
+        "daily": daily_sentiment
+    }
+
+
 @router.get("/sectors/{sector_identifier}/daily-sentiment")
 async def get_sector_daily_sentiment(
     sector_identifier: str,
@@ -391,8 +454,8 @@ async def get_sector_daily_sentiment(
 
     This endpoint:
     1. Resolves the sector identifier to a yfinance sector key
-    2. Fetches aggregated news for the sector
-    3. Groups articles by date and calculates daily sector sentiment
+    2. Fetches aggregated news for the sector (cached)
+    3. Groups articles by date and calculates daily sector sentiment (cached)
     4. Returns daily sentiment data compatible with CombinedSentimentVolumeChart
 
     Args:
@@ -426,36 +489,12 @@ async def get_sector_daily_sentiment(
         # Resolve sector identifier to yfinance key
         sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
 
-        # Get sector metadata
-        sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
-
-        # Get sector tickers
-        tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
-
-        # Fetch aggregated news (we need a larger timeframe to get enough days)
-        # For 30 days, fetch 1M of news
-        # Use higher limit (5000) to ensure full coverage for high-volume sectors
-        timeframe_map = {7: "1W", 14: "2W", 30: "1M", 60: "2M", 90: "3M"}
-        timeframe = timeframe_map.get(days, "1M")
-
-        news_result = await news_service_instance.get_sector_news(
-            sector_key=sector_key,
-            limit=5000,  # Higher limit to ensure full coverage for high-volume sectors
-            timeframe=timeframe
-        )
-
-        # Calculate daily sentiment
-        daily_sentiment = sector_sentiment_service.calculate_daily_sector_sentiment(
-            articles=news_result['articles'],
-            sector_tickers=tickers,
-            days=days
-        )
+        # Call the cached helper function
+        result = await get_cached_sector_daily_sentiment(sector_key, days)
 
         return {
             "success": True,
-            "sector_key": sector_key,
-            "sector_name": sector_metadata['display_name'],
-            "daily": daily_sentiment
+            **result
         }
 
     except ValueError as e:

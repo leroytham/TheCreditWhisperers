@@ -72,6 +72,22 @@ def get_portfolios_collection() -> Collection:
     return get_collection("portfolios")
 
 
+# Sector cache collections
+def get_sector_news_cache_collection() -> Collection:
+    """Get sector news cache collection."""
+    return get_collection("sector_news_cache")
+
+
+def get_sector_daily_sentiment_collection() -> Collection:
+    """Get sector daily sentiment collection."""
+    return get_collection("sector_daily_sentiment")
+
+
+def get_news_articles_master_collection() -> Collection:
+    """Get master news articles collection for deduplication."""
+    return get_collection("news_articles_master")
+
+
 def close_database_connection():
     """Close MongoDB connection (for cleanup)."""
     global _client, _database
@@ -135,4 +151,22 @@ def create_indexes():
     portfolios.create_index("created_at")
     portfolios.create_index("tickers")  # For queries by ticker
 
-    print("📇 Created database indexes for notifications and portfolios")
+    # Sector news cache indexes
+    sector_news_cache = get_sector_news_cache_collection()
+    sector_news_cache.create_index([("sector_key", 1), ("timeframe", 1), ("created_at", -1)])
+    sector_news_cache.create_index("cache_key", unique=True)
+    sector_news_cache.create_index("expires_at", expireAfterSeconds=0, sparse=True)  # TTL index
+
+    # Sector daily sentiment indexes
+    sector_daily_sentiment = get_sector_daily_sentiment_collection()
+    sector_daily_sentiment.create_index([("sector_key", 1), ("date", -1)])
+    sector_daily_sentiment.create_index("created_at")
+
+    # News articles master indexes (for deduplication)
+    news_articles_master = get_news_articles_master_collection()
+    news_articles_master.create_index("url", unique=True)
+    news_articles_master.create_index([("normalized_title", 1), ("publish_date", -1)])
+    news_articles_master.create_index([("sectors", 1), ("publish_date", -1)])
+    news_articles_master.create_index("ticker_sentiment.ticker")
+
+    print("📇 Created database indexes for notifications, portfolios, and sector caches")
