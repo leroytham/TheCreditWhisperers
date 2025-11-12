@@ -2,8 +2,6 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 import yfinance as yf
 from datetime import datetime
-from pymongo import MongoClient
-import certifi
 import asyncio
 import uuid
 
@@ -27,6 +25,9 @@ from app.core.config import settings
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
 
+# Import centralized database connection
+from app.database import get_database, get_collection
+
 
 CLIENT_ID = os.getenv("APPLICATION_ID", "<your-client-id>")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -38,11 +39,10 @@ if not CLIENT_SECRET:
     print("WARNING: Azure CLIENT_SECRET is not configured. Azure authentication will not work.")
 
 
-mongo_uri = os.getenv("MONGO_URI")
-client = MongoClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
-db = client["FYP"]  
-accounts_col = db["Account_Details"]
-holdings_col = db["Stock_Holding"]
+# Use centralized database connection that handles TLS/SSL conditionally
+db = get_database("FYP")
+accounts_col = get_collection("Account_Details")
+holdings_col = get_collection("Stock_Holding")
 
 
 router = APIRouter()
@@ -289,7 +289,7 @@ async def get_company_overview(ticker: str):
 
     
 @router.get("/sectors/{sector_ticker}/top-constituents")
-def get_top_constituents_for_sector(sector_ticker: str):
+async def get_top_constituents_for_sector(sector_ticker: str):
     """
     API endpoint to get the top 10 constituents for a given sector.
     The sector_ticker must be URL-encoded if it contains special characters.
@@ -297,7 +297,8 @@ def get_top_constituents_for_sector(sector_ticker: str):
     """
     try:
         # The API layer calls the service to perform the logic
-        constituents = stock_data_service.get_sector_top_constituents(sector_ticker)
+        # Note: get_sector_top_constituents handles async operations internally
+        constituents = await asyncio.to_thread(stock_data_service.get_sector_top_constituents, sector_ticker)
 
         if not constituents:
              return {"success": True, "sector_ticker": sector_ticker, "top_constituents": []}
@@ -1841,10 +1842,13 @@ async def get_accounts_for_user(username: str):
     Returns client_account_name and account_no.
     """
     try:
-        accounts = list(accounts_col.find(
-            {"username": username},
-            {"_id": 0, "client_account_name": 1, "account_no": 1}
-        ))
+        # Use asyncio.to_thread to prevent blocking the event loop
+        accounts = await asyncio.to_thread(
+            lambda: list(accounts_col.find(
+                {"username": username},
+                {"_id": 0, "client_account_name": 1, "account_no": 1}
+            ))
+        )
 
         if not accounts:
             return {"accounts": []}
@@ -1862,19 +1866,25 @@ async def get_portfolio_details(username: str, account_name: str):
     Returns the account details and all holdings for this user/account.
     """
     try:
-        # Fetch account details
-        account = accounts_col.find_one(
+        # Fetch account details and holdings in parallel using asyncio.to_thread
+        account_task = asyncio.to_thread(
+            accounts_col.find_one,
             {"username": username, "client_account_name": account_name},
             {"_id": 0}
         )
+
+        holdings_task = asyncio.to_thread(
+            lambda: list(holdings_col.find(
+                {"username": username, "client_account_name": account_name},
+                {"_id": 0}
+            ))
+        )
+
+        # Execute both queries in parallel
+        account, holdings = await asyncio.gather(account_task, holdings_task)
+
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
-
-        # Fetch holdings
-        holdings = list(holdings_col.find(
-            {"username": username, "client_account_name": account_name},
-            {"_id": 0}
-        ))
 
         return {"account": account, "holdings": holdings}
 
@@ -1973,12 +1983,14 @@ async def get_portfolio_holdings(username: str, account_name: str):
     market data, news, and sector info concurrently for all holdings.
     """
     try:
-        holdings_cursor = holdings_col.find({
-            "username": username,
-            "client_account_name": account_name
-        })
+        # Use asyncio.to_thread to prevent blocking the event loop
+        holdings_list = await asyncio.to_thread(
+            lambda: list(holdings_col.find({
+                "username": username,
+                "client_account_name": account_name
+            }))
+        )
 
-        holdings_list = list(holdings_cursor)
         if not holdings_list:
             return {"holdings": []}
 
@@ -2057,9 +2069,11 @@ async def get_portfolio_holdings(username: str, account_name: str):
 
                     news_volume = len(articles)
 
-                # Fetch sector info (cached, so fast)
+                # Fetch sector info (cached, so fast) - use asyncio.to_thread to avoid blocking
                 try:
-                    sector_info = stock_data_service.get_ticker_sector_info(symbol)
+                    sector_info = await asyncio.to_thread(
+                        stock_data_service.get_ticker_sector_info, symbol
+                    )
                     sector = sector_info.get("sector", "N/A")
                     industry = sector_info.get("industry", "N/A")
                 except Exception as e:
