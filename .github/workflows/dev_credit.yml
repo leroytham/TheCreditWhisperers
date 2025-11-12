@@ -74,7 +74,14 @@ jobs:
           slot-name: 'Production'
           package: ./backend
           startup-command: >
-            gunicorn -w 2 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 app.main:app
+            gunicorn -w 8
+            -k uvicorn.workers.UvicornWorker
+            --timeout 120
+            --keep-alive 5
+            --max-requests 1000
+            --max-requests-jitter 50
+            -b 0.0.0.0:8000
+            app.main:app
 
       # IMPORTANT: Environment variables must be configured in Azure Portal
       # Go to: Azure Portal > App Service "credit" > Configuration > Application settings
