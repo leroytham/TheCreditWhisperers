@@ -33,23 +33,13 @@ class SentimentService:
         return cls._instance
 
     def _initialize(self):
-        """Loads the FinBERT model for fallback sentiment analysis."""
-        try:
-            # Suppress the model loading messages
-            original_stdout = sys.stdout
-            sys.stdout = io.StringIO()
-            try:
-                from transformers import pipeline
-                self.finbert = pipeline("text-classification", model="ProsusAI/finbert")
-                self.finbert_available = True
-            finally:
-                sys.stdout = original_stdout
-            print("FinBERT model loaded successfully for fallback sentiment analysis.")
-        except Exception as e:
-            print(f"WARNING: FinBERT model could not be loaded: {e}")
-            print("Fallback articles will use neutral sentiment (0.0).")
-            self.finbert = None
-            self.finbert_available = False
+        """Skip FinBERT model loading for faster Azure performance."""
+        # ML packages disabled for Azure performance optimization
+        # Using Alpha Vantage sentiment scores only
+        self.finbert = None
+        self.finbert_available = False
+        print("FinBERT disabled for Azure performance optimization.")
+        print("Using Alpha Vantage sentiment scores only.")
 
     def analyze_sentiment(self, text: str) -> dict:
         """
