@@ -502,6 +502,23 @@ async def get_sector_daily_sentiment(
         /sectors/XLK/daily-sentiment?days=7
     """
     try:
+        # Generate cache key for this endpoint
+        from app.core.cache import generate_cache_key
+        cache_key = generate_cache_key(
+            "sector_daily_sentiment_v1",
+            sector_identifier,
+            days=days
+        )
+
+        # Try to get from cache
+        cached_result = await redis_cache.aget(cache_key)
+        if cached_result is not None:
+            print(f"[CACHE HIT] Returning cached daily sentiment for sector {sector_identifier}")
+            cached_result['cached'] = True
+            return cached_result
+
+        print(f"[CACHE MISS] Calculating daily sentiment for sector {sector_identifier}")
+
         # Resolve sector identifier to yfinance key
         sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
 
@@ -530,12 +547,18 @@ async def get_sector_daily_sentiment(
             days=days
         )
 
-        return {
+        result = {
             "success": True,
             "sector_key": sector_key,
             "sector_name": sector_metadata['display_name'],
-            "daily": daily_sentiment
+            "daily": daily_sentiment,
+            "cached": False
         }
+
+        # Cache the result with sentiment-specific TTL (15 minutes)
+        await redis_cache.aset(cache_key, result, ttl=settings.SENTIMENT_CACHE_TTL)
+
+        return result
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

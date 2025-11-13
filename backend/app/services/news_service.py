@@ -1350,21 +1350,43 @@ class NewsService:
             - cached: Whether result was from cache
             - metadata: Deduplication statistics
         """
+        # Generate cache key
+        from app.core.cache import redis_cache, generate_cache_key
+        from app.core.config import settings
+
+        cache_key = generate_cache_key(
+            "sector_news_v2",
+            sector_key,
+            limit=limit,
+            timeframe=timeframe
+        )
+
+        # Try to get from cache
+        cached_result = await redis_cache.aget(cache_key)
+        if cached_result is not None:
+            print(f"[CACHE HIT] Returning cached sector news for {sector_key}")
+            cached_result['cached'] = True
+            return cached_result
+
         # SECTOR OVERRIDE: Cap timeframe at 1M maximum for exponential decay relevance
         # After 10 days (10 half-lives), news has <0.1% relevance
         sector_timeframe = timeframe if timeframe in ['1D', '1W', '1M'] else '1M'
         if sector_timeframe != timeframe:
             print(f"[SECTOR OVERRIDE] Requested timeframe '{timeframe}' capped to '1M' for sector analysis")
-        
-        print(f"Fetching aggregated news for sector: {sector_key} (timeframe: {sector_timeframe})")
+
+        print(f"[CACHE MISS] Fetching aggregated news for sector: {sector_key} (timeframe: {sector_timeframe})")
 
         # Check if this is "All Sectors" request
         if is_all_sectors_identifier(sector_key):
-            return await self._get_all_sectors_news(
+            result = await self._get_all_sectors_news(
                 base_etf_ticker=sector_key,
                 limit=limit,
                 timeframe=sector_timeframe
             )
+            result['cached'] = False
+            # Cache the result with shorter TTL for news (10 minutes)
+            await redis_cache.aset(cache_key, result, ttl=settings.NEWS_CACHE_TTL)
+            return result
 
         try:
             tickers, market_weight_coverage = sector_service_instance.get_sector_tickers(sector_key)
@@ -1378,7 +1400,7 @@ class NewsService:
 
             sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
 
-            return await self._assemble_sector_news_response(
+            result = await self._assemble_sector_news_response(
                 response_sector_key=sector_key,
                 display_name=sector_metadata['display_name'],
                 tickers=tickers,
@@ -1386,6 +1408,12 @@ class NewsService:
                 limit=limit,
                 market_weight_coverage=market_weight_coverage
             )
+
+            result['cached'] = False
+            # Cache the result
+            await redis_cache.aset(cache_key, result, ttl=settings.NEWS_CACHE_TTL)
+
+            return result
 
         except Exception as e:
             print(f"ERROR: Failed to fetch sector news for '{sector_key}': {str(e)}")
