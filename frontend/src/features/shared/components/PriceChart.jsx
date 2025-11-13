@@ -25,15 +25,12 @@ import NewsDetailModal from './NewsDetailModal';
  *
  * @param {Object} props
  * @param {Array} props.priceData - Raw price data (entity mode)
- * @param {Array} props.benchmarkData - Benchmark price data for comparison overlay
- * @param {boolean} props.showBenchmark - Whether to show benchmark overlay
  * @param {Array} props.chartData - Pre-processed chart data (sector mode)
  * @param {Object} props.priceRange - Pre-calculated price range (sector mode)
  * @param {number} props.priceChange - Pre-calculated price change (sector mode)
  * @param {string} props.ticker - Ticker symbol
  * @param {string} props.companyName - Company/sector name
  * @param {string} props.currency - Currency code
- * @param {string} props.displayMode - 'value' or 'percent' - controls tooltip formatting
  * @param {Array} props.significantEvents - Events for entity mode
  * @param {Array} props.topEvents - Events for sector mode
  * @param {boolean} props.showEvents - Whether to show event markers (sector mode)
@@ -46,15 +43,12 @@ import NewsDetailModal from './NewsDetailModal';
  */
 const PriceChart = ({
   priceData,
-  benchmarkData = [],
-  showBenchmark = false,
   chartData: preProcessedChartData,
   priceRange: preProcessedPriceRange,
   priceChange: preProcessedPriceChange,
   ticker,
   companyName,
   currency,
-  displayMode = 'value',
   significantEvents = [],
   topEvents = [],
   showEvents = true,
@@ -138,30 +132,9 @@ const PriceChart = ({
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  // Reset hover states when dataset changes
-  useEffect(() => {
-    setHoveredPoint(null);
-    setHoveredEvent(null);
-    setSelectedArticle(null);
-  }, [priceData, benchmarkData, showBenchmark, significantEvents, showEvents, showSignificantEvents, timeframe, displayMode]);
-
   // Calculate chart data based on mode
   const chartData = preProcessedChartData || generateChartData(priceData);
-
-  // Process benchmark data if provided
-  const benchmarkChartData = showBenchmark && benchmarkData && benchmarkData.length > 0
-    ? generateChartData(benchmarkData)
-    : [];
-
-  // Calculate price range, combining with benchmark if shown
   let priceRange = preProcessedPriceRange || getPriceRange(chartData);
-  if (showBenchmark && benchmarkChartData.length > 0) {
-    const benchmarkRange = getPriceRange(benchmarkChartData);
-    priceRange = {
-      min: Math.min(priceRange.min, benchmarkRange.min),
-      max: Math.max(priceRange.max, benchmarkRange.max)
-    };
-  }
 
   // For 1D timeframe, expand price range to include prevClose if needed
   if (timeframe === '1D' && prevClose && priceRange) {
@@ -174,9 +147,9 @@ const PriceChart = ({
       max: adjustedMax + padding
     };
   }
-  const { currentPrice, priceChange, priceChangePercent, isValidPercentage } =
+  const { currentPrice, priceChange, priceChangePercent } =
     preProcessedPriceChange !== undefined
-      ? { currentPrice: chartData[chartData.length - 1], priceChange: preProcessedPriceChange, priceChangePercent: preProcessedPriceChange, isValidPercentage: true }
+      ? { currentPrice: chartData[chartData.length - 1], priceChange: preProcessedPriceChange, priceChangePercent: preProcessedPriceChange }
       : calculatePriceChange(chartData);
 
   // Chart dimensions
@@ -234,13 +207,6 @@ const PriceChart = ({
     ? calculateFillPath(chartData, priceRange, chartWidth, chartHeight, paddingLeft, paddingTop)
     : null;
 
-  // Calculate benchmark line path if benchmark is shown
-  const benchmarkLinePath = showBenchmark && benchmarkChartData.length > 0
-    ? (detectedMode === 'entity'
-      ? calculateChartPath(benchmarkChartData, priceRange, chartWidth, chartHeight, paddingLeft, paddingTop)
-      : null)
-    : null;
-
   // Empty state
   if (!chartData || chartData.length === 0) {
     return (
@@ -270,7 +236,7 @@ const PriceChart = ({
     const prev = (idx > 0 && chartData[idx - 1]) ? chartData[idx - 1].y : hoveredPoint.price;
     const change = hoveredPoint.price - prev;
     const changePct = prev ? (change / prev) * 100 : 0;
-    const dateStr = hoveredPoint.date ? formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time, exchange) : '';
+    const dateStr = hoveredPoint.date ? formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time) : '';
     return { left, top, change, changePct, dateStr };
   })() : null;
 
@@ -336,9 +302,7 @@ const PriceChart = ({
                   fontSize="11"
                   fontWeight="600"
                 >
-                  {displayMode === 'percent'
-                    ? `${price.toFixed(2)}%`
-                    : price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  {price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </text>
               </g>
             );
@@ -405,33 +369,6 @@ const PriceChart = ({
             fill="none"
             stroke={priceChange >= 0 ? '#00a850' : '#dc2626'}
             strokeWidth="1.5"
-          />
-        )}
-
-        {/* Benchmark line - S&P 500 overlay (solid gray) */}
-        {showBenchmark && detectedMode === 'entity' && benchmarkLinePath && (
-          <path
-            d={benchmarkLinePath}
-            fill="none"
-            stroke="#6b7280"
-            strokeWidth="1.5"
-            opacity="0.8"
-          />
-        )}
-        {showBenchmark && detectedMode === 'sector' && benchmarkChartData.length > 0 && (
-          <path
-            d={`M ${paddingLeft} ${(paddingTop + chartHeight) - ((benchmarkChartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)} ${benchmarkChartData
-              .slice(1)
-              .map((point, i) => {
-                const x = paddingLeft + ((i + 1) * (chartWidth / Math.max(1, benchmarkChartData.length - 1)));
-                const y = (paddingTop + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
-                return `L ${x} ${y}`;
-              })
-              .join(' ')}`}
-            fill="none"
-            stroke="#6b7280"
-            strokeWidth="1.5"
-            opacity="0.8"
           />
         )}
 
@@ -574,23 +511,20 @@ const PriceChart = ({
           });
 
           return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }) => {
+            const handleClick = () => {
+              const url = event.link || event.url;
+              if (url) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }
+            };
+
             return (
               <g
                 key={`event-${index}`}
                 className="cursor-pointer group"
                 onClick={(e) => {
                   e.stopPropagation();
-
-                  // Cmd/Ctrl+click opens URL in new tab
-                  if (e.metaKey || e.ctrlKey) {
-                    const url = event.link || event.url;
-                    if (url) {
-                      window.open(url, '_blank', 'noopener,noreferrer');
-                    }
-                    return;
-                  }
-
-                  // Regular click toggles tooltip
+                  // Toggle tooltip: if clicking same icon, close it; otherwise open new one
                   if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
                     setHoveredEvent(null);
                   } else {
@@ -607,7 +541,7 @@ const PriceChart = ({
                   cx={originalXPos}
                   cy={dataY}
                   r="6"
-                  fill={event.trend === 'Upward' ? '#00a850' : '#ef4444'}
+                  fill={priceChangePercent >= 0 ? '#00a850' : '#ef4444'}
                   stroke="white"
                   strokeWidth="2"
                 />
@@ -688,6 +622,7 @@ const PriceChart = ({
                   height="34"
                   fill="transparent"
                   className="cursor-pointer"
+                  onClick={handleClick}
                 />
               </g>
             );
@@ -747,23 +682,19 @@ const PriceChart = ({
           });
 
           return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }) => {
+            const handleClick = () => {
+              const url = event.link || event.url;
+              if (url) {
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }
+            };
+
             return (
               <g
                 key={`event-${index}`}
                 className="cursor-pointer group"
                 onClick={(e) => {
                   e.stopPropagation();
-
-                  // Cmd/Ctrl+click opens URL in new tab
-                  if (e.metaKey || e.ctrlKey) {
-                    const url = event.link || event.url;
-                    if (url) {
-                      window.open(url, '_blank', 'noopener,noreferrer');
-                    }
-                    return;
-                  }
-
-                  // Regular click toggles tooltip
                   if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
                     setHoveredEvent(null);
                   } else {
@@ -776,7 +707,7 @@ const PriceChart = ({
                   cx={originalXPos}
                   cy={dataY}
                   r="6"
-                  fill={event.trend === 'Upward' ? '#00a850' : '#ef4444'}
+                  fill={priceChangePercent >= 0 ? '#00a850' : '#ef4444'}
                   stroke="white"
                   strokeWidth="2"
                 />
@@ -839,6 +770,7 @@ const PriceChart = ({
                   height="34"
                   fill="transparent"
                   className="cursor-pointer"
+                  onClick={handleClick}
                 />
               </g>
             );
@@ -906,10 +838,7 @@ const PriceChart = ({
           }}
         >
           <div className="text-sm font-bold text-gray-900">
-            {displayMode === 'percent'
-              ? `${formatPrice(hoveredPoint.price, '', 2)}%`
-              : `${formatPrice(hoveredPoint.price)} ${currency}`
-            }
+            {formatPrice(hoveredPoint.price)} {currency}
           </div>
           <div className="text-xs text-gray-600 mt-0.5">
             {formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time)}
@@ -922,8 +851,8 @@ const PriceChart = ({
         <div
           className="absolute bg-white border border-gray-300 rounded shadow-lg"
           style={{
-            left: `${Math.max(hoveredEvent.paddingLeft || paddingLeft, Math.min(hoveredEvent.xPos - 110, (hoveredEvent.chartWidth || chartWidth) + (hoveredEvent.paddingLeft || paddingLeft) - 220))}px`,
-            top: `${Math.max(paddingTop, Math.min(hoveredEvent.iconY - 260, paddingTop + chartHeight - 240))}px`,
+            left: `${Math.min(hoveredEvent.xPos - 110, (hoveredEvent.chartWidth || chartWidth) - 220)}px`,
+            top: `${hoveredEvent.iconY - 260}px`,
             width: '220px',
             maxHeight: '240px',
             overflowY: 'scroll',
@@ -952,41 +881,14 @@ const PriceChart = ({
           <div className="text-xs text-gray-500 mb-1">
             {hoveredEvent.start_date}
           </div>
-          {/* Show trend/movement for entity events, or description for portfolio events */}
-          {hoveredEvent.total_move_pct !== undefined ? (
-            <div
-              className="text-sm font-semibold mb-2"
-              style={{
-                color: hoveredEvent.trend === 'Downward' ? '#dc2626' : '#00a850'
-              }}
-            >
-              {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct).toFixed(2)}% {hoveredEvent.trend}
-            </div>
-          ) : (
-            <div className="text-sm mb-2 text-gray-700">
-              {hoveredEvent.description}
-              {hoveredEvent.impact_value && (
-                <span className={`ml-2 font-semibold ${
-                  hoveredEvent.type === 'dividend'
-                    ? 'text-green-600'  // Money received
-                    : hoveredEvent.type === 'purchase'
-                    ? 'text-gray-600'   // Money spent (neutral)
-                    : hoveredEvent.impact_value < 0
-                    ? 'text-red-600'    // Withdrawal/loss
-                    : 'text-green-600'  // Default positive
-                }`}>
-                  {hoveredEvent.type === 'dividend'
-                    ? '+'
-                    : hoveredEvent.type === 'purchase'
-                    ? ''  // No sign for purchases (cost displayed)
-                    : hoveredEvent.impact_value < 0
-                    ? '-'
-                    : '+'
-                  }${Math.abs(hoveredEvent.impact_value).toLocaleString()}
-                </span>
-              )}
-            </div>
-          )}
+          <div
+            className="text-sm font-semibold mb-2"
+            style={{
+              color: hoveredEvent.trend === 'Downward' ? '#dc2626' : '#00a850'
+            }}
+          >
+            {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct).toFixed(2)}% {hoveredEvent.trend}
+          </div>
 
           {/* Divider line */}
           <div className="border-t border-gray-300 mb-3"></div>
