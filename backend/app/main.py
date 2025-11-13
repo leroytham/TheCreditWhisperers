@@ -161,6 +161,16 @@ async def startup_event():
     """
     logger.info("Starting up application...")
 
+    # Test MongoDB connection
+    try:
+        from .api.routes import client as motor_client
+        # Ping MongoDB to verify connection
+        await motor_client.admin.command('ping')
+        logger.info("✅ MongoDB connection verified successfully")
+    except Exception as e:
+        logger.error(f"❌ MongoDB connection failed: {e}")
+        logger.error("Please check your MONGO_URI environment variable and network connectivity")
+
     # Create MongoDB indexes for notifications
     try:
         create_indexes()

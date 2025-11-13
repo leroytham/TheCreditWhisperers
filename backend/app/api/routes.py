@@ -39,13 +39,92 @@ if not CLIENT_SECRET:
 
 
 mongo_uri = os.getenv("MONGO_URI")
-client = AsyncIOMotorClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
+# Configure Motor client with Azure-optimized settings
+client = AsyncIOMotorClient(
+    mongo_uri,
+    tls=True,
+    tlsCAFile=certifi.where(),
+    # Connection pool settings
+    maxPoolSize=50,              # Maximum number of connections in the pool
+    minPoolSize=10,              # Minimum number of connections to maintain
+    maxIdleTimeMS=45000,         # Close idle connections after 45 seconds
+    # Timeout settings
+    serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
+    connectTimeoutMS=10000,         # 10 second timeout for initial connection
+    socketTimeoutMS=30000,          # 30 second timeout for socket operations
+    # Retry and keep-alive settings
+    retryWrites=True,            # Automatically retry write operations
+    retryReads=True,             # Automatically retry read operations
+    heartbeatFrequencyMS=10000,  # Send heartbeat every 10 seconds to keep connection alive
+    appname="FYP-Backend"        # Application name for MongoDB logs
+)
 db = client["FYP"]
 accounts_col = db["Account_Details"]
 holdings_col = db["Stock_Holding"]
 
 
 router = APIRouter()
+
+@router.get("/health")
+async def health_check():
+    """
+    Health check endpoint for monitoring.
+    Verifies MongoDB connectivity and returns service status.
+    """
+    import time
+    start_time = time.time()
+
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "checks": {}
+    }
+
+    # Check MongoDB connectivity
+    try:
+        # Ping MongoDB with 3 second timeout
+        await asyncio.wait_for(
+            client.admin.command('ping'),
+            timeout=3.0
+        )
+        health_status["checks"]["mongodb"] = {
+            "status": "connected",
+            "response_time_ms": round((time.time() - start_time) * 1000, 2)
+        }
+    except asyncio.TimeoutError:
+        health_status["status"] = "unhealthy"
+        health_status["checks"]["mongodb"] = {
+            "status": "timeout",
+            "error": "MongoDB ping timeout after 3 seconds"
+        }
+    except Exception as e:
+        health_status["status"] = "unhealthy"
+        health_status["checks"]["mongodb"] = {
+            "status": "disconnected",
+            "error": str(e)
+        }
+
+    # Check Redis connectivity (if available)
+    try:
+        from app.core.cache import redis_cache
+        if redis_cache and redis_cache._redis_client:
+            redis_start = time.time()
+            await redis_cache._redis_client.ping()
+            health_status["checks"]["redis"] = {
+                "status": "connected",
+                "response_time_ms": round((time.time() - redis_start) * 1000, 2)
+            }
+        else:
+            health_status["checks"]["redis"] = {"status": "disabled"}
+    except Exception as e:
+        health_status["checks"]["redis"] = {
+            "status": "disconnected",
+            "error": str(e)
+        }
+
+    # Return appropriate HTTP status code
+    status_code = 200 if health_status["status"] == "healthy" else 503
+    return health_status
 
 @router.get("/stocks/{ticker}/historical-data")
 def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
