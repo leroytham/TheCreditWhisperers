@@ -1,0 +1,240 @@
+ss.s..ssss.s.sssss...s...........FFFFFFFF....FFF..F.F.F.F............... [ 34%]
+.........FF..F.FFFFFF...FF....FF........................................ [ 68%]
+..FFFFFFFFF...................F..............F..F..F...............      [100%]
+=============================== warnings summary ===============================
+app/models/notification.py:98
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:98: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    @validator('id', pre=True)
+
+app/models/notification.py:104
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:104: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    @validator('metadata')
+
+app/models/notification.py:42
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:42: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class NotificationModel(BaseModel):
+
+../../../../../opt/anaconda3/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:319: 12 warnings
+  /opt/anaconda3/lib/python3.12/site-packages/pydantic/_internal/_generate_schema.py:319: PydanticDeprecatedSince20: `json_encoders` is deprecated. See https://docs.pydantic.dev/2.12/concepts/serialization/#custom-serializers for alternatives. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    warnings.warn(
+
+app/models/notification.py:176
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:176: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    @validator('id', pre=True)
+
+app/models/notification.py:130
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:130: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class NotificationPreferenceModel(BaseModel):
+
+app/models/notification.py:244
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:244: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    @validator('id', pre=True)
+
+app/models/notification.py:250
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:250: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    @validator('condition')
+
+app/models/notification.py:200
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/notification.py:200: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PriceAlertModel(BaseModel):
+
+app/models/transaction.py:26
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/transaction.py:26: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class TransactionModel(BaseModel):
+
+app/core/config.py:8
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/core/config.py:8: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class Settings(BaseSettings):
+
+tests/api/test_portfolio_routes.py: 2 warnings
+tests/models/test_notification_portfolio_filtering.py: 3 warnings
+tests/models/test_portfolio_model.py: 8 warnings
+tests/services/test_price_alert_portfolio.py: 3 warnings
+  /opt/anaconda3/lib/python3.12/site-packages/pydantic/main.py:250: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_multi_portfolio_notifications
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:190: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_multi_portfolio_notifications
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:199: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_multi_portfolio_notifications
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:207: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_notifications_exclude_global
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:98: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_notifications_with_portfolio_filter
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:46: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_notifications_with_portfolio_filter
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:57: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_portfolio_notifications
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_notification_portfolio_filtering.py:136: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_portfolio_by_id
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:121: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_portfolio_by_id
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:122: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_portfolios
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:160: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_portfolios
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:161: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_portfolios
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_portfolios
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:170: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_primary_portfolio
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:196: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_primary_portfolio
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_portfolio_model.py:197: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_update_portfolio_holdings_cache
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/models/portfolio_model.py:230: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow()
+
+tests/models/test_transaction.py::TestTransactionModel::test_transaction_from_dict
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:267: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionModel::test_transaction_from_dict
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:268: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_cash_flows_between_dates
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:426: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_cash_flows_between_dates
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:427: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_cash_flows_between_dates
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:440: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_cash_flows_between_dates
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:441: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_transaction_by_id
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:348: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_transaction_by_id
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:349: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_transactions_with_filters
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:383: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/models/test_transaction.py::TestTransactionCRUDOperations::test_get_transactions_with_filters
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/models/test_transaction.py:384: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "updated_at": datetime.utcnow(),
+
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_no_api_key
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/services/earnings_service.py:140: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "fetched_at": datetime.utcnow().isoformat()
+
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_success
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_api_error
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_rate_limit
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_no_data
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_http_error
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_timeout
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_network_error
+tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_caching
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/app/services/earnings_service.py:97: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_copy_alerts_to_portfolio
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/services/test_price_alert_portfolio.py:271: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_get_portfolio_alerts
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/services/test_price_alert_portfolio.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_get_portfolio_alerts
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/services/test_price_alert_portfolio.py:140: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_get_portfolio_alerts_include_global
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/services/test_price_alert_portfolio.py:177: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_get_portfolio_alerts_include_global
+  /Users/wenxiang/Documents/Revert_New_FYP/backend/tests/services/test_price_alert_portfolio.py:187: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "created_at": datetime.utcnow(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_multi_portfolio_notifications
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_notifications_exclude_global
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_notifications_with_portfolio_filter
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_portfolio_notifications
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationPortfolioFiltering::test_get_portfolio_unread_count
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationModelWithPortfolio::test_notification_model_global
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationModelWithPortfolio::test_notification_model_to_dict
+FAILED tests/models/test_notification_portfolio_filtering.py::TestNotificationModelWithPortfolio::test_notification_model_with_portfolio
+FAILED tests/models/test_portfolio_model.py::TestPortfolioModel::test_portfolio_model_to_dict
+FAILED tests/models/test_portfolio_model.py::TestPortfolioModel::test_portfolio_summary_from_model
+FAILED tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_create_portfolio
+FAILED tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_get_user_portfolios
+FAILED tests/models/test_portfolio_model.py::TestPortfolioCRUDOperations::test_set_primary_portfolio
+FAILED tests/models/test_sentiment.py::TestSentimentScore::test_repr_method
+FAILED tests/models/test_sentiment.py::TestSentimentScore::test_sentiment_label_property
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_initialization_with_api_key
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_initialization_without_api_key
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_no_api_key
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_success
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_api_error
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_rate_limit
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_no_data
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_http_error
+FAILED tests/services/test_earnings_service.py::TestEarningsService::test_fetch_earnings_transcript_timeout
+FAILED tests/services/test_market_analysis_service.py::TestMarketAnalysisService::test_analyze_significant_events_no_data
+FAILED tests/services/test_market_analysis_service.py::TestMarketAnalysisService::test_analyze_significant_events_success
+FAILED tests/services/test_market_analysis_service.py::TestMarketAnalysisService::test_fetch_finnhub_news_success
+FAILED tests/services/test_news_service.py::TestNewsService::test_get_categorized_news
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_add_alert_auto_assign_primary_portfolio
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_add_alert_with_portfolio
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_add_global_alert
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_check_portfolio_alerts
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_copy_alerts_to_portfolio
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_get_portfolio_alerts
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertPortfolio::test_get_portfolio_alerts_include_global
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertModel::test_global_price_alert
+FAILED tests/services/test_price_alert_portfolio.py::TestPriceAlertModel::test_price_alert_with_portfolio
+FAILED tests/services/test_sector_service.py::TestSectorService::test_get_sector_tickers_invalid_etf
+FAILED tests/services/test_sentiment_service.py::TestSentimentService::test_analyze_sentiment_with_weights
+FAILED tests/services/test_stock_data_service.py::TestStockDataService::test_filter_data_by_timeframe_5d
+FAILED tests/services/test_stock_data_service.py::TestStockDataService::test_get_sector_top_constituents_success
+41 failed, 156 passed, 14 skipped, 78 warnings in 49.88s

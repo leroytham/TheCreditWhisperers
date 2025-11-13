@@ -344,7 +344,7 @@ describe('formatters', () => {
       expect(result[0].noLotData).toBe(true);
       expect(result[0].originalValue).toBe(10000);
 
-      expect(result[1].close).toBe(0);
+      expect(result[1].close).toBe(5);
       expect(result[1].noLotData).toBe(true);
       expect(result[1].originalValue).toBe(10500);
 

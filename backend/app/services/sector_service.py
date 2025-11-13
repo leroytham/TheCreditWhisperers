@@ -106,6 +106,7 @@ class SectorService:
             print(f"ERROR: Failed to fetch holdings for ETF '{etf_ticker}': {str(e)}")
             raise ValueError(f"Failed to fetch ETF holdings: {str(e)}")
 
+    @cache_result(ttl=86400)  # Cache for 24 hours (sector metadata rarely changes)
     def resolve_sector_key(self, identifier: str) -> str:
         """
         Validates and returns ETF ticker (now acts as sector key).
@@ -121,6 +122,7 @@ class SectorService:
         """
         return resolve_sector_identifier(identifier)
 
+    @cache_result(ttl=86400)  # Cache for 24 hours (sector metadata rarely changes)
     def get_sector_metadata(self, etf_ticker: str) -> Dict[str, str]:
         """
         Gets metadata for an ETF/sector.
