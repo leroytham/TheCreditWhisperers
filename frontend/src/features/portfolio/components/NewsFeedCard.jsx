@@ -161,7 +161,7 @@ const NewsFeedCard = () => {
       style={{
         height: "100%",
         minHeight: "350px",
-        maxHeight: "595px",
+        maxHeight: "760px",
         fontFamily: "Arial, sans-serif",
       }}
     >
@@ -217,7 +217,7 @@ const NewsFeedCard = () => {
         ) : (
           groupedNews.map(([label, items]) => (
             <div key={label} className="mb-6">
-              {label === "Yesterday" && (
+              {label !== "Today" && (
                 <div className="-mx-6 px-6 border-b-2 border-gray-300 pb-2 mb-4">
                   <h3 className="text-gray-900 font-semibold text-sm">
                     {label}
@@ -249,8 +249,8 @@ const NewsFeedCard = () => {
                       key={idx}
                       className="flex items-start py-4"
                     >
-                      {/* Left Column: Empty for Today (pattern is now outside), Time for Yesterday */}
-                      {label === "Yesterday" && (
+                      {/* Left Column: Empty for all non-Today items for alignment */}
+                      {label !== "Today" && (
                         <div className="w-24 text-sm flex-shrink-0"></div>
                       )}
 
