@@ -402,14 +402,14 @@ class TWRCalculatorService:
         """
         try:
             import yfinance as yf
-            from pymongo import MongoClient
 
             # Get all holdings for this portfolio
             holdings_col = db["Stock_Holding"]
-            holdings = list(holdings_col.find({
+            holdings_cursor = holdings_col.find({
                 "username": username,
                 "client_account_name": account_name
-            }))
+            })
+            holdings = await holdings_cursor.to_list(length=None)
 
             if not holdings:
                 return 0.0
