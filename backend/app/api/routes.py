@@ -713,13 +713,13 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
         for article in articles_with_sentiment:
             news_item = {
                 "title": article.get("title", ""),  # Frontend expects "title"
-                "provider": article.get("provider", "Unknown"),
+                "provider": article.get("source_domain", article.get("provider", "Unknown")),  # Try source_domain first, fallback to provider
                 "sentiment_score": article.get("sentiment_score_raw", 0),  # Frontend expects "sentiment_score"
                 "sentiment_label": article.get("sentiment_label", "Neutral"),  # Bullish/Bearish format
                 "link": article.get("link", ""),
                 "publish_date": article.get("publish_date", ""),
                 "publish_timestamp": article.get("publish_timestamp", ""),  # Add full timestamp
-                "image": article.get("image", "")
+                "image": article.get("banner_image", article.get("image", ""))  # Try banner_image first, fallback to image
             }
 
             # Add relevance score if available

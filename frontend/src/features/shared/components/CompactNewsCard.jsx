@@ -13,18 +13,36 @@ const CompactNewsCard = ({
 }) => {
   const formatPublishTime = (timeStr) => {
     if (!timeStr) return 'Unknown';
+
+    // Check if it's an ISO date format (e.g., "2025-11-13T11:53:58+00:00" or "2025-11-13")
+    if (timeStr.includes('-')) {
+      const date = new Date(timeStr);
+      if (!isNaN(date)) {
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+      }
+    }
+
+    // Handle the old format (yyyymmddThhmmss)
     const year = timeStr.substring(0, 4);
     const month = timeStr.substring(4, 6);
     const day = timeStr.substring(6, 8);
-    const hour = timeStr.substring(9, 11);
-    const minute = timeStr.substring(11, 13);
-    
+    const hour = timeStr.substring(9, 11) || '00';
+    const minute = timeStr.substring(11, 13) || '00';
+
     const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    if (!isNaN(date)) {
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+
+    return 'Unknown';
   };
 
   const getSentimentColor = (score) => {

@@ -26,7 +26,8 @@ export const useNewsData = (ticker, timeframe = '1Y', options = {}) => {
   });
 
   // Transform data into the expected format
-  const news = data?.feed || data?.news || [];
+  // Prefer formatted news over raw feed data for proper field names (image, provider, etc.)
+  const news = data?.news || data?.feed || [];
 
   const apiMetadata = {
     items: data?.items,

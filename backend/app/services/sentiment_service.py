@@ -230,17 +230,18 @@ class SentimentService:
             else:
                 combined_weight = 0.0
 
-            # Store metadata for this article
-            article_meta = {
+            # Store metadata for this article - preserve ALL original fields
+            article_meta = article.copy()  # Start with all original article fields
+            article_meta.update({
                 "sentiment_score_raw": raw_score,
                 "relevance_score": relevance_score,
                 "recency_weight": recency_weight,
                 "combined_weight": combined_weight,
                 "age_hours": age_hours,
-                # Include original article data for source/topic analysis
-                "source": article.get("provider", "Unknown"),
+                # Include original article data for source/topic analysis (override if needed)
+                "source": article.get("provider", article.get("source", "Unknown")),
                 "topics": article.get("topics", [])
-            }
+            })
             articles_with_metadata.append(article_meta)
 
         # Calculate overall weighted average and determine data quality
