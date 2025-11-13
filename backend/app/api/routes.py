@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 import yfinance as yf
 from datetime import datetime
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 import certifi
 import asyncio
 import uuid
@@ -39,8 +39,8 @@ if not CLIENT_SECRET:
 
 
 mongo_uri = os.getenv("MONGO_URI")
-client = MongoClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
-db = client["FYP"]  
+client = AsyncIOMotorClient(mongo_uri, tls=True, tlsCAFile=certifi.where())
+db = client["FYP"]
 accounts_col = db["Account_Details"]
 holdings_col = db["Stock_Holding"]
 
@@ -1567,7 +1567,7 @@ def reduce_lots_fifo(lots: list, quantity_to_reduce: float) -> tuple[list, float
     return updated_lots, realized_gain_loss
 
 
-def apply_sell_transaction(
+async def apply_sell_transaction(
     holdings_col,
     username: str,
     account_name: str,
@@ -1595,7 +1595,7 @@ def apply_sell_transaction(
         ValueError: If holding not found or insufficient shares
     """
     # Find existing holding
-    holding = holdings_col.find_one({
+    holding = await holdings_col.find_one({
         "username": username,
         "client_account_name": account_name,
         "account_no": account_no,
@@ -1621,7 +1621,7 @@ def apply_sell_transaction(
 
     if new_quantity <= 0:
         # Completely sold out - delete holding
-        holdings_col.delete_one({"_id": holding["_id"]})
+        await holdings_col.delete_one({"_id": holding["_id"]})
         return {
             "status": "deleted",
             "symbol": symbol,
@@ -1644,7 +1644,7 @@ def apply_sell_transaction(
             for lot in updated_lots
         ) if updated_lots else holding.get("purchase_date")
 
-        holdings_col.update_one(
+        await holdings_col.update_one(
             {"_id": holding["_id"]},
             {
                 "$set": {
@@ -1684,7 +1684,7 @@ async def save_portfolio(data: dict):
         account_no = account["accountNumber"].strip()
 
         # 1️. Check if account already exists
-        existing_account = accounts_col.find_one({
+        existing_account = await accounts_col.find_one({
             "username": username,
             "account_no": account_no
         })
@@ -1728,7 +1728,7 @@ async def save_portfolio(data: dict):
             "open_date": account["openDate"],
             "created_at": datetime.utcnow()
         }
-        accounts_col.insert_one(account_record)
+        await accounts_col.insert_one(account_record)
 
         # 5️. Insert holdings or merge if exists
         holdings_added, holdings_updated = 0, 0
@@ -1739,7 +1739,7 @@ async def save_portfolio(data: dict):
             purchase_price = float(h["purchasePrice"])
             purchase_date = h["purchaseDate"]
 
-            existing_holding = holdings_col.find_one({
+            existing_holding = await holdings_col.find_one({
                 "username": username,
                 "client_account_name": account_name,
                 "account_no": account_no,
@@ -1769,7 +1769,7 @@ async def save_portfolio(data: dict):
                 existing_purchase_date = existing_holding.get("purchase_date", purchase_date)
                 earliest_date = min(existing_purchase_date, purchase_date) if existing_purchase_date else purchase_date
 
-                holdings_col.update_one(
+                await holdings_col.update_one(
                     {
                         "username": username,
                         "client_account_name": account_name,
@@ -1810,7 +1810,7 @@ async def save_portfolio(data: dict):
                     "lots": [first_lot],  # Initialize lots array
                     "created_at": datetime.utcnow()
                 }
-                holdings_col.insert_one(holding_record)
+                await holdings_col.insert_one(holding_record)
                 holdings_added += 1
 
         return {
@@ -1837,10 +1837,11 @@ async def get_accounts_for_user(username: str):
     Returns client_account_name and account_no.
     """
     try:
-        accounts = list(accounts_col.find(
+        cursor = accounts_col.find(
             {"username": username},
             {"_id": 0, "client_account_name": 1, "account_no": 1}
-        ))
+        )
+        accounts = await cursor.to_list(length=None)
 
         if not accounts:
             return {"accounts": []}
@@ -1859,7 +1860,7 @@ async def get_portfolio_details(username: str, account_name: str):
     """
     try:
         # Fetch account details
-        account = accounts_col.find_one(
+        account = await accounts_col.find_one(
             {"username": username, "client_account_name": account_name},
             {"_id": 0}
         )
@@ -1867,10 +1868,11 @@ async def get_portfolio_details(username: str, account_name: str):
             raise HTTPException(status_code=404, detail="Account not found")
 
         # Fetch holdings
-        holdings = list(holdings_col.find(
+        cursor = holdings_col.find(
             {"username": username, "client_account_name": account_name},
             {"_id": 0}
-        ))
+        )
+        holdings = await cursor.to_list(length=None)
 
         return {"account": account, "holdings": holdings}
 
@@ -1915,7 +1917,7 @@ async def update_portfolio(data: dict):
             )
 
         # Step 2: Update the account details
-        result = accounts_col.update_one(
+        result = await accounts_col.update_one(
             {"username": username, "client_account_name": account["accountName"]},
             {"$set": {
                 "account_no": account.get("accountNumber"),
@@ -1928,7 +1930,7 @@ async def update_portfolio(data: dict):
             raise HTTPException(status_code=404, detail="Account not found")
 
         # Step 3: Clear old holdings for this account
-        holdings_col.delete_many({
+        await holdings_col.delete_many({
             "username": username,
             "client_account_name": account["accountName"]
         })
@@ -1947,7 +1949,7 @@ async def update_portfolio(data: dict):
             })
 
         if new_holdings:
-            holdings_col.insert_many(new_holdings)
+            await holdings_col.insert_many(new_holdings)
 
         return {"message": "Portfolio updated successfully!"}
 
@@ -1974,7 +1976,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
             "client_account_name": account_name
         })
 
-        holdings_list = list(holdings_cursor)
+        holdings_list = await holdings_cursor.to_list(length=None)
         if not holdings_list:
             return {"holdings": []}
 
@@ -2188,7 +2190,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             "username": username,
             "client_account_name": account_name
         })
-        holdings_list = list(holdings_cursor)
+        holdings_list = await holdings_cursor.to_list(length=None)
 
         if not holdings_list:
             return {"error": "No holdings found"}
@@ -2411,7 +2413,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
         # Timeframe is configurable via query parameter (1D, 1W, 1M, 6M, YTD, 1Y, 3Y, 5Y)
         try:
             # Fetch account info to get open_date
-            account_info = accounts_col.find_one({
+            account_info = await accounts_col.find_one({
                 "username": username,
                 "client_account_name": account_name
             })
@@ -2571,10 +2573,11 @@ async def get_portfolio_news(username: str, account_name: str):
         print(f"Username: {username}, Account: {account_name}")
 
         # Fetch holdings
-        holdings_list = list(holdings_col.find({
+        cursor = holdings_col.find({
             "username": username,
             "client_account_name": account_name
-        }))
+        })
+        holdings_list = await cursor.to_list(length=None)
 
         if not holdings_list:
             raise HTTPException(
@@ -2737,10 +2740,11 @@ async def get_portfolio_sentiment(username: str, account_name: str):
         print(f"Username: {username}, Account: {account_name}")
 
         # Fetch holdings with sector data
-        holdings_list = list(holdings_col.find({
+        cursor = holdings_col.find({
             "username": username,
             "client_account_name": account_name
-        }))
+        })
+        holdings_list = await cursor.to_list(length=None)
 
         if not holdings_list:
             raise HTTPException(
@@ -2903,10 +2907,11 @@ async def get_portfolio_daily_sentiment(
         print(f"Timeframe: {timeframe}, Days: {days}")
 
         # Fetch holdings
-        holdings_list = list(holdings_col.find({
+        cursor = holdings_col.find({
             "username": username,
             "client_account_name": account_name
-        }))
+        })
+        holdings_list = await cursor.to_list(length=None)
 
         if not holdings_list:
             raise HTTPException(
@@ -2992,10 +2997,11 @@ async def get_portfolio_rolling_sentiment(
         print(f"Timeframe: {timeframe}")
 
         # Fetch holdings
-        holdings_list = list(holdings_col.find({
+        cursor = holdings_col.find({
             "username": username,
             "client_account_name": account_name
-        }))
+        })
+        holdings_list = await cursor.to_list(length=None)
 
         if not holdings_list:
             raise HTTPException(
@@ -3387,7 +3393,7 @@ async def get_portfolio_performance_twr(
             start_date = end_date - timedelta(days=365 * 5)
         elif timeframe == "ITD":
             # Get portfolio inception date
-            account = accounts_col.find_one({
+            account = await accounts_col.find_one({
                 "username": username,
                 "client_account_name": account_name
             })
