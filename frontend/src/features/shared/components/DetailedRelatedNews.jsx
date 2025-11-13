@@ -32,6 +32,27 @@ const DetailedRelatedNews = ({
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  // Transform API response to match CompactNewsCard expected fields
+  const transformedNews = useMemo(() => {
+    if (!news || news.length === 0) return [];
+
+    return news.map(article => ({
+      ...article,
+      // Map API fields to component expected fields
+      banner_image: article.image || article.banner_image,
+      source: article.provider || article.source,
+      time_published: article.publish_timestamp || article.publish_date || article.time_published,
+      overall_sentiment_score: article.sentiment_score ?? article.overall_sentiment_score,
+      overall_sentiment_label: article.sentiment_label || article.overall_sentiment_label,
+      // Keep other fields as-is
+      title: article.title,
+      summary: article.summary,
+      link: article.link,
+      topics: article.topics || [],
+      ticker_sentiment: article.ticker_sentiment || []
+    }));
+  }, [news]);
+
   // Determine if this is a sector view based on apiMetadata
   const isSector = useMemo(() => {
     return !!(apiMetadata?.sector_name || apiMetadata?.tickers_queried);
@@ -70,12 +91,12 @@ const DetailedRelatedNews = ({
 
   // Extract unique topics and sentiment labels
   const { allTopics, sentimentLabels } = useMemo(() => {
-    if (!news || news.length === 0) return { allTopics: [], sentimentLabels: [] };
+    if (!transformedNews || transformedNews.length === 0) return { allTopics: [], sentimentLabels: [] };
 
     const topicsSet = new Set();
     const sentimentsSet = new Set();
 
-    news.forEach(article => {
+    transformedNews.forEach(article => {
       if (article.topics) {
         article.topics.forEach(t => topicsSet.add(t.topic));
       }
@@ -88,12 +109,12 @@ const DetailedRelatedNews = ({
       allTopics: Array.from(topicsSet).sort(),
       sentimentLabels: Array.from(sentimentsSet).sort()
     };
-  }, [news]);
+  }, [transformedNews]);
 
   const newsToDisplay = useMemo(() => {
-    if (!news) return [];
+    if (!transformedNews) return [];
 
-    let filtered = [...news];
+    let filtered = [...transformedNews];
 
     // Filter by search term
     if (filter) {
@@ -148,7 +169,7 @@ const DetailedRelatedNews = ({
     });
 
     return filtered;
-  }, [news, filter, selectedTopic, selectedSentiment, sortOption, minRelevance, ticker, calculateRelevanceScore]);
+  }, [transformedNews, filter, selectedTopic, selectedSentiment, sortOption, minRelevance, ticker, calculateRelevanceScore]);
 
   const handleArticleClick = (article) => {
     setSelectedArticle(article);
@@ -283,7 +304,7 @@ const DetailedRelatedNews = ({
         {/* Layout Controls and Result Count */}
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            Showing {newsToDisplay.length} of {news?.length || 0} articles
+            Showing {newsToDisplay.length} of {transformedNews?.length || 0} articles
           </div>
 
           {/* Column Layout Selector */}
