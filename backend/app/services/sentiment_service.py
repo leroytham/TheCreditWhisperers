@@ -15,6 +15,8 @@ warnings.filterwarnings('ignore')
 from app.models import News, SentimentScore, RelevanceScore
 from app.config.scoring import map_alpha_vantage_label, classify_sentiment, classify_momentum, get_momentum_definition
 from app.core.config import settings
+from app.core.cache import cache_result, redis_cache
+import pickle
 
 
 class SentimentService:
@@ -33,23 +35,30 @@ class SentimentService:
         return cls._instance
 
     def _initialize(self):
-        """Loads the FinBERT model for fallback sentiment analysis."""
-        try:
-            # Suppress the model loading messages
-            original_stdout = sys.stdout
-            sys.stdout = io.StringIO()
-            try:
-                from transformers import pipeline
-                self.finbert = pipeline("text-classification", model="ProsusAI/finbert")
-                self.finbert_available = True
-            finally:
-                sys.stdout = original_stdout
-            print("FinBERT model loaded successfully for fallback sentiment analysis.")
-        except Exception as e:
-            print(f"WARNING: FinBERT model could not be loaded: {e}")
-            print("Fallback articles will use neutral sentiment (0.0).")
-            self.finbert = None
-            self.finbert_available = False
+        """
+        Initialize sentiment service.
+
+        NOTE: FinBERT model loading is disabled because it's not currently used in production.
+        The application uses Alpha Vantage pre-calculated sentiment scores exclusively.
+        FinBERT loading takes 10-15 minutes and is unnecessary overhead.
+        """
+        # Disabled FinBERT loading - not used in production
+        # If you need FinBERT fallback sentiment, uncomment the code below:
+        #
+        # try:
+        #     from transformers import pipeline
+        #     self.finbert = pipeline("text-classification", model="ProsusAI/finbert")
+        #     self.finbert_available = True
+        #     print("FinBERT model loaded successfully for fallback sentiment analysis.")
+        # except Exception as e:
+        #     print(f"WARNING: FinBERT model could not be loaded: {e}")
+        #     print("Fallback articles will use neutral sentiment (0.0).")
+        #     self.finbert = None
+        #     self.finbert_available = False
+
+        self.finbert = None
+        self.finbert_available = False
+        print("SentimentService initialized (FinBERT disabled - using Alpha Vantage scores only)")
 
     def analyze_sentiment(self, text: str) -> dict:
         """
@@ -115,6 +124,32 @@ class SentimentService:
             sentiment_result["label"],
             sentiment_result["confidence"]
         )
+
+    def _generate_news_cache_key(self, news_articles: list[dict]) -> str:
+        """
+        Generate a stable cache key from a list of news articles.
+        Uses article links and publish dates to create a unique hash.
+
+        Args:
+            news_articles: List of news article dictionaries
+
+        Returns:
+            16-character hash string representing the article set
+        """
+        import hashlib
+
+        if not news_articles:
+            return "empty"
+
+        # Sort articles by link to ensure consistent ordering
+        article_ids = sorted([
+            f"{article.get('link', article.get('url', ''))}:{article.get('publish_date', article.get('time_published', ''))}"
+            for article in news_articles
+        ])
+
+        # Generate MD5 hash and take first 16 characters
+        combined = ":".join(article_ids)
+        return hashlib.md5(combined.encode()).hexdigest()[:16]
 
     def _calculate_aggregated_score_with_decay(
         self,
@@ -851,7 +886,20 @@ class SentimentService:
                 - half_life_fast_hours: Fast score half-life in hours
                 - half_life_slow_hours: Slow score half-life in hours
                 - momentum_definition: Human-readable definition of thresholds
+
+        Cached for 10 minutes based on the news article set to avoid redundant calculations.
         """
+        # Check cache first using news articles hash as key
+        articles_hash = self._generate_news_cache_key(news_articles)
+        cache_key = f"sentiment_momentum:{articles_hash}"
+
+        try:
+            cached_result = redis_cache.get(cache_key)
+            if cached_result:
+                return pickle.loads(cached_result)
+        except Exception as e:
+            print(f"Cache read error in analyze_sentiment_with_momentum: {e}")
+
         # Calculate decay constants from configured half-lives
         # Formula: k = ln(2) / half_life_hours
         half_life_fast = settings.SENTIMENT_HALF_LIFE_FAST_HOURS
@@ -1040,6 +1088,12 @@ class SentimentService:
             "sentiment_by_topic": sentiment_by_topic_data.get("sentiment_by_topic", {}),
             "topic_weights": sentiment_by_topic_data.get("topic_weights", {})
         })
+
+        # Cache the result for 10 minutes (600 seconds)
+        try:
+            redis_cache.set(cache_key, pickle.dumps(full_results), 600)
+        except Exception as e:
+            print(f"Cache write error in analyze_sentiment_with_momentum: {e}")
 
         return full_results
 

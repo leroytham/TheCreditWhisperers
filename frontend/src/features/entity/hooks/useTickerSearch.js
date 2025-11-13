@@ -13,7 +13,10 @@ export const useTickerSearch = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    console.log('[useTickerSearch] Search term changed:', searchTerm);
+
     if (searchTerm.trim().length < MIN_SEARCH_LENGTH) {
+      console.log('[useTickerSearch] Search term too short, clearing suggestions');
       setSuggestions([]);
       return;
     }
@@ -23,12 +26,16 @@ export const useTickerSearch = () => {
     // Debounced API call
     const timeoutId = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/search-ticker?q=${searchTerm}`);
+        const url = `/api/search-ticker?q=${searchTerm}`;
+        console.log('[useTickerSearch] Fetching:', url);
+
+        const response = await fetch(url);
         const data = await response.json();
 
+        console.log('[useTickerSearch] Response:', data);
         setSuggestions(data.quotes || []);
       } catch (err) {
-        console.error('Error searching ticker:', err);
+        console.error('[useTickerSearch] Error searching ticker:', err);
         setSuggestions([]);
       } finally {
         setLoading(false);

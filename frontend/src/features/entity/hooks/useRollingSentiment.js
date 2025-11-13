@@ -14,8 +14,11 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
   const [sourceEarliestDates, setSourceEarliestDates] = useState(null);
 
   useEffect(() => {
+    console.log('[useRollingSentiment] Effect triggered:', { ticker, timeframe });
+
     // If ticker is null (lazy loading - tab not active), set loading to false immediately
     if (!ticker) {
+      console.log('[useRollingSentiment] Ticker is null, skipping fetch');
       setLoading(false);
       return;
     }
@@ -31,7 +34,10 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
           timeframe: timeframe || ''
         });
 
-        const response = await fetch(`/api/rolling-sentiment?${params.toString()}`);
+        const url = `/api/rolling-sentiment?${params.toString()}`;
+        console.log('[useRollingSentiment] Fetching:', url);
+
+        const response = await fetch(url);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -46,7 +52,7 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
         setHasData(result.has_data !== false);
         setSourceEarliestDates(result.source_earliest_dates || null);
       } catch (err) {
-        console.error('Error fetching rolling sentiment:', err);
+        console.error('[useRollingSentiment] Error fetching rolling sentiment:', err);
         setError(err.message);
         setData([]);
         setHasData(false);

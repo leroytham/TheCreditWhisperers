@@ -985,19 +985,33 @@ class SectorSentimentService:
             )  # Return all headlines (no limit)
 
             # Format label based on timeframe
+            # Cross-platform datetime formatting (Windows doesn't support %-I, %-d)
             point_datetime = point_time
             if timeframe == '1D':
-                label = point_datetime.strftime("%-I%p")
+                # Format: "3PM"
+                hour = point_datetime.strftime("%I").lstrip("0")
+                label = f"{hour}{point_datetime.strftime('%p')}"
             elif timeframe == '1W':
-                label = point_datetime.strftime("%a %-I%p")
+                # Format: "Mon 3PM"
+                hour = point_datetime.strftime("%I").lstrip("0")
+                label = f"{point_datetime.strftime('%a')} {hour}{point_datetime.strftime('%p')}"
             elif timeframe == '1M':
-                label = point_datetime.strftime("%b %-d %-I%p")
+                # Format: "Jan 5 3PM"
+                day = str(point_datetime.day)
+                hour = point_datetime.strftime("%I").lstrip("0")
+                label = f"{point_datetime.strftime('%b')} {day} {hour}{point_datetime.strftime('%p')}"
             elif timeframe in ['3M', '6M']:
-                label = point_datetime.strftime("%b %-d")
+                # Format: "Jan 5"
+                day = str(point_datetime.day)
+                label = f"{point_datetime.strftime('%b')} {day}"
             elif timeframe == '1Y':
-                label = point_datetime.strftime("%b %-d")
+                # Format: "Jan 5"
+                day = str(point_datetime.day)
+                label = f"{point_datetime.strftime('%b')} {day}"
             else:
-                label = point_datetime.strftime("%b %-d")
+                # Default: "Jan 5"
+                day = str(point_datetime.day)
+                label = f"{point_datetime.strftime('%b')} {day}"
 
             data_points.append({
                 "timestamp": point_datetime.isoformat(),

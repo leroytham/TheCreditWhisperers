@@ -21,7 +21,7 @@ from app.services.sector_sentiment_service import sector_sentiment_service
 from app.services.earnings_service import earnings_service
 from app.services.portfolio_timeseries_service import portfolio_timeseries_service
 from app.services.portfolio_sentiment_service import portfolio_sentiment_service
-from app.core.cache import redis_cache, async_cache_result
+from app.core.cache import redis_cache, async_cache_result, cache_result
 from app.core.config import settings
 
 # Import scoring configuration
@@ -468,15 +468,33 @@ async def get_sector_daily_sentiment(
 
 
 @router.get("/stocks/{ticker}/significant-events")
-def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
+async def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
     """
     API endpoint to analyze historical data for a stock, identify the top 5
     most significant price moves, and find correlated news for those events.
     Example: /stocks/NVDA/significant-events?timeframe=1M
+
+    Optimized to reuse cached news data instead of making redundant API calls.
     """
     try:
-        # The API layer makes a single call to the service
-        events_with_news = market_analysis_service.analyze_significant_events(ticker, timeframe)
+        # Fetch cached news for the timeframe to reuse in significant events analysis
+        # This avoids redundant Alpha Vantage API calls
+        try:
+            cached_news = await news_service_instance.get_ticker_news_for_timeframe(
+                ticker,
+                timeframe=timeframe,
+                trigger_progressive=False  # Don't trigger progressive fetch
+            )
+        except Exception as e:
+            print(f"Warning: Could not fetch cached news for significant events: {e}")
+            cached_news = None
+
+        # Pass cached news to avoid redundant API calls
+        events_with_news = market_analysis_service.analyze_significant_events(
+            ticker,
+            timeframe,
+            news_articles=cached_news
+        )
 
         if not events_with_news:
             return {"ticker": ticker, "message": "No significant events found matching the criteria."}
@@ -649,32 +667,31 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
     """
     try:
         # Fetch news articles using the timeframe-aware news service
+        # Use preserve_all_tickers=True to get full data including all metadata
         news_articles = await news_service_instance.get_ticker_news_for_timeframe(
             ticker,
             timeframe=timeframe,
-            trigger_progressive=True
+            trigger_progressive=True,
+            preserve_all_tickers=True  # Get full data with all tickers and metadata
         )
-        
-        # Also fetch raw Alpha Vantage data if available
-        raw_feed = []
-        try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                raw_av_data = await news_service_instance._fetch_alpha_vantage_news(
-                    session, ticker, limit=1000, preserve_all_tickers=True
-                )
-                # Extract the raw feed items from Alpha Vantage
-                if raw_av_data:
-                    # The _fetch_alpha_vantage_news returns processed articles
-                    # We need to fetch raw data directly
-                    alpha_vantage_api_key = news_service_instance.alpha_vantage_api_key
-                    if alpha_vantage_api_key:
-                        url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&limit=1000&tickers={ticker}&apikey={alpha_vantage_api_key}"
-                        async with session.get(url, timeout=30) as response:
-                            data = await response.json()
-                            raw_feed = data.get("feed", [])
-        except Exception as e:
-            print(f"Error fetching raw Alpha Vantage feed: {e}")
+
+        # Preserve the original format for raw_feed (with ticker_sentiment arrays)
+        import copy
+        raw_feed = copy.deepcopy(news_articles) if news_articles else []
+
+        # Extract ticker-specific sentiment from ticker_sentiment array for processing
+        # This is needed because preserve_all_tickers=True returns array format
+        if news_articles:
+            for article in news_articles:
+                if "ticker_sentiment" in article and isinstance(article["ticker_sentiment"], list):
+                    # Find the sentiment for the queried ticker
+                    for ts in article["ticker_sentiment"]:
+                        if ts.get("ticker", "").upper() == ticker.upper():
+                            # Extract sentiment data to root level for sentiment service
+                            article["ticker_sentiment_score"] = float(ts.get("ticker_sentiment_score", 0.0))
+                            article["ticker_sentiment_label"] = ts.get("ticker_sentiment_label", "Neutral")
+                            article["ticker_relevance_score"] = float(ts.get("relevance_score", 0.0))
+                            break
 
         if not news_articles:
             score_defs = get_score_definitions()
@@ -857,6 +874,7 @@ async def get_news_sources(ticker: str):
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 @router.get("/daily-sentiment")
+@async_cache_result(ttl=600, key_prefix="daily_sentiment")  # Cache for 10 minutes
 async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = None):
     """
     API endpoint to get daily sentiment data for a ticker.
@@ -864,6 +882,7 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
     Example: /api/daily-sentiment?ticker=AAPL&timeframe=6M
     Example: /api/daily-sentiment?ticker=AAPL&days=30
     Example: /api/daily-sentiment?ticker=AAPL&timeframe=10Y
+    Cached for 10 minutes to avoid redundant sentiment calculations.
     """
     try:
         from datetime import datetime, timedelta, timezone
@@ -1169,20 +1188,36 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
                 )  # Return all headlines (no limit)
 
                 # Format label based on timeframe and interval
+                # Cross-platform datetime formatting (Windows doesn't support %-I, %-d)
                 if timeframe == '1D':
-                    label = point_time.strftime("%-I%p")
+                    # Format: "3PM"
+                    hour = point_time.strftime("%I").lstrip("0")
+                    label = f"{hour}{point_time.strftime('%p')}"
                 elif timeframe == '1W':
-                    label = point_time.strftime("%a %-I%p")
+                    # Format: "Mon 3PM"
+                    hour = point_time.strftime("%I").lstrip("0")
+                    label = f"{point_time.strftime('%a')} {hour}{point_time.strftime('%p')}"
                 elif timeframe == '1M':
-                    label = point_time.strftime("%b %-d %-I%p")
+                    # Format: "Jan 5 3PM"
+                    day = str(point_time.day)
+                    hour = point_time.strftime("%I").lstrip("0")
+                    label = f"{point_time.strftime('%b')} {day} {hour}{point_time.strftime('%p')}"
                 elif timeframe in ['3M', '6M']:
-                    label = point_time.strftime("%b %-d")
+                    # Format: "Jan 5"
+                    day = str(point_time.day)
+                    label = f"{point_time.strftime('%b')} {day}"
                 elif timeframe in ['YTD', '1Y']:
-                    label = point_time.strftime("%b %-d")
+                    # Format: "Jan 5"
+                    day = str(point_time.day)
+                    label = f"{point_time.strftime('%b')} {day}"
                 elif timeframe == '5Y':
-                    label = point_time.strftime("%b %-d, %Y")
+                    # Format: "Jan 5, 2024"
+                    day = str(point_time.day)
+                    label = f"{point_time.strftime('%b')} {day}, {point_time.year}"
                 else:
-                    label = point_time.strftime("%b %-d")
+                    # Default: "Jan 5"
+                    day = str(point_time.day)
+                    label = f"{point_time.strftime('%b')} {day}"
 
                 data_points.append({
                     "timestamp": point_time.isoformat(),
@@ -3442,3 +3477,7 @@ async def get_portfolio_performance_twr(
 
 #python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 #source venv/bin/activate
+#venv\Scripts\activate
+
+#run this to start docker container (localhost only - for redis)
+#docker run -d --name redis-cache -p 6379:6379 redis:latest
