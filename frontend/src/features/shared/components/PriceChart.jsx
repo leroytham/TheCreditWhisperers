@@ -127,9 +127,31 @@ const PriceChart = ({
       const w = Math.min(1200, Math.max(300, availableWidth));
       setDynamicChartWidth(w);
     };
-    measure();
+
+    // Use ResizeObserver to detect container size changes
+    const resizeObserver = new ResizeObserver(() => {
+      measure();
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
+    // Initial measure with small delay to ensure layout is complete
+    const timeoutId = setTimeout(measure, 0);
+
+    // Fallback: also measure after a longer delay to catch any late layout changes
+    const fallbackTimeoutId = setTimeout(measure, 100);
+
+    // Window resize as additional fallback
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+
+    return () => {
+      resizeObserver.disconnect();
+      clearTimeout(timeoutId);
+      clearTimeout(fallbackTimeoutId);
+      window.removeEventListener('resize', measure);
+    };
   }, []);
 
   // Calculate chart data based on mode
