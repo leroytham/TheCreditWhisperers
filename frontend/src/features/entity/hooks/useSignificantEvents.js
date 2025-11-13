@@ -1,78 +1,87 @@
 /**
  * useSignificantEvents Hook
  *
- * Custom hook for fetching significant events data with background prefetching
+ * Custom hook for fetching significant events data
+ * Optimized with React Query for automatic caching and background refetching
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 
-export const useSignificantEvents = (ticker, timeframe = '1D') => {
-  const [significantEvents, setSignificantEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export const useSignificantEvents = (ticker, timeframe = '1D', options = {}) => {
+  const queryClient = useQueryClient();
   const prefetchInitiated = useRef(new Set());
 
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['significantEvents', ticker, timeframe],
+    queryFn: async () => {
+      const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${timeframe}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch significant events: ${response.statusText}`);
+      }
+      const data = await response.json();
+
+      const rawEvents = data.events || [];
+      // Transform events to match UI expectations
+      const transformedEvents = rawEvents.map(event => {
+        const movePct = event.total_move_pct * 100;
+        return {
+          ...event,
+          trend: movePct >= 0 ? 'Upward' : 'Downward',
+          total_move_pct: movePct,
+          end_date: event.start_date,
+          days: 1
+        };
+      });
+
+      return transformedEvents;
+    },
+    enabled: Boolean(ticker), // Only fetch if ticker is provided
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    cacheTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    retry: 2, // Retry failed requests twice
+    ...options // Allow overriding default options
+  });
+
+  // Background prefetch for all timeframes (only once per ticker)
   useEffect(() => {
-    // If ticker is null (lazy loading - tab not active), set loading to false immediately
-    if (!ticker) {
-      setLoading(false);
-      return;
-    }
+    if (ticker && !prefetchInitiated.current.has(ticker)) {
+      prefetchInitiated.current.add(ticker);
 
-    // Set loading immediately when ticker changes (before async fetch)
-    setLoading(true);
-    setError(null);
+      // Prefetch other common timeframes in the background
+      const timeframesToPrefetch = ['1W', '1M', '3M', '6M', '1Y'].filter(tf => tf !== timeframe);
 
-    const fetchSignificantEvents = async () => {
-      try {
-        const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${timeframe}`);
-        const data = await response.json();
-
-        const rawEvents = data.events || [];
-        // Transform events to match UI expectations
-        const transformedEvents = rawEvents.map(event => {
-          const movePct = event.total_move_pct * 100;
-          return {
-            ...event,
-            trend: movePct >= 0 ? 'Upward' : 'Downward',
-            total_move_pct: movePct,
-            end_date: event.start_date,
-            days: 1
-          };
+      timeframesToPrefetch.forEach(tf => {
+        queryClient.prefetchQuery({
+          queryKey: ['significantEvents', ticker, tf],
+          queryFn: async () => {
+            const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${tf}`);
+            if (!response.ok) return [];
+            const data = await response.json();
+            const rawEvents = data.events || [];
+            return rawEvents.map(event => {
+              const movePct = event.total_move_pct * 100;
+              return {
+                ...event,
+                trend: movePct >= 0 ? 'Upward' : 'Downward',
+                total_move_pct: movePct,
+                end_date: event.start_date,
+                days: 1
+              };
+            });
+          },
+          staleTime: 5 * 60 * 1000,
         });
+      });
 
-        setSignificantEvents(transformedEvents);
-      } catch (err) {
-        console.error('Error fetching significant events:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Background prefetch for all timeframes (only once per ticker)
-    const prefetchAllTimeframes = async () => {
-      if (!prefetchInitiated.current.has(ticker)) {
-        prefetchInitiated.current.add(ticker);
-
-        try {
-          console.log(`[PREFETCH] Initiating background fetch for all timeframes: ${ticker}`);
-          await fetch(`/api/stocks/${ticker}/prefetch-events`, {
-            method: 'POST'
-          });
-        } catch (err) {
-          console.error('Error initiating prefetch:', err);
-        }
-      }
-    };
-
-    fetchSignificantEvents();
-    prefetchAllTimeframes();
-  }, [ticker, timeframe]);
+      console.log(`[PREFETCH] Initiated background prefetch for significant events: ${ticker}`);
+    }
+  }, [ticker, timeframe, queryClient]);
 
   return {
-    significantEvents,
-    loading,
-    error
+    significantEvents: data || [],
+    loading: isLoading,
+    error: error?.message || null
   };
 };

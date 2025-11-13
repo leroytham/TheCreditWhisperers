@@ -1,6 +1,7 @@
 # app/core/config.py
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 
 
@@ -54,6 +55,20 @@ class Settings(BaseSettings):
 
     # Frontend URL (for CORS and redirects)
     FRONTEND_URL: str = "http://localhost:3000"
+
+    @field_validator('DEBUG', mode='before')
+    @classmethod
+    def parse_debug(cls, v):
+        """Handle various DEBUG value formats, including Windows system vars."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            v_lower = v.lower().strip()
+            if v_lower in ('true', '1', 'yes', 'on'):
+                return True
+            if v_lower in ('false', '0', 'no', 'off', '', 'warn', 'warning'):
+                return False
+        return False
 
     # API Base URL (where the backend is hosted)
     # Supports both API_BASE_URL (new) and API_BASE (legacy for backward compatibility)

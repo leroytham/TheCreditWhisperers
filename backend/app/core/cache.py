@@ -16,40 +16,53 @@ class RedisCache:
     """
     Redis cache wrapper with support for both sync and async operations.
     Provides connection pooling, serialization, and error handling.
+
+    Gracefully degrades if Redis is unavailable - caching will be disabled
+    but the application will continue to function normally.
     """
 
     def __init__(self):
         self._client: Optional[redis.Redis] = None
         self._async_client: Optional[redis.asyncio.Redis] = None
+        self._connection_attempted = False
+        self._is_available = False
 
     @property
     def client(self) -> redis.Redis:
         """Get or create synchronous Redis client."""
-        if self._client is None:
+        if self._client is None and not self._connection_attempted:
+            self._connection_attempted = True
             try:
                 if settings.REDIS_URL:
                     self._client = redis.from_url(
                         settings.REDIS_URL,
                         decode_responses=False,  # We'll handle serialization
-                        socket_connect_timeout=5,
-                        socket_timeout=5
+                        socket_connect_timeout=2,
+                        socket_timeout=2
                     )
                 else:
                     self._client = redis.Redis(
                         host=settings.REDIS_HOST,
                         port=settings.REDIS_PORT,
                         db=settings.REDIS_DB,
-                        password=settings.REDIS_PASSWORD,
+                        password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
                         decode_responses=False,
-                        socket_connect_timeout=5,
-                        socket_timeout=5
+                        socket_connect_timeout=2,
+                        socket_timeout=2
                     )
                 # Test connection
                 self._client.ping()
+                self._is_available = True
                 print("[OK] Redis connection established successfully")
             except redis.ConnectionError as e:
-                print(f"[WARNING] Redis connection failed: {e}. Caching will be disabled.")
+                print("[WARNING] Redis not available - running without cache (this is OK for development)")
+                print("          To enable caching: Start Redis server or deploy to Azure with Azure Cache for Redis")
                 self._client = None
+                self._is_available = False
+            except Exception as e:
+                print(f"[WARNING] Redis configuration error: {e}")
+                self._client = None
+                self._is_available = False
         return self._client
 
     @property
@@ -81,8 +94,13 @@ class RedisCache:
 
     def is_available(self) -> bool:
         """Check if Redis is available."""
+        # Use cached availability status to avoid repeated connection attempts
+        if self._connection_attempted:
+            return self._is_available
+
+        # First time check - trigger connection attempt
         try:
-            return self.client is not None and self.client.ping()
+            return self.client is not None and self._is_available
         except:
             return False
 

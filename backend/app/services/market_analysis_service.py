@@ -70,7 +70,8 @@ class MarketAnalysisService:
         ticker: str,
         timeframe: str = "1Y",
         std_threshold: float = 2.0,
-        event_count: int = None
+        event_count: int = None,
+        news_articles: list[dict] = None
     ) -> list[dict]:
         """
         Identifies significant price moves for a ticker and finds correlated news.
@@ -81,13 +82,14 @@ class MarketAnalysisService:
         2. Identifies price moves exceeding std_threshold * daily_std
         3. Groups consecutive moves in the same direction into "streaks"
         4. Ranks streaks by total magnitude
-        5. Fetches news for the top events
+        5. Filters pre-fetched news by date or fetches news for the top events
 
         Args:
             ticker: Stock ticker symbol
             timeframe: Timeframe for analysis (1D, 1W, 1M, 3M, 6M, YTD, 1Y)
             std_threshold: Standard deviation multiplier for significance
             event_count: Number of top events to return (auto-determined if None)
+            news_articles: Optional pre-fetched news articles to filter by date (avoids redundant API calls)
 
         Returns:
             List of events with dates, move percentages, and related news
@@ -194,14 +196,46 @@ class MarketAnalysisService:
             
             print(f"DEBUG Event: start={start_date}, end={end_date}, days={event.num_days}, move={event.total_move_pct:.2f}%")
 
-            # Fetch news for the start date (±1 day window)
-            # Use sector-aware fetching if ticker is a known sector ETF
-            if ticker.upper() in self.sector_etf_tickers:
-                print(f"DEBUG: Detected sector ETF {ticker}, fetching aggregated constituent news")
-                news = self.fetch_sector_aggregated_news(ticker, start_date)
+            # Filter news from pre-fetched articles if provided, otherwise fetch from API
+            if news_articles is not None:
+                # Filter news within ±1 day window of the event start date
+                from datetime import timedelta
+                from dateutil import parser
+
+                window_start = start_date - timedelta(days=1)
+                window_end = start_date + timedelta(days=1)
+
+                news = []
+                for article in news_articles:
+                    try:
+                        # Parse article publish date
+                        article_date_str = article.get('publish_date') or article.get('time_published', '')
+                        if not article_date_str:
+                            continue
+
+                        # Handle both formats: "YYYY-MM-DD" and "YYYYMMDDTHHMM"
+                        if 'T' in article_date_str:
+                            article_date = parser.parse(article_date_str[:8])  # Take YYYYMMDD part
+                        else:
+                            article_date = parser.parse(article_date_str)
+
+                        # Check if within window
+                        if window_start <= article_date <= window_end:
+                            news.append(article)
+                    except Exception as e:
+                        print(f"DEBUG: Error parsing article date: {e}")
+                        continue
+
+                print(f"DEBUG: Filtered {len(news)} articles from cache for event on {start_date.strftime('%Y-%m-%d')}")
             else:
-                news = self.fetch_alpha_vantage_news(ticker, start_date)
-            
+                # Fallback to fetching news from API
+                # Use sector-aware fetching if ticker is a known sector ETF
+                if ticker.upper() in self.sector_etf_tickers:
+                    print(f"DEBUG: Detected sector ETF {ticker}, fetching aggregated constituent news")
+                    news = self.fetch_sector_aggregated_news(ticker, start_date)
+                else:
+                    news = self.fetch_alpha_vantage_news(ticker, start_date)
+
             final_results.append({
                 "start_date": start_date.strftime('%Y-%m-%d'),
                 "end_date": end_date.strftime('%Y-%m-%d'),

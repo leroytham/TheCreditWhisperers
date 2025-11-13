@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import AppHeader from '../components/layout/AppHeader';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
 import EarningsTranscript from '../features/entity/components/EarningsTranscript';
@@ -33,6 +34,7 @@ import { DEFAULT_TICKER } from '../features/shared/utils/constants';
  */
 const EntityPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [ticker, setTicker] = useState(searchParams.get('ticker') || DEFAULT_TICKER);
   const [activeSubTab, setActiveSubTab] = useState('overview');
@@ -84,31 +86,64 @@ const EntityPage = () => {
   ];
 
   // Fetch all data using custom hooks
+  // With React Query caching, all hooks can be called unconditionally
+  // Data persists in cache when switching tabs for instant loading
   const { priceData1Y, companyName, currency, lastFetched, exchange, market, marketState, prevClose, loading: priceLoading1Y, error: priceError1Y } = usePriceData(ticker, '1Y');
 
   // Fetch real-time 1D data for current price display
   const { priceData1Y: priceData1D, prevClose: prevClose1D, loading: priceLoading1D, error: priceError1D } = usePriceData(ticker, '1D');
 
-  // Tab-aware lazy fetching: determine which data to fetch based on active tab
-  const shouldFetchNews = ['overview', 'news'].includes(activeSubTab);
-  const shouldFetchDailySentiment = ['sentiment'].includes(activeSubTab);
-  const shouldFetchSignificantEvents = ['overview', 'performance'].includes(activeSubTab);
-
-  // Call hooks unconditionally but pass skip flags to control fetching
-  const { news, sentiment, apiMetadata, loading: newsLoading, error: newsError } = useNewsData(
-    shouldFetchNews ? ticker : null,
-    '1Y'
-  );
+  // Fetch all tab data unconditionally - React Query caches results
+  const { news, sentiment, apiMetadata, loading: newsLoading, error: newsError } = useNewsData(ticker, '1Y');
 
   const { dailySentiment, loading: dailySentimentLoading, error: dailySentimentError } = useDailySentiment(
-    shouldFetchDailySentiment ? ticker : null,
+    ticker,
     sentimentTimeframe
   );
 
   const { significantEvents, loading: significantEventsLoading, error: significantEventsError } = useSignificantEvents(
-    shouldFetchSignificantEvents ? ticker : null,
+    ticker,
     priceTimeframe
   );
+
+  // Cache warming: Pre-fetch data for all tabs when Overview tab loads
+  // This ensures instant tab switching with no loading spinners
+  useEffect(() => {
+    if (ticker && activeSubTab === 'overview') {
+      // Already fetched by hooks above, but we can prefetch alternate timeframes
+      // that users might switch to later
+
+      // Prefetch daily sentiment data for common timeframes
+      const sentimentTimeframes = ['1W', '3M', '6M', '1Y'].filter(tf => tf !== sentimentTimeframe);
+      sentimentTimeframes.forEach(tf => {
+        queryClient.prefetchQuery({
+          queryKey: ['dailySentiment', ticker, tf],
+          queryFn: async () => {
+            const response = await fetch(`/api/daily-sentiment?ticker=${ticker}&timeframe=${tf}`);
+            if (!response.ok) return { daily: {} };
+            return response.json();
+          },
+          staleTime: 5 * 60 * 1000,
+        });
+      });
+
+      // Prefetch price data for alternate timeframes
+      const priceTimeframes = ['1W', '1M', '3M', '6M', 'YTD', '1Y'].filter(tf => tf !== priceTimeframe);
+      priceTimeframes.forEach(tf => {
+        queryClient.prefetchQuery({
+          queryKey: ['price', ticker, tf],
+          queryFn: async () => {
+            const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${tf}`);
+            if (!response.ok) return { prices: [] };
+            return response.json();
+          },
+          staleTime: 5 * 60 * 1000,
+        });
+      });
+
+      console.log(`[CACHE WARMING] Pre-fetching data for ${ticker}`);
+    }
+  }, [ticker, activeSubTab, sentimentTimeframe, priceTimeframe, queryClient]);
 
   return (
     <div className="min-h-screen bg-gray-50">
