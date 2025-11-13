@@ -68,90 +68,143 @@ const NewsDetailModal = ({
   const modalContent = (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-start justify-between p-4 border-b border-gray-200 bg-white sticky top-0 z-10">
-        <div className="flex-1 pr-4">
-          <a
-            href={article.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group"
-          >
-            <h2 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors flex items-start gap-2">
+      <div className="border-b border-gray-200 bg-white sticky top-0 z-10">
+        <div className="flex items-start justify-between p-4">
+          <div className="flex-1 pr-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">
               {article.title}
-              <ExternalLink className="flex-shrink-0 w-4 h-4 text-gray-400 group-hover:text-blue-500 mt-1" />
             </h2>
-          </a>
-          
-          {/* Metadata */}
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-1.5">
-            <span className="font-medium text-gray-700">{article.source}</span>
-            {article.category_within_source && article.category_within_source !== 'n/a' && (
-              <>
-                <span>•</span>
-                <span>{article.category_within_source}</span>
-              </>
+
+            {/* Metadata */}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              <span className="font-medium text-gray-700">{article.source || 'Unknown Source'}</span>
+              {article.category_within_source && article.category_within_source !== 'n/a' && (
+                <>
+                  <span>•</span>
+                  <span>{article.category_within_source}</span>
+                </>
+              )}
+              {article.source_domain && (
+                <>
+                  <span>•</span>
+                  <span>{article.source_domain}</span>
+                </>
+              )}
+              {article.time_published && (
+                <>
+                  <span>•</span>
+                  <time>{formatPublishTime(article.time_published)}</time>
+                </>
+              )}
+            </div>
+
+            {article.authors && article.authors.length > 0 && (
+              <div className="text-xs text-gray-600 mt-1">
+                By: {article.authors.filter(a => !a.includes('http')).join(', ')}
+              </div>
             )}
-            {article.source_domain && (
-              <>
-                <span>•</span>
-                <span>{article.source_domain}</span>
-              </>
-            )}
-            <span>•</span>
-            <time>{formatPublishTime(article.time_published)}</time>
           </div>
 
-          {article.authors && article.authors.length > 0 && (
-            <div className="text-xs text-gray-600 mt-1">
-              By: {article.authors.filter(a => !a.includes('http')).join(', ')}
-            </div>
-          )}
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
         </div>
 
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5 text-gray-500" />
-        </button>
+        {/* Read Full Article Button - Prominent CTA */}
+        {(article.url || article.link) && (
+          <div className="px-4 pb-4">
+            <a
+              href={article.url || article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-sm"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Read Full Article
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
         {/* Banner Image */}
-        {article.banner_image && (
-          <div className="mb-4 rounded-lg overflow-hidden bg-gray-200">
+        {(article.banner_image || article.image) && (
+          <div className="mb-4 rounded-lg overflow-hidden bg-gray-200 shadow-sm">
             <img
-              src={article.banner_image}
-              alt=""
+              src={article.banner_image || article.image}
+              alt={article.title || 'Article image'}
               className="w-full h-auto max-h-64 object-cover"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </div>
         )}
 
-        {/* Summary */}
-        {article.summary && (
-          <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2">Summary</h3>
-            <p className="text-sm text-gray-700 leading-relaxed">{article.summary}</p>
+        {/* Quick Insights - Key metrics at a glance */}
+        {(article.overall_sentiment_label || (article.topics && article.topics.length > 0) || (article.ticker_sentiment && article.ticker_sentiment.length > 0)) && (
+          <div className="mb-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Insights</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {article.overall_sentiment_label && (
+                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                  <div className="text-xs text-gray-600 mb-1">Overall Sentiment</div>
+                  <div className={`text-sm font-bold ${article.overall_sentiment_score >= 0.15 ? 'text-green-600' : article.overall_sentiment_score <= -0.15 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {article.overall_sentiment_label}
+                  </div>
+                </div>
+              )}
+              {article.topics && article.topics.length > 0 && (
+                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                  <div className="text-xs text-gray-600 mb-1">Main Topic</div>
+                  <div className="text-sm font-bold text-gray-900">
+                    {article.topics[0].topic}
+                  </div>
+                </div>
+              )}
+              {article.ticker_sentiment && article.ticker_sentiment.length > 0 && (
+                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                  <div className="text-xs text-gray-600 mb-1">Tickers Mentioned</div>
+                  <div className="text-sm font-bold text-gray-900">
+                    {article.ticker_sentiment.length} {article.ticker_sentiment.length === 1 ? 'ticker' : 'tickers'}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
+        {/* Summary */}
+        <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900 mb-2">Article Summary</h3>
+          {article.summary ? (
+            <p className="text-sm text-gray-700 leading-relaxed">{article.summary}</p>
+          ) : (
+            <p className="text-sm text-gray-500 italic">
+              No summary available. Click "Read Full Article" above to view the complete article.
+            </p>
+          )}
+        </div>
+
         {/* Overall Sentiment */}
         {article.overall_sentiment_score !== undefined && article.overall_sentiment_score !== null && (
-          <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5" />
-              Overall Sentiment
+          <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Overall Sentiment Analysis
             </h3>
             <div className="flex items-center gap-3">
-              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium border ${getSentimentColor(article.overall_sentiment_score)}`}>
+              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold border ${getSentimentColor(article.overall_sentiment_score)}`}>
                 {article.overall_sentiment_label}
               </span>
-              <span className="text-lg font-bold text-gray-900">
+              <span className="text-xl font-bold text-gray-900">
                 {article.overall_sentiment_score.toFixed(3)}
+              </span>
+              <span className="text-xs text-gray-500 ml-auto">
+                Score range: -1 (very negative) to +1 (very positive)
               </span>
             </div>
           </div>
@@ -159,28 +212,28 @@ const NewsDetailModal = ({
 
         {/* Topics */}
         {article.topics && article.topics.length > 0 && (
-          <div className="mb-4 p-3 bg-white rounded-lg border border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <BarChart3 className="w-3.5 h-3.5" />
+          <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
               Topics & Relevance
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {article.topics.map((topic, idx) => {
                 const relevance = parseFloat(topic.relevance_score);
                 const hasValidRelevance = !isNaN(relevance) && relevance !== null;
-                
+
                 return (
                   <div
                     key={idx}
-                    className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200"
+                    className="flex justify-between items-center p-2.5 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
                   >
-                    <span className="text-xs font-medium text-gray-700">{topic.topic}</span>
+                    <span className="text-sm font-medium text-gray-800">{topic.topic}</span>
                     {hasValidRelevance ? (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${getRelevanceColor(relevance)}`}>
+                      <span className={`text-sm font-bold px-2.5 py-1 rounded-md border ${getRelevanceColor(relevance)}`}>
                         {(relevance * 100).toFixed(1)}%
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">N/A</span>
+                      <span className="text-sm text-gray-400">N/A</span>
                     )}
                   </div>
                 );
@@ -191,19 +244,19 @@ const NewsDetailModal = ({
 
         {/* Ticker Sentiments */}
         {article.ticker_sentiment && article.ticker_sentiment.length > 0 && (
-          <div className="p-3 bg-white rounded-lg border border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5" />
+          <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
               Ticker-Specific Sentiment
             </h3>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Ticker</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Relevance</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Score</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700">Label</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticker</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Relevance</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Score</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Label</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -212,29 +265,29 @@ const NewsDetailModal = ({
                     const sentiment = parseFloat(ts.ticker_sentiment_score);
                     const hasValidRelevance = !isNaN(relevance) && relevance !== null;
                     const hasValidSentiment = !isNaN(sentiment) && sentiment !== null;
-                    
+
                     return (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 font-medium text-gray-900">{ts.ticker}</td>
-                        <td className="px-3 py-2">
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-sm text-gray-900">{ts.ticker}</td>
+                        <td className="px-4 py-3">
                           {hasValidRelevance ? (
-                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getRelevanceColor(relevance)}`}>
+                            <span className={`inline-block px-2.5 py-1 rounded-md text-sm font-bold border ${getRelevanceColor(relevance)}`}>
                               {(relevance * 100).toFixed(1)}%
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">N/A</span>
+                            <span className="text-gray-400 text-sm">N/A</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-gray-700 font-mono">
+                        <td className="px-4 py-3 text-sm text-gray-700 font-mono font-medium">
                           {hasValidSentiment ? sentiment.toFixed(3) : 'N/A'}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-4 py-3">
                           {hasValidSentiment && ts.ticker_sentiment_label ? (
-                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getSentimentColor(sentiment)}`}>
+                            <span className={`inline-block px-2.5 py-1 rounded-md text-sm font-semibold border ${getSentimentColor(sentiment)}`}>
                               {ts.ticker_sentiment_label}
                             </span>
                           ) : (
-                            <span className="text-gray-400 text-xs">N/A</span>
+                            <span className="text-gray-400 text-sm">N/A</span>
                           )}
                         </td>
                       </tr>
