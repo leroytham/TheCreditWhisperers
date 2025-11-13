@@ -1,0 +1,419 @@
+
+> frontend@0.1.0 test:ci
+> CI=true react-scripts test --coverage --watchAll=false
+
+(node:4871) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PASS src/features/shared/components/__tests__/processAggregatedHeadlines.test.js
+  ● Console
+
+    console.log
+      
+      === Manual Test Examples ===
+
+      at Object.<anonymous> (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:174:9)
+
+    console.log
+      Input: 5 headlines (1 duplicate)
+
+      at Object.<anonymous> (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:216:9)
+
+    console.log
+      Output: Top 3 headlines after deduplication and ranking:
+
+      at Object.<anonymous> (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:217:9)
+
+    console.log
+      1. "Breaking: Major market movement"
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:221:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Provider: Reuters
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:222:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Sentiment: -0.8, Relevance: 0.9
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:223:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Impact Score: 0.72
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:224:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+      2. "Company announces strong earnings"
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:221:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Provider: Bloomberg
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:222:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Sentiment: 0.7, Relevance: 0.85
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:223:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Impact Score: 0.59
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:224:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+      3. "Analyst upgrades rating"
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:221:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Provider: CNBC
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:222:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Sentiment: 0.3, Relevance: 0.5
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:223:11)
+          at Array.forEach (<anonymous>)
+
+    console.log
+         Impact Score: 0.15
+
+      at forEach (src/features/shared/components/__tests__/processAggregatedHeadlines.test.js:224:11)
+          at Array.forEach (<anonymous>)
+
+(node:4873) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL src/features/shared/utils/chartHelpers.test.js
+  ● Test suite failed to run
+
+    Jest encountered an unexpected token
+
+    Jest failed to parse a file. This happens e.g. when your code or its dependencies use non-standard JavaScript syntax, or when Jest is not configured to support such syntax.
+
+    Out of the box Jest supports Babel, which will be used to transform your files into valid JS based on your Babel configuration.
+
+    By default "node_modules" folder is ignored by transformers.
+
+    Here's what you can do:
+     • If you are trying to use ECMAScript Modules, see https://jestjs.io/docs/ecmascript-modules for how to enable it.
+     • If you are trying to use TypeScript, see https://jestjs.io/docs/getting-started#using-typescript
+     • To have some of your "node_modules" files transformed, you can specify a custom "transformIgnorePatterns" in your config.
+     • If you need a custom transformation specify a "transform" option in your config.
+     • If you simply want to mock your non-JS modules (e.g. binary assets) you can stub them out with the "moduleNameMapper" config option.
+
+    You'll find more details and examples of these config options in the docs:
+    https://jestjs.io/docs/configuration
+    For information about custom transformations, see:
+    https://jestjs.io/docs/code-transformation
+
+    Details:
+
+    /Users/wenxiang/Documents/Revert_New_FYP/node_modules/date-fns/format.js:1
+    ({"Object.<anonymous>":function(module,exports,require,__dirname,__filename,jest){import { defaultLocale } from "./_lib/defaultLocale.js";
+                                                                                      ^^^^^^
+
+    SyntaxError: Cannot use import statement outside a module
+
+    [0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m { toZonedTime[33m,[39m fromZonedTime } [36mfrom[39m [32m'date-fns-tz'[39m[33m;[39m
+     [90m   |[39m [31m[1m^[22m[39m
+     [90m 2 |[39m [36mimport[39m { startOfWeek[33m,[39m startOfMonth[33m,[39m addDays[33m,[39m getYear[33m,[39m getMonth[33m,[39m format } [36mfrom[39m [32m'date-fns'[39m[33m;[39m
+     [90m 3 |[39m
+     [90m 4 |[39m [90m/**[39m[0m
+
+      at Runtime.createScriptFromCode (node_modules/jest-runtime/build/index.js:1728:14)
+      at Object.<anonymous> (../node_modules/date-fns-tz/dist/cjs/format/index.js:4:18)
+      at Object.<anonymous> (../node_modules/date-fns-tz/dist/cjs/index.js:4:18)
+      at Object.<anonymous> (src/features/shared/utils/formatters.js:1:1)
+      at Object.<anonymous> (src/features/shared/utils/chartHelpers.js:1:1)
+      at Object.<anonymous> (src/features/shared/utils/chartHelpers.test.js:6:1)
+
+(node:4869) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+FAIL src/utils/formatters.test.js
+  ● Console
+
+    console.log
+      Re-basing percentage returns on first non-zero value: $1000.00 on 2024-01-02
+
+      at normalizeToPercentageReturn (src/utils/formatters.js:375:13)
+
+    console.log
+      Re-basing percentage returns on first non-zero value: $1000.00 on 2024-01-01
+
+      at normalizeToPercentageReturn (src/utils/formatters.js:375:13)
+
+    console.warn
+      Portfolio has no non-zero values. Showing 0% for all data points.
+
+    [0m [90m 357 |[39m     [90m// If no non-zero value found, return all zeros[39m
+     [90m 358 |[39m     [36mif[39m (baselineIndex [33m===[39m [33m-[39m[35m1[39m) {
+    [31m[1m>[22m[39m[90m 359 |[39m       console[33m.[39mwarn([32m'Portfolio has no non-zero values. Showing 0% for all data points.'[39m)[33m;[39m
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 360 |[39m       [36mreturn[39m data[33m.[39mmap(point [33m=>[39m {
+     [90m 361 |[39m         [36mconst[39m currentValue [33m=[39m point[33m.[39mclose [33m||[39m point[33m.[39mportfolio_value [33m||[39m [35m0[39m[33m;[39m
+     [90m 362 |[39m         [36mconst[39m { price[33m,[39m [33m...[39mpointWithoutPrice } [33m=[39m point[33m;[39m[0m
+
+      at normalizeToPercentageReturn (src/utils/formatters.js:359:15)
+      at Object.<anonymous> (src/utils/formatters.test.js:181:49)
+
+    console.log
+      Re-basing percentage returns on first non-zero value: $10000.00 on 2024-01-04
+
+      at normalizeToPercentageReturn (src/utils/formatters.js:375:13)
+
+    console.log
+      Re-basing percentage returns on first non-zero value: $100.00 on 2024-01-03
+
+      at normalizeToPercentageReturn (src/utils/formatters.js:375:13)
+
+  ● formatters › normalizeToHybridReturn › should return close: 0 for points without lot data (partial coverage)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 5
+
+    [0m [90m 345 |[39m       expect(result[[35m0[39m][33m.[39moriginalValue)[33m.[39mtoBe([35m10000[39m)[33m;[39m
+     [90m 346 |[39m
+    [31m[1m>[22m[39m[90m 347 |[39m       expect(result[[35m1[39m][33m.[39mclose)[33m.[39mtoBe([35m0[39m)[33m;[39m
+     [90m     |[39m                               [31m[1m^[22m[39m
+     [90m 348 |[39m       expect(result[[35m1[39m][33m.[39mnoLotData)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m 349 |[39m       expect(result[[35m1[39m][33m.[39moriginalValue)[33m.[39mtoBe([35m10500[39m)[33m;[39m
+     [90m 350 |[39m[0m
+
+      at Object.<anonymous> (src/utils/formatters.test.js:347:31)
+
+FAIL src/App.test.js
+  ● Test suite failed to run
+
+    Cannot find module 'react-router-dom' from 'src/App.js'
+
+    Require stack:
+      src/App.js
+      src/App.test.js
+
+    [0m [90m 1 |[39m [36mimport[39m [33mReact[39m [36mfrom[39m [32m"react"[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { [33mBrowserRouter[39m [36mas[39m [33mRouter[39m[33m,[39m [33mRoutes[39m[33m,[39m [33mRoute[39m[33m,[39m [33mNavigate[39m } [36mfrom[39m [32m"react-router-dom"[39m[33m;[39m
+     [90m   |[39m [31m[1m^[22m[39m
+     [90m 3 |[39m [36mimport[39m { [33mQueryClient[39m[33m,[39m [33mQueryClientProvider[39m } [36mfrom[39m [32m"@tanstack/react-query"[39m[33m;[39m
+     [90m 4 |[39m [36mimport[39m { [33mReactQueryDevtools[39m } [36mfrom[39m [32m"@tanstack/react-query-devtools"[39m[33m;[39m
+     [90m 5 |[39m [36mimport[39m [33mLoginCard[39m [36mfrom[39m [32m"./components/auth/LoginPage"[39m[33m;[39m[0m
+
+      at Resolver.resolveModule (node_modules/jest-resolve/build/resolver.js:324:11)
+      at Object.<anonymous> (src/App.js:2:1)
+      at Object.<anonymous> (src/App.test.js:2:1)
+
+(node:4872) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:4870) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+PASS src/features/portfolio/components/PerformanceCard.test.jsx
+-----------------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------
+File                                                 | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                           
+-----------------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------
+All files                                            |    2.76 |     2.34 |    1.36 |    2.91 |                                                             
+ src                                                 |       0 |        0 |       0 |       0 |                                                             
+  App.js                                             |       0 |        0 |       0 |       0 | 17-74                                                       
+  index.js                                           |       0 |      100 |     100 |       0 | 10-39                                                       
+  reportWebVitals.js                                 |       0 |        0 |       0 |       0 | 1-8                                                         
+  setupProxy.js                                      |       0 |        0 |       0 |       0 | 16-104                                                      
+ src/components                                      |   14.92 |    13.95 |    7.69 |   15.74 |                                                             
+  ErrorBoundary.jsx                                  |       0 |        0 |       0 |       0 | 5-127                                                       
+  ErrorDisplay.jsx                                   |   47.61 |    25.49 |      50 |   47.61 | 29-139,149,152,155,158,212                                  
+  Header.jsx                                         |       0 |        0 |       0 |       0 | 6-114                                                       
+  LoadingSpinner.jsx                                 |   66.66 |    52.38 |      50 |   66.66 | 56,64,78-86                                                 
+  PortfolioSelector.jsx                              |       0 |        0 |       0 |       0 | 11-212                                                      
+  RelatedNewsList.jsx                                |       0 |        0 |       0 |       0 | 4-67                                                        
+ src/components/auth                                 |       0 |        0 |       0 |       0 |                                                             
+  LoginPage.jsx                                      |       0 |        0 |       0 |       0 | 9-117                                                       
+  SignupCard.jsx                                     |       0 |        0 |       0 |       0 | 5-82                                                        
+ src/components/errors                               |       0 |        0 |       0 |       0 |                                                             
+  ErrorBoundary.js                                   |       0 |        0 |       0 |       0 | 11-86                                                       
+ src/components/layout                               |       0 |        0 |       0 |       0 |                                                             
+  AppHeader.jsx                                      |       0 |        0 |       0 |       0 | 21-139                                                      
+ src/components/ui                                   |       0 |        0 |       0 |       0 |                                                             
+  EmptyState.js                                      |       0 |        0 |       0 |       0 | 15-21                                                       
+  ErrorMessage.js                                    |       0 |        0 |       0 |       0 | 13-14                                                       
+  LoadingSpinner.js                                  |       0 |        0 |       0 |       0 | 13-35                                                       
+ src/config                                          |     100 |      100 |     100 |     100 |                                                             
+  constants.js                                       |     100 |      100 |     100 |     100 |                                                             
+ src/context                                         |    7.31 |        0 |       0 |    7.89 |                                                             
+  PortfolioContext.jsx                               |    7.31 |        0 |       0 |    7.89 | 60-125,134-234                                              
+ src/features/entity/components/CompanyOverview      |       0 |        0 |       0 |       0 |                                                             
+  CompanyOverview.jsx                                |       0 |        0 |       0 |       0 | 15-341                                                      
+  index.js                                           |       0 |        0 |       0 |       0 |                                                             
+ src/features/entity/components/EarningsCalendar     |       0 |        0 |       0 |       0 |                                                             
+  EarningsCalendar.jsx                               |       0 |        0 |       0 |       0 | 28-163                                                      
+ src/features/entity/components/EarningsTranscript   |       0 |        0 |       0 |       0 |                                                             
+  EarningsTranscript.jsx                             |       0 |        0 |       0 |       0 | 30-375                                                      
+  index.js                                           |       0 |        0 |       0 |       0 |                                                             
+ src/features/entity/components/EntitySearch         |       0 |        0 |       0 |       0 |                                                             
+  EntitySearch.jsx                                   |       0 |        0 |       0 |       0 | 10-47                                                       
+ src/features/entity/components/PerformanceView      |       0 |        0 |       0 |       0 |                                                             
+  PerformanceView.jsx                                |       0 |        0 |       0 |       0 | 36-640                                                      
+ src/features/entity/hooks                           |       0 |        0 |       0 |       0 |                                                             
+  useCompanyOverview.js                              |       0 |        0 |       0 |       0 | 12-49                                                       
+  useDailySentiment.js                               |       0 |        0 |       0 |       0 | 11-29                                                       
+  useEarningsCalendar.js                             |       0 |        0 |       0 |       0 | 9-154                                                       
+  useEarningsTranscript.js                           |       0 |        0 |       0 |       0 | 9-136                                                       
+  useNewsData.js                                     |       0 |        0 |       0 |       0 | 10-84                                                       
+  usePriceData.js                                    |       0 |        0 |       0 |       0 | 13-34                                                       
+  useRollingSentiment.js                             |       0 |        0 |       0 |       0 | 9-68                                                        
+  useSignificantEvents.js                            |       0 |        0 |       0 |       0 | 11-82                                                       
+  useSourceReliability.js                            |       0 |        0 |       0 |       0 | 11-47                                                       
+  useTickerSearch.js                                 |       0 |        0 |       0 |       0 | 10-56                                                       
+ src/features/entity/utils                           |       0 |        0 |       0 |       0 |                                                             
+  timeframeFilter.js                                 |       0 |        0 |       0 |       0 | 10-72                                                       
+ src/features/notifications/components               |       0 |        0 |       0 |       0 |                                                             
+  NotificationDropdown.jsx                           |       0 |        0 |       0 |       0 | 10-62                                                       
+  NotificationFilters.jsx                            |       0 |      100 |       0 |       0 | 9-206                                                       
+  NotificationList.jsx                               |       0 |        0 |       0 |       0 | 10-185                                                      
+  NotificationModal.jsx                              |       0 |        0 |       0 |       0 | 9-258                                                       
+  ToastContainer.jsx                                 |       0 |        0 |       0 |       0 | 11-57                                                       
+  ToastNotification.jsx                              |       0 |        0 |       0 |       0 | 11-99                                                       
+  index.js                                           |       0 |        0 |       0 |       0 |                                                             
+ src/features/notifications/data                     |       0 |      100 |     100 |       0 |                                                             
+  mockNotifications.js                               |       0 |      100 |     100 |       0 | 7                                                           
+ src/features/notifications/hooks                    |       0 |        0 |       0 |       0 |                                                             
+  useNewsNotifications.js                            |       0 |        0 |       0 |       0 | 14-110                                                      
+  useNotificationMutations.js                        |       0 |        0 |       0 |       0 | 13-51                                                       
+  useNotificationSocket.js                           |       0 |        0 |       0 |       0 | 13-261                                                      
+  useNotifications.js                                |       0 |        0 |       0 |       0 | 12-441                                                      
+  usePriceAlerts.js                                  |       0 |        0 |       0 |       0 | 14-140                                                      
+ src/features/notifications/utils                    |   14.51 |        0 |       0 |   16.66 |                                                             
+  notificationHelpers.js                             |   14.51 |        0 |       0 |   16.66 | 11-38,46-47,54-85,92-98,106-115,123-132,139-140,155-156,171 
+ src/features/portfolio/components                   |    27.5 |     30.8 |   21.15 |   26.98 |                                                             
+  AccountDetailsCard.jsx                             |       0 |        0 |       0 |       0 | 19-39                                                       
+  ClientInfoBar.jsx                                  |       0 |        0 |       0 |       0 | 25-122                                                      
+  KeyThemesCard.jsx                                  |       0 |      100 |       0 |       0 | 9-10                                                        
+  NewsFeedCard.jsx                                   |       0 |        0 |       0 |       0 | 26-248                                                      
+  OpportunitiesCard.jsx                              |       0 |      100 |       0 |       0 | 9-10                                                        
+  PerformanceCard.jsx                                |   90.16 |    72.64 |   78.57 |   94.44 | 122-132,407                                                 
+  TopHoldingsTable.jsx                               |       0 |        0 |       0 |       0 | 28-177                                                      
+ src/features/portfolio/components/AccountSelector   |       0 |        0 |       0 |       0 |                                                             
+  AccountList.jsx                                    |       0 |        0 |       0 |       0 | 25-170                                                      
+  AccountSelector.jsx                                |       0 |        0 |       0 |       0 | 26-140                                                      
+  UserList.jsx                                       |       0 |        0 |       0 |       0 | 22-156                                                      
+  index.js                                           |       0 |        0 |       0 |       0 |                                                             
+ src/features/portfolio/components/HoldingsDetail    |       0 |        0 |       0 |       0 |                                                             
+  PortfolioHoldingsDetail.jsx                        |       0 |        0 |       0 |       0 | 31-292                                                      
+ src/features/portfolio/components/PerformanceDetail |       0 |        0 |       0 |       0 |                                                             
+  PortfolioPerformanceDetail.jsx                     |       0 |        0 |       0 |       0 | 29-762                                                      
+ src/features/portfolio/components/SentimentView     |       0 |        0 |       0 |       0 |                                                             
+  HoldingsSentimentTable.jsx                         |       0 |        0 |       0 |       0 | 21-305                                                      
+  PortfolioSentimentView.jsx                         |       0 |        0 |       0 |       0 | 56-452                                                      
+  SectorSentimentBreakdown.jsx                       |       0 |        0 |       0 |       0 | 13-137                                                      
+ src/features/portfolio/components/modals            |       0 |        0 |       0 |       0 |                                                             
+  AccountDetailsModal.jsx                            |       0 |        0 |       0 |       0 | 10-129                                                      
+  AddPortfolioModal.jsx                              |       0 |        0 |       0 |       0 | 11-338                                                      
+  EditPortfolioModal.jsx                             |       0 |        0 |       0 |       0 | 14-404                                                      
+ src/features/portfolio/hooks                        |       0 |        0 |       0 |       0 |                                                             
+  usePortfolioNews.js                                |       0 |        0 |       0 |       0 | 10-97                                                       
+  usePortfolioOverview.js                            |       0 |        0 |       0 |       0 | 22-81                                                       
+  usePortfolioRollingSentiment.js                    |       0 |        0 |       0 |       0 | 20-160                                                      
+  usePortfolioSectorSentiment.js                     |       0 |        0 |       0 |       0 | 16-98                                                       
+  usePortfolioSentiment.js                           |       0 |        0 |       0 |       0 | 20-358                                                      
+ src/features/sector/components/PerformanceView      |       0 |        0 |       0 |       0 |                                                             
+  PerformanceHeader.jsx                              |       0 |        0 |       0 |       0 | 7-30                                                        
+  PerformanceView.jsx                                |       0 |        0 |       0 |       0 | 36-516                                                      
+  TopConstituents.jsx                                |       0 |        0 |       0 |       0 | 6-278                                                       
+ src/features/sector/components/SectorSelector       |       0 |        0 |       0 |       0 |                                                             
+  CountryList.jsx                                    |       0 |        0 |       0 |       0 | 7-45                                                        
+  SectorList.jsx                                     |       0 |        0 |       0 |       0 | 9-63                                                        
+  SectorSelector.jsx                                 |       0 |        0 |       0 |       0 | 9-34                                                        
+ src/features/sector/config                          |       0 |        0 |       0 |       0 |                                                             
+  regionData.js                                      |       0 |        0 |       0 |       0 | 6-63                                                        
+  sectorData.js                                      |       0 |      100 |     100 |       0 | 6                                                           
+  tickerMappings.js                                  |       0 |      100 |     100 |       0 | 9-104                                                       
+ src/features/sector/hooks                           |       0 |        0 |       0 |       0 |                                                             
+  usePriceData.js                                    |       0 |      100 |       0 |       0 | 10-35                                                       
+  useSectorData.js                                   |       0 |        0 |       0 |       0 | 13-349                                                      
+  useSentimentData.js                                |       0 |        0 |       0 |       0 | 10-15                                                       
+ src/features/sector/utils                           |       0 |        0 |       0 |       0 |                                                             
+  tickerResolver.js                                  |       0 |        0 |       0 |       0 | 9-98                                                        
+ src/features/shared/components                      |       0 |        0 |       0 |       0 |                                                             
+  CombinedSentimentVolumeChart.jsx                   |       0 |        0 |       0 |       0 | 9-1191                                                      
+  CompactNewsCard.jsx                                |       0 |        0 |       0 |       0 | 10-77                                                       
+  DetailedNewsCard.jsx                               |       0 |        0 |       0 |       0 | 12-234                                                      
+  DetailedRelatedNews.jsx                            |       0 |        0 |       0 |       0 | 16-324                                                      
+  EventsToggle.jsx                                   |       0 |        0 |       0 |       0 | 13-22                                                       
+  HistoricalSentimentTimeline.jsx                    |       0 |        0 |       0 |       0 | 18-283                                                      
+  HoldingsCoverageCard.jsx                           |       0 |        0 |       0 |       0 | 15-205                                                      
+  MomentumCard.jsx                                   |       0 |        0 |       0 |       0 | 23-43                                                       
+  NewsCard.jsx                                       |       0 |        0 |       0 |       0 | 27-124                                                      
+  NewsCoverageCard.jsx                               |       0 |        0 |       0 |       0 | 16-26                                                       
+  NewsDetailModal.jsx                                |       0 |        0 |       0 |       0 | 10-281                                                      
+  NewsEmpty.jsx                                      |       0 |        0 |       0 |       0 | 11-12                                                       
+  NewsError.jsx                                      |       0 |        0 |       0 |       0 | 12-13                                                       
+  NewsSkeleton.jsx                                   |       0 |        0 |       0 |       0 | 10-14                                                       
+  NewsToolbar.jsx                                    |       0 |        0 |       0 |       0 | 16-68                                                       
+  NewsVolumeChart.jsx                                |       0 |        0 |       0 |       0 | 16-241                                                      
+  OverallSentiment.jsx                               |       0 |        0 |       0 |       0 | 31-81                                                       
+  PriceChart.jsx                                     |       0 |        0 |       0 |       0 | 47-1028                                                     
+  RelatedNews.jsx                                    |       0 |        0 |       0 |       0 | 27-108                                                      
+  SentimentBadge.jsx                                 |       0 |        0 |       0 |       0 | 12-18                                                       
+  SentimentBreadthCard.jsx                           |       0 |        0 |       0 |       0 | 22-101                                                      
+  SentimentByTopicCard.jsx                           |       0 |        0 |       0 |       0 | 19-284                                                      
+  SentimentChart.jsx                                 |       0 |        0 |       0 |       0 | 18-288                                                      
+  SentimentConfidenceCard.jsx                        |       0 |        0 |       0 |       0 | 15-55                                                       
+  SentimentMetricsCard.jsx                           |       0 |        0 |       0 |       0 | 19-286                                                      
+  SentimentScoreCard.jsx                             |       0 |        0 |       0 |       0 | 22-44                                                       
+  SentimentShockCard.jsx                             |       0 |        0 |       0 |       0 | 22-121                                                      
+  SentimentSourceBreakdown.jsx                       |       0 |        0 |       0 |       0 | 20-204                                                      
+  SentimentTrendSummary.jsx                          |       0 |        0 |       0 |       0 | 19-157                                                      
+  SignificantEvents.jsx                              |       0 |        0 |       0 |       0 | 23-210                                                      
+  SourceConcentrationCard.jsx                        |       0 |        0 |       0 |       0 | 16-189                                                      
+  TickerCoverageCard.jsx                             |       0 |        0 |       0 |       0 | 15-205                                                      
+  TimeRangeSelector.jsx                              |       0 |        0 |       0 |       0 | 15-26                                                       
+  TooltipPortal.jsx                                  |       0 |        0 |       0 |       0 | 14-135                                                      
+  ViewModeToggle.jsx                                 |       0 |        0 |       0 |       0 | 16-50                                                       
+  index.js                                           |       0 |        0 |       0 |       0 |                                                             
+ src/features/shared/utils                           |       0 |        0 |       0 |       0 |                                                             
+  chartHelpers.js                                    |       0 |        0 |       0 |       0 | 16-809                                                      
+  constants.js                                       |       0 |      100 |     100 |       0 | 10-121                                                      
+  dateFormatters.js                                  |       0 |        0 |       0 |       0 | 8-45                                                        
+  formatters.js                                      |       0 |        0 |       0 |       0 | 9-468                                                       
+  sentimentAnalysis.js                               |       0 |        0 |       0 |       0 | 14-286                                                      
+  sentimentHelpers.js                                |       0 |        0 |       0 |       0 | 25-246                                                      
+ src/hooks                                           |       0 |        0 |       0 |       0 |                                                             
+  index.js                                           |       0 |        0 |       0 |       0 |                                                             
+  useDebounce.js                                     |       0 |        0 |       0 |       0 | 15-28                                                       
+  useNews.js                                         |       0 |        0 |       0 |       0 | 14-150                                                      
+  usePortfolioData.js                                |       0 |        0 |       0 |       0 | 27-272                                                      
+  useSearch.js                                       |       0 |        0 |       0 |       0 | 15-40                                                       
+  useStock.js                                        |       0 |        0 |       0 |       0 | 16-162                                                      
+ src/pages                                           |       0 |        0 |       0 |       0 |                                                             
+  EntityPage.jsx                                     |       0 |        0 |       0 |       0 | 35-165                                                      
+  NotificationPage.jsx                               |       0 |        0 |       0 |       0 | 14-305                                                      
+  NotificationPageEnhanced.jsx                       |       0 |        0 |       0 |       0 | 21-546                                                      
+  PortfolioPage.jsx                                  |       0 |        0 |       0 |       0 | 51-312                                                      
+  SectorPage.jsx                                     |       0 |        0 |       0 |       0 | 26-120                                                      
+ src/services                                        |    2.33 |        0 |       0 |    2.38 |                                                             
+  api.js                                             |    4.87 |        0 |       0 |    4.93 | 32-54,64-176,186-275                                        
+  notificationApi.js                                 |       0 |        0 |       0 |       0 | 9-413                                                       
+ src/store                                           |    1.47 |        0 |    1.16 |    1.76 |                                                             
+  useAppStore.js                                     |    1.47 |        0 |    1.16 |    1.76 | 22-446                                                      
+ src/utils                                           |      25 |    18.32 |   22.22 |   27.08 |                                                             
+  formatters.js                                      |   25.38 |    18.32 |      25 |   27.54 | 25-302,449-631,681-686                                      
+  queryClient.js                                     |       0 |      100 |       0 |       0 | 8-30                                                        
+-----------------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------
+
+Test Suites: 3 failed, 2 passed, 5 total
+Tests:       1 failed, 50 passed, 51 total
+Snapshots:   0 total
+Time:        2.193 s
+Ran all test suites.
