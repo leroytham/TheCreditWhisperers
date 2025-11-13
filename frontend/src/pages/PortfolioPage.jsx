@@ -7,8 +7,6 @@ import AccountDetailsCard from '../features/portfolio/components/AccountDetailsC
 import PerformanceCard from '../features/portfolio/components/PerformanceCard';
 import NewsFeedCard from '../features/portfolio/components/NewsFeedCard';
 import TopHoldingsTable from '../features/portfolio/components/TopHoldingsTable';
-import KeyThemesCard from '../features/portfolio/components/KeyThemesCard';
-import OpportunitiesCard from '../features/portfolio/components/OpportunitiesCard';
 import AddPortfolioModal from '../features/portfolio/components/modals/AddPortfolioModal';
 import EditPortfolioModal from '../features/portfolio/components/modals/EditPortfolioModal';
 import { AccountSelector } from '../features/portfolio/components/AccountSelector';
@@ -252,20 +250,6 @@ const PortfolioPage = () => {
                     <ErrorBoundary errorMessage="Unable to load holdings data.">
                       <TopHoldingsTable onViewAllHoldings={() => setActiveSubTab('holdings')} />
                     </ErrorBoundary>
-
-                    {/* Dashboard Grid Row 3: Key Themes & Opportunities */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                      <div className="lg:col-span-2">
-                        <ErrorBoundary errorMessage="Unable to load key themes.">
-                          <KeyThemesCard />
-                        </ErrorBoundary>
-                      </div>
-                      <div>
-                        <ErrorBoundary errorMessage="Unable to load opportunities.">
-                          <OpportunitiesCard />
-                        </ErrorBoundary>
-                      </div>
-                    </div>
                   </section>
                 </>
               </ErrorBoundary>
