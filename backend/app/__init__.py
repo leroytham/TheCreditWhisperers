@@ -1,0 +1,1 @@
+# This file makes 'app' a Python package, enabling imports like app.main
