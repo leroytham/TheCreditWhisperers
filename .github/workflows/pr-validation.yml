@@ -1,0 +1,210 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, dev-final, development ]
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  # Check for code quality and linting
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Python linting tools
+      run: |
+        pip install flake8 black isort
+
+    - name: Run Python linting
+      working-directory: ./backend
+      continue-on-error: true
+      run: |
+        echo "🔍 Checking Python code style..."
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
+        black --check . --diff || echo "⚠️  Some files need formatting with black"
+        isort --check-only . --diff || echo "⚠️  Some imports need sorting with isort"
+
+    - name: Run Frontend ESLint
+      working-directory: ./frontend
+      continue-on-error: true
+      run: |
+        echo "🔍 Checking JavaScript code style..."
+        npm ci
+        npx eslint src/ --ext .js,.jsx --format=stylish || echo "⚠️  ESLint found some issues"
+
+  # Run all tests
+  test-suite:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run backend tests with coverage
+      working-directory: ./backend
+      env:
+        PYTHONPATH: ${{ github.workspace }}/backend
+      run: |
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=term-missing
+
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Run frontend tests with coverage
+      working-directory: ./frontend
+      run: npm run test:ci
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          backend/coverage.xml
+          frontend/coverage/
+
+  # Security scanning
+  security-check:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Python security check
+      continue-on-error: true
+      run: |
+        pip install safety
+        safety check -r backend/requirements.txt || echo "⚠️  Some dependencies have known vulnerabilities"
+
+    - name: Run npm audit
+      working-directory: ./frontend
+      continue-on-error: true
+      run: |
+        npm audit || echo "⚠️  Some npm packages have known vulnerabilities"
+
+  # Create PR comment with results
+  pr-comment:
+    name: PR Summary Comment
+    runs-on: ubuntu-latest
+    needs: [code-quality, test-suite, security-check]
+    if: always()
+
+    steps:
+    - name: Comment PR with results
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const codeQuality = '${{ needs.code-quality.result }}';
+          const testSuite = '${{ needs.test-suite.result }}';
+          const security = '${{ needs.security-check.result }}';
+
+          // Determine overall status
+          const overallStatus = (testSuite === 'success') ? '✅' : '❌';
+
+          // Create status emojis
+          const getStatusEmoji = (status) => {
+            switch(status) {
+              case 'success': return '✅';
+              case 'failure': return '❌';
+              case 'skipped': return '⏭️';
+              default: return '⚠️';
+            }
+          };
+
+          const comment = `## Pull Request Validation Results ${overallStatus}
+
+          | Check | Status | Required |
+          |-------|--------|----------|
+          | 🧪 **Test Suite** | ${getStatusEmoji(testSuite)} | Yes |
+          | 📝 **Code Quality** | ${getStatusEmoji(codeQuality)} | No |
+          | 🔒 **Security Scan** | ${getStatusEmoji(security)} | No |
+
+          ### Details
+
+          ${testSuite !== 'success' ? '⚠️ **Tests must pass before merging!**' : '✅ All required checks passed!'}
+
+          ---
+          <details>
+          <summary>💡 Tips for developers</summary>
+
+          - Run \`pytest\` locally in the backend folder to test Python code
+          - Run \`npm test\` in the frontend folder to test React components
+          - Use \`black .\` in backend to format Python code
+          - Use \`npm run lint:fix\` in frontend to fix ESLint issues
+
+          </details>
+
+          *View detailed test results in the Actions tab*
+          `;
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Pull Request Validation Results')
+          );
+
+          // Update or create comment
+          if (botComment) {
+            github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment
+            });
+          } else {
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }
+
+          // Fail the workflow if tests failed
+          if (testSuite !== 'success') {
+            core.setFailed('Tests must pass before merging!');
+          }
