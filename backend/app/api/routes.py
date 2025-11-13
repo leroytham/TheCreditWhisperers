@@ -744,6 +744,13 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
     - momentum_interpretation: Human-readable description
     - momentum_quality: Data quality indicator
     """
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+
+    news_fetch_start = time.time()
+    logger.info(f"[NEWS-API] Fetching news for ticker={ticker}, timeframe={timeframe}")
+
     try:
         # Fetch news articles using the timeframe-aware news service
         # Use preserve_all_tickers=True to get full data including all metadata
@@ -753,6 +760,9 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
             trigger_progressive=True,
             preserve_all_tickers=True  # Get full data with all tickers and metadata
         )
+
+        news_fetch_elapsed = (time.time() - news_fetch_start) * 1000
+        logger.info(f"[NEWS-API] Fetched {len(news_articles) if news_articles else 0} articles in {news_fetch_elapsed:.0f}ms")
 
         # Preserve the original format for raw_feed (with ticker_sentiment arrays)
         import copy
@@ -2049,14 +2059,28 @@ async def get_portfolio_holdings(username: str, account_name: str):
     OPTIMIZED VERSION: Uses parallel fetching with asyncio.gather to fetch
     market data, news, and sector info concurrently for all holdings.
     """
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+
+    start_time = time.time()
+    logger.info(f"[PORTFOLIO-HOLDINGS] Request started - username={username}, account={account_name}")
+
     try:
+        # Query MongoDB for holdings
+        logger.debug(f"[PORTFOLIO-HOLDINGS-DB] Querying holdings: username={username}, account={account_name}")
         holdings_cursor = holdings_col.find({
             "username": username,
             "client_account_name": account_name
         })
 
         holdings_list = await holdings_cursor.to_list(length=None)
+
+        db_elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"[PORTFOLIO-HOLDINGS-DB] Found {len(holdings_list)} holdings in {db_elapsed_ms:.0f}ms")
+
         if not holdings_list:
+            logger.info(f"[PORTFOLIO-HOLDINGS] No holdings found, returning empty list")
             return {"holdings": []}
 
         # Aggregate duplicate holdings
@@ -2070,9 +2094,12 @@ async def get_portfolio_holdings(username: str, account_name: str):
             aggregated[symbol]["total_qty"] += qty
             aggregated[symbol]["total_cost"] += qty * price
 
+        logger.info(f"[PORTFOLIO-HOLDINGS-DB] Aggregated to {len(aggregated)} unique symbols from {len(holdings_list)} holdings")
+
         # Helper function to fetch all data for a single symbol in parallel
         async def fetch_holding_data(symbol: str, total_qty: float, avg_cost: float):
             """Fetch market price, news, and sector data in parallel for a symbol."""
+            logger.debug(f"[PORTFOLIO-HOLDINGS-FETCH] Starting parallel fetch for {symbol}")
             try:
                 # Create parallel tasks for this symbol
                 market_price_task = stock_data_service.get_current_market_price(symbol)
@@ -2089,7 +2116,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
 
                 # Process market data
                 if isinstance(market_data, Exception) or market_data is None:
-                    print(f"⚠️ Market data fetch failed for {symbol}: {market_data if isinstance(market_data, Exception) else 'No data'}")
+                    logger.warning(f"[PORTFOLIO-HOLDINGS-FETCH] Market data failed for {symbol}: {market_data if isinstance(market_data, Exception) else 'No data'}")
                     market_price = None
                     day_change_value = None
                     day_change_percent = None
@@ -2103,6 +2130,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
                     previous_close = market_data.get("previous_close")
                     fifty_two_week_high = market_data.get("fifty_two_week_high")
                     fifty_two_week_low = market_data.get("fifty_two_week_low")
+                    logger.debug(f"[PORTFOLIO-HOLDINGS-FETCH] Market data OK for {symbol}: ${market_price:.2f}")
 
                 # Calculate profit/loss
                 if market_price:
@@ -2114,7 +2142,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
 
                 # Process news data
                 if isinstance(news_data, Exception) or news_data is None:
-                    print(f"⚠️ News fetch failed for {symbol}: {news_data if isinstance(news_data, Exception) else 'No data'}")
+                    logger.warning(f"[PORTFOLIO-HOLDINGS-FETCH] News fetch failed for {symbol}: {news_data if isinstance(news_data, Exception) else 'No data'}")
                     avg_score = 0
                     sentiment_label = "N/A"
                     news_volume = 0
@@ -2133,6 +2161,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
                         sentiment_label = "Neutral"
 
                     news_volume = len(articles)
+                    logger.debug(f"[PORTFOLIO-HOLDINGS-FETCH] News fetched for {symbol}: {news_volume} articles, sentiment={avg_score:.2f}")
 
                 # Fetch sector info (cached, so fast)
                 try:
@@ -2173,7 +2202,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
                 }
 
             except Exception as e:
-                print(f"⚠️ Error processing holding {symbol}: {e}")
+                logger.error(f"[PORTFOLIO-HOLDINGS-ERROR] Processing failed for {symbol}: {e}", exc_info=True)
                 # Return minimal data on error
                 return {
                     "symbol": symbol,
@@ -2194,7 +2223,8 @@ async def get_portfolio_holdings(username: str, account_name: str):
                 }
 
         # Create tasks for all symbols and execute in parallel
-        print(f"📊 Fetching data for {len(aggregated)} holdings in parallel...")
+        logger.info(f"[PORTFOLIO-HOLDINGS] Starting parallel data fetch for {len(aggregated)} unique symbols")
+        fetch_start = time.time()
         tasks = [
             fetch_holding_data(
                 symbol,
@@ -2210,12 +2240,17 @@ async def get_portfolio_holdings(username: str, account_name: str):
         # Filter out any exceptions
         holdings_results = [r for r in results if not isinstance(r, Exception)]
 
-        print(f"✅ Successfully fetched data for {len(holdings_results)}/{len(aggregated)} holdings")
+        fetch_elapsed_ms = (time.time() - fetch_start) * 1000
+        logger.info(f"[PORTFOLIO-HOLDINGS] Parallel fetch completed: {len(holdings_results)}/{len(aggregated)} successful in {fetch_elapsed_ms:.0f}ms")
+
+        total_elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"[PORTFOLIO-HOLDINGS] Request completed in {total_elapsed_ms:.0f}ms")
 
         return {"holdings": holdings_results}
 
     except Exception as e:
-        print(f"❌ Error fetching holdings: {e}")
+        total_elapsed_ms = (time.time() - start_time) * 1000
+        logger.error(f"[PORTFOLIO-HOLDINGS] Request failed after {total_elapsed_ms:.0f}ms: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
 
 
@@ -2260,23 +2295,33 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
 
     Returns MTD, QTD, YTD, and ITD (Inception-to-Date) performance metrics.
     """
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+
+    start_time = time.time()
+    logger.info(f"[PORTFOLIO-PERF] Request started - username={username}, account={account_name}, timeframe={timeframe}")
+
     try:
         from datetime import datetime, timedelta
         import pandas as pd
 
         # Fetch ALL current holdings
+        logger.debug(f"[PORTFOLIO-PERF-DB] Querying holdings: username={username}, account={account_name}")
         holdings_cursor = holdings_col.find({
             "username": username,
             "client_account_name": account_name
         })
         holdings_list = await holdings_cursor.to_list(length=None)
 
+        db_elapsed_ms = (time.time() - start_time) * 1000
+        logger.info(f"[PORTFOLIO-PERF-DB] Found {len(holdings_list)} holdings in {db_elapsed_ms:.0f}ms")
+
         if not holdings_list:
+            logger.info(f"[PORTFOLIO-PERF] No holdings found, returning error")
             return {"error": "No holdings found"}
 
-        print(f"\n=== PORTFOLIO PERFORMANCE CALCULATION ===")
-        print(f"Account: {account_name}")
-        print(f"Total Holdings: {len(holdings_list)}")
+        logger.debug(f"[PORTFOLIO-PERF] Processing {len(holdings_list)} holdings for performance calculation")
 
         # Get current date
         today = datetime.now()
@@ -2429,9 +2474,14 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             # Step 5: Fetch S&P 500 performance for the SAME period
             try:
                 sp500 = yf.Ticker("^GSPC")
-                sp500_hist = sp500.history(
-                    start=(start_date - timedelta(days=5)).strftime("%Y-%m-%d"),
-                    end=today.strftime("%Y-%m-%d")
+                # Run blocking yfinance call in thread pool to prevent event loop blocking
+                sp500_hist = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        sp500.history,
+                        start=(start_date - timedelta(days=5)).strftime("%Y-%m-%d"),
+                        end=today.strftime("%Y-%m-%d")
+                    ),
+                    timeout=20.0  # 20 second timeout for S&P 500 data
                 )
 
                 if len(sp500_hist) >= 2:
@@ -2549,8 +2599,13 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             for symbol in unique_symbols:
                 try:
                     ticker = yf.Ticker(symbol)
-                    # Get dividend history
-                    dividends = ticker.dividends
+                    # Get dividend and split history with timeout protection
+
+                    # Fetch dividends in thread pool
+                    dividends = await asyncio.wait_for(
+                        asyncio.to_thread(lambda: ticker.dividends),
+                        timeout=10.0  # 10 second timeout
+                    )
                     if not dividends.empty:
                         # Filter to last year and convert to events
                         recent_divs = dividends[dividends.index >= pd.Timestamp(one_year_ago)]
@@ -2567,8 +2622,11 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                                 "impact_value": round(total_dividend, 2)
                             })
 
-                    # Get stock splits
-                    splits = ticker.splits
+                    # Get stock splits in thread pool
+                    splits = await asyncio.wait_for(
+                        asyncio.to_thread(lambda: ticker.splits),
+                        timeout=10.0  # 10 second timeout
+                    )
                     if not splits.empty:
                         recent_splits = splits[splits.index >= pd.Timestamp(one_year_ago)]
                         for split_date, split_ratio in recent_splits.items():

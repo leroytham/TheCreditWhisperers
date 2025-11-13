@@ -127,7 +127,16 @@ class PortfolioTimeseriesService:
             for candidate in self._get_ticker_candidates(ticker):
                 try:
                     stock = yf.Ticker(candidate)
-                    hist = stock.history(start=start_date, end=end_date, interval=interval)
+                    # Run blocking yfinance call in thread pool to prevent event loop blocking
+                    hist = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            stock.history,
+                            start=start_date,
+                            end=end_date,
+                            interval=interval
+                        ),
+                        timeout=15.0  # 15 second timeout per ticker attempt
+                    )
 
                     if hist.empty:
                         continue
@@ -639,15 +648,19 @@ class PortfolioTimeseriesService:
         Returns:
             Dictionary with timeframe, data_points array (normalized to % returns)
         """
+        import time
+        import logging
+        logger = logging.getLogger(__name__)
+
+        fetch_start = time.time()
+        logger.info(f"[BENCHMARK-TIMESERIES] Fetching {benchmark_ticker} for timeframe={timeframe}")
+
         try:
             end_date = datetime.now()
             delta = self.parse_timeframe_to_delta(timeframe)
             start_date = end_date - delta
 
-            print(f"\n=== BENCHMARK TIMESERIES GENERATION ===")
-            print(f"Benchmark: {benchmark_ticker}")
-            print(f"Timeframe: {timeframe}")
-            print(f"Start: {start_date.date()}, End: {end_date.date()}")
+            logger.debug(f"[BENCHMARK-TIMESERIES] Date range: {start_date.date()} to {end_date.date()}")
 
             # Determine appropriate interval based on timeframe (same logic as fetch_historical_prices)
             if timeframe == "1D":
@@ -657,9 +670,40 @@ class PortfolioTimeseriesService:
             else:
                 interval = "1d"  # Daily intervals for longer periods
 
-            # Fetch benchmark data
-            benchmark = yf.Ticker(benchmark_ticker)
-            hist = benchmark.history(start=start_date, end=end_date, interval=interval)
+            # Fetch benchmark data with timeout protection
+            try:
+                logger.debug(f"[BENCHMARK-TIMESERIES] Calling yfinance with timeout=30s for {benchmark_ticker}")
+                benchmark = yf.Ticker(benchmark_ticker)
+                # Run blocking yfinance call in thread pool to prevent event loop blocking
+                hist = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        benchmark.history,
+                        start=start_date,
+                        end=end_date,
+                        interval=interval
+                    ),
+                    timeout=30.0  # 30 second timeout
+                )
+                yf_elapsed_ms = (time.time() - fetch_start) * 1000
+                logger.debug(f"[BENCHMARK-TIMESERIES] yfinance returned {len(hist)} records in {yf_elapsed_ms:.0f}ms")
+            except asyncio.TimeoutError:
+                elapsed_ms = (time.time() - fetch_start) * 1000
+                logger.error(f"[BENCHMARK-TIMESERIES-TIMEOUT] {benchmark_ticker} timed out after {elapsed_ms:.0f}ms (30s limit)")
+                return {
+                    "timeframe": timeframe,
+                    "benchmark_ticker": benchmark_ticker,
+                    "data_points": [],
+                    "error": "Request timeout - Yahoo Finance not responding"
+                }
+            except Exception as e:
+                elapsed_ms = (time.time() - fetch_start) * 1000
+                logger.error(f"[BENCHMARK-TIMESERIES-ERROR] Failed to fetch {benchmark_ticker} after {elapsed_ms:.0f}ms: {e}")
+                return {
+                    "timeframe": timeframe,
+                    "benchmark_ticker": benchmark_ticker,
+                    "data_points": [],
+                    "error": str(e)
+                }
 
             if hist.empty:
                 print(f"⚠️ No historical data for benchmark {benchmark_ticker}")
@@ -695,8 +739,9 @@ class PortfolioTimeseriesService:
                     "value": round(current_value, 2)  # Absolute index value
                 })
 
-            print(f"Generated {len(data_points)} benchmark data points")
-            print(f"Start value: {start_value:.2f}, End return: {data_points[-1]['close']:.2f}%")
+            fetch_elapsed_ms = (time.time() - fetch_start) * 1000
+            final_return = data_points[-1]['close'] if data_points else 0.0
+            logger.info(f"[BENCHMARK-TIMESERIES] Successfully fetched {benchmark_ticker} in {fetch_elapsed_ms:.0f}ms: {len(data_points)} points, return={final_return:.2f}%")
 
             return {
                 "timeframe": timeframe,
