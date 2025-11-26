@@ -1,0 +1,282 @@
+# =============================================================================
+# TheCreditWhisperers - Prometheus Alert Rules
+# =============================================================================
+# PrometheusRule CRD for Kubernetes Prometheus Operator
+# Defines alerting rules for HTTP errors, latency, circuit breakers, and external APIs
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: creditwhisperers-alerts
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    release: prometheus
+    role: alert-rules
+spec:
+  groups:
+    # =========================================================================
+    # HTTP Error Alerts
+    # =========================================================================
+    - name: http.rules
+      interval: 30s
+      rules:
+        # High HTTP 5xx Error Rate (Critical)
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+            component: backend
+          annotations:
+            summary: "High HTTP 5xx error rate detected"
+            description: "HTTP 5xx error rate is {{ $value | humanizePercentage }} (threshold: >5%) for 2+ minutes"
+            runbook_url: "https://wiki.example.com/runbooks/high-error-rate"
+
+        # High HTTP 4xx Error Rate (Warning)
+        - alert: HighClientErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"4.."}[5m]))
+            / sum(rate(http_requests_total[5m])) > 0.20
+          for: 5m
+          labels:
+            severity: warning
+            component: backend
+          annotations:
+            summary: "High HTTP 4xx error rate detected"
+            description: "HTTP 4xx error rate is {{ $value | humanizePercentage }} (threshold: >20%) for 5+ minutes"
+
+        # No Requests (Warning - possible outage)
+        - alert: NoRequests
+          expr: |
+            sum(rate(http_requests_total[5m])) == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: backend
+          annotations:
+            summary: "No HTTP requests received"
+            description: "No HTTP requests have been received in the last 5 minutes - possible outage or routing issue"
+
+    # =========================================================================
+    # Latency Alerts
+    # =========================================================================
+    - name: latency.rules
+      interval: 30s
+      rules:
+        # P95 Latency High (Warning)
+        - alert: HighP95Latency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            component: backend
+          annotations:
+            summary: "P95 latency above 2 seconds"
+            description: "95th percentile latency is {{ $value | humanizeDuration }} (threshold: >2s)"
+
+        # P99 Latency Critical
+        - alert: HighP99Latency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 5
+          for: 5m
+          labels:
+            severity: critical
+            component: backend
+          annotations:
+            summary: "P99 latency above 5 seconds"
+            description: "99th percentile latency is {{ $value | humanizeDuration }} (threshold: >5s)"
+            runbook_url: "https://wiki.example.com/runbooks/high-latency"
+
+        # Endpoint-specific latency (for critical endpoints)
+        - alert: PortfolioEndpointSlow
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{endpoint=~"/api/portfolio.*"}[5m])) by (le)
+            ) > 3
+          for: 5m
+          labels:
+            severity: warning
+            component: backend
+            endpoint: portfolio
+          annotations:
+            summary: "Portfolio endpoint P95 latency above 3 seconds"
+            description: "Portfolio API P95 latency is {{ $value | humanizeDuration }}"
+
+    # =========================================================================
+    # Circuit Breaker Alerts
+    # =========================================================================
+    - name: circuit-breaker.rules
+      interval: 30s
+      rules:
+        # Circuit Breaker Open (Critical)
+        - alert: CircuitBreakerOpen
+          expr: circuit_breaker_state == 1
+          for: 1m
+          labels:
+            severity: critical
+            component: circuit-breaker
+          annotations:
+            summary: "Circuit breaker OPEN for {{ $labels.api_name }}"
+            description: "Circuit breaker for API '{{ $labels.api_name }}' has tripped. External service may be down."
+            runbook_url: "https://wiki.example.com/runbooks/circuit-breaker-open"
+
+        # Circuit Breaker Stuck in Half-Open (Warning)
+        - alert: CircuitBreakerHalfOpen
+          expr: circuit_breaker_state == 2
+          for: 5m
+          labels:
+            severity: warning
+            component: circuit-breaker
+          annotations:
+            summary: "Circuit breaker stuck in HALF_OPEN for {{ $labels.api_name }}"
+            description: "Circuit breaker for '{{ $labels.api_name }}' has been in HALF_OPEN state for 5+ minutes. Service recovery may be failing."
+
+        # High Circuit Breaker Failure Rate (Warning)
+        - alert: HighCircuitBreakerFailureRate
+          expr: rate(circuit_breaker_failures_total[5m]) > 0.5
+          for: 2m
+          labels:
+            severity: warning
+            component: circuit-breaker
+          annotations:
+            summary: "High failure rate on {{ $labels.api_name }}"
+            description: "Circuit breaker '{{ $labels.api_name }}' is recording {{ $value | humanize }} failures/sec"
+
+        # Circuit Breaker State Flapping (Warning)
+        - alert: CircuitBreakerFlapping
+          expr: |
+            increase(circuit_breaker_state_changes_total[10m]) > 5
+          for: 1m
+          labels:
+            severity: warning
+            component: circuit-breaker
+          annotations:
+            summary: "Circuit breaker flapping for {{ $labels.api_name }}"
+            description: "Circuit breaker '{{ $labels.api_name }}' has changed state {{ $value }} times in 10 minutes - service may be unstable"
+
+    # =========================================================================
+    # External API Alerts
+    # =========================================================================
+    - name: external-api.rules
+      interval: 30s
+      rules:
+        # External API High Latency (Warning)
+        - alert: ExternalAPIHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(external_api_request_duration_seconds_bucket[5m])) by (le, api_name)
+            ) > 10
+          for: 5m
+          labels:
+            severity: warning
+            component: external-api
+          annotations:
+            summary: "External API '{{ $labels.api_name }}' P95 latency >10s"
+            description: "External API '{{ $labels.api_name }}' P95 latency is {{ $value | humanizeDuration }}"
+
+        # External API High Error Rate (Warning)
+        - alert: ExternalAPIHighErrorRate
+          expr: |
+            sum(rate(external_api_errors_total[5m])) by (api_name) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            component: external-api
+          annotations:
+            summary: "External API '{{ $labels.api_name }}' error rate elevated"
+            description: "External API '{{ $labels.api_name }}' is returning {{ $value | humanize }} errors/sec"
+
+        # Alpha Vantage Rate Limit Warning
+        - alert: AlphaVantageRateLimited
+          expr: |
+            sum(rate(external_api_errors_total{api_name="alpha_vantage", error_type="rate_limit"}[5m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+            component: external-api
+          annotations:
+            summary: "Alpha Vantage API rate limited"
+            description: "Alpha Vantage API is returning rate limit errors - consider reducing request frequency"
+
+    # =========================================================================
+    # Cache Alerts
+    # =========================================================================
+    - name: cache.rules
+      interval: 30s
+      rules:
+        # Low Cache Hit Rate (Warning)
+        - alert: LowCacheHitRate
+          expr: |
+            sum(rate(cache_operations_total{status="hit"}[5m]))
+            / sum(rate(cache_operations_total{operation="get"}[5m])) < 0.5
+          for: 10m
+          labels:
+            severity: warning
+            component: cache
+          annotations:
+            summary: "Cache hit rate below 50%"
+            description: "Cache hit rate is {{ $value | humanizePercentage }} - consider adjusting TTL or cache strategy"
+
+        # Redis Connection Issues
+        - alert: RedisConnectionErrors
+          expr: |
+            sum(rate(cache_operations_total{status="error"}[5m])) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            component: cache
+          annotations:
+            summary: "Redis cache errors detected"
+            description: "Cache operations are failing at {{ $value | humanize }} errors/sec"
+
+    # =========================================================================
+    # Resource Alerts (Pod-level)
+    # =========================================================================
+    - name: resource.rules
+      interval: 30s
+      rules:
+        # High Memory Usage
+        - alert: HighPodMemoryUsage
+          expr: |
+            container_memory_working_set_bytes{namespace="creditwhisperers", container!=""}
+            / container_spec_memory_limit_bytes{namespace="creditwhisperers", container!=""} > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            component: infrastructure
+          annotations:
+            summary: "Pod memory usage above 85%"
+            description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}"
+
+        # High CPU Usage
+        - alert: HighPodCPUUsage
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace="creditwhisperers", container!=""}[5m])) by (pod)
+            / sum(container_spec_cpu_quota{namespace="creditwhisperers", container!=""}) by (pod) * 100000 > 0.80
+          for: 5m
+          labels:
+            severity: warning
+            component: infrastructure
+          annotations:
+            summary: "Pod CPU usage above 80%"
+            description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}"
+
+        # Pod Restarts
+        - alert: HighPodRestartRate
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="creditwhisperers"}[1h]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            component: infrastructure
+          annotations:
+            summary: "Pod restarting frequently"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"

@@ -264,6 +264,22 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"⚠️ Failed to initialize HTTP connection pool: {e}")
 
+    # Initialize circuit breaker Prometheus metrics
+    try:
+        from .core.circuit_breaker_metrics import initialize_circuit_breaker_metrics
+        initialize_circuit_breaker_metrics([
+            "alpha_vantage",
+            "finnhub",
+            "newsapi",
+            "marketaux",
+            "yahoo_finance",
+        ])
+        logger.info("✅ Circuit breaker metrics initialized")
+    except ImportError:
+        logger.warning("⚠️ prometheus-client not installed. CB metrics disabled.")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to initialize circuit breaker metrics: {e}")
+
     logger.info("Application startup complete")
 
 # Cleanup handler for multiprocessing resources

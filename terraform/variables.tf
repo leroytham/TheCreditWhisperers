@@ -126,6 +126,12 @@ variable "log_retention_days" {
   }
 }
 
+variable "alert_email" {
+  description = "Email address for alert notifications (leave empty to disable email alerts)"
+  type        = string
+  default     = ""
+}
+
 # =============================================================================
 # Optional Features
 # =============================================================================

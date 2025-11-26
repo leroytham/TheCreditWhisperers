@@ -2,6 +2,8 @@
 """
 Circuit breaker pattern implementation for external API calls
 Prevents cascading failures and provides fallback mechanisms
+
+Instrumented with Prometheus metrics for observability.
 """
 
 import asyncio
@@ -11,6 +13,8 @@ from typing import Optional, Callable, Any, Dict
 from datetime import datetime, timedelta
 import logging
 from functools import wraps
+
+from app.core.circuit_breaker_metrics import get_metrics_recorder
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +62,9 @@ class CircuitBreaker:
         self.last_state_change: float = time.time()
         self._lock = asyncio.Lock()
 
+        # Initialize Prometheus metrics recorder
+        self._metrics = get_metrics_recorder(name)
+
     async def call(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute function through circuit breaker
@@ -69,12 +76,17 @@ class CircuitBreaker:
         Returns:
             Function result or raises exception
         """
+        start_time = time.time()
+
         async with self._lock:
             # Check circuit state
             if self.state == CircuitState.OPEN:
                 if self._should_attempt_reset():
                     self._transition_to_half_open()
                 else:
+                    # Record rejection metric
+                    self._metrics.record_rejection()
+                    self._metrics.record_call_duration(time.time() - start_time, "rejected")
                     raise CircuitBreakerOpenError(
                         f"Circuit breaker '{self.name}' is OPEN. "
                         f"Retry after {self._time_until_retry()} seconds."
@@ -84,14 +96,21 @@ class CircuitBreaker:
         try:
             result = await func(*args, **kwargs)
             await self._on_success()
+            # Record successful call duration
+            self._metrics.record_call_duration(time.time() - start_time, "success")
             return result
         except self.expected_exception as e:
             await self._on_failure()
+            # Record failed call duration
+            self._metrics.record_call_duration(time.time() - start_time, "failure")
             raise e
 
     async def _on_success(self):
         """Handle successful call"""
         async with self._lock:
+            # Record success metric
+            self._metrics.record_success()
+
             if self.state == CircuitState.HALF_OPEN:
                 self.success_count += 1
                 logger.info(f"[CIRCUIT-{self.name}] Success in HALF_OPEN state ({self.success_count}/{self.success_threshold})")
@@ -107,6 +126,9 @@ class CircuitBreaker:
         async with self._lock:
             self.last_failure_time = time.time()
 
+            # Record failure metric
+            self._metrics.record_failure()
+
             if self.state == CircuitState.CLOSED:
                 self.failure_count += 1
                 logger.warning(f"[CIRCUIT-{self.name}] Failure {self.failure_count}/{self.failure_threshold}")
@@ -120,25 +142,37 @@ class CircuitBreaker:
 
     def _transition_to_open(self):
         """Transition to OPEN state"""
+        previous_state = self.state.value
         self.state = CircuitState.OPEN
         self.last_state_change = time.time()
         self.failure_count = 0
         self.success_count = 0
+
+        # Record state transition metric
+        self._metrics.record_state_change(previous_state, "open")
         logger.error(f"[CIRCUIT-{self.name}] Circuit OPENED due to failures")
 
     def _transition_to_closed(self):
         """Transition to CLOSED state"""
+        previous_state = self.state.value
         self.state = CircuitState.CLOSED
         self.last_state_change = time.time()
         self.failure_count = 0
         self.success_count = 0
+
+        # Record state transition metric (also records recovery time)
+        self._metrics.record_state_change(previous_state, "closed")
         logger.info(f"[CIRCUIT-{self.name}] Circuit CLOSED, service recovered")
 
     def _transition_to_half_open(self):
         """Transition to HALF_OPEN state"""
+        previous_state = self.state.value
         self.state = CircuitState.HALF_OPEN
         self.last_state_change = time.time()
         self.success_count = 0
+
+        # Record state transition metric
+        self._metrics.record_state_change(previous_state, "half_open")
         logger.info(f"[CIRCUIT-{self.name}] Circuit HALF_OPEN, testing recovery")
 
     def _should_attempt_reset(self) -> bool:
