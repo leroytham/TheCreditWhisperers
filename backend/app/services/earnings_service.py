@@ -6,8 +6,12 @@ from datetime import datetime
 from dotenv import load_dotenv
 import aiohttp
 from typing import List, Dict, Optional
+import logging
 from app.core.cache import async_cache_result
 from app.core.http_client import http_client
+from app.core.circuit_breakers import get_circuit_breaker, CircuitBreakerOpenError
+
+logger = logging.getLogger(__name__)
 
 
 class EarningsService:
@@ -83,64 +87,73 @@ class EarningsService:
                 "quarter": quarter
             }
 
-        try:
-            session = await http_client.get_session()
-            url = (
-                f"https://www.alphavantage.co/query?"
-                f"function=EARNINGS_CALL_TRANSCRIPT"
-                f"&symbol={ticker.upper()}"
-                f"&quarter={quarter}"
-                f"&apikey={self.alpha_vantage_api_key}"
-            )
+        cb = get_circuit_breaker("alpha_vantage")
+        session = await http_client.get_session()
+        url = (
+            f"https://www.alphavantage.co/query?"
+            f"function=EARNINGS_CALL_TRANSCRIPT"
+            f"&symbol={ticker.upper()}"
+            f"&quarter={quarter}"
+            f"&apikey={self.alpha_vantage_api_key}"
+        )
 
-            print(f"Fetching earnings transcript for {ticker} - {quarter}...")
-
+        async def _make_request():
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status != 200:
-                    return {
-                        "error": f"API returned status code {response.status}",
-                        "symbol": ticker,
-                        "quarter": quarter
-                    }
+                    raise aiohttp.ClientResponseError(
+                        response.request_info,
+                        response.history,
+                        status=response.status
+                    )
+                return await response.json()
 
-                data = await response.json()
+        try:
+            print(f"Fetching earnings transcript for {ticker} - {quarter}...")
+            data = await cb.call(_make_request) if cb else await _make_request()
 
-                # Check for API errors
-                if "Error Message" in data:
-                    return {
-                        "error": data["Error Message"],
-                        "symbol": ticker,
-                        "quarter": quarter
-                    }
-
-                if "Note" in data:
-                    # Rate limit or other API notice
-                    return {
-                        "error": "API rate limit reached. Please try again later.",
-                        "symbol": ticker,
-                        "quarter": quarter,
-                        "note": data["Note"]
-                    }
-
-                # Check if transcript data exists
-                if "transcript" not in data or not data["transcript"]:
-                    return {
-                        "error": f"No earnings transcript available for {ticker} in {quarter}",
-                        "symbol": ticker,
-                        "quarter": quarter
-                    }
-
-                # Process and enrich the transcript data
-                processed_transcript = self._process_transcript(data["transcript"])
-
+            # Check for API errors
+            if "Error Message" in data:
                 return {
-                    "symbol": data.get("symbol", ticker.upper()),
-                    "quarter": data.get("quarter", quarter),
-                    "transcript": processed_transcript,
-                    "total_segments": len(processed_transcript),
-                    "fetched_at": datetime.utcnow().isoformat()
+                    "error": data["Error Message"],
+                    "symbol": ticker,
+                    "quarter": quarter
                 }
 
+            if "Note" in data:
+                # Rate limit or other API notice
+                return {
+                    "error": "API rate limit reached. Please try again later.",
+                    "symbol": ticker,
+                    "quarter": quarter,
+                    "note": data["Note"]
+                }
+
+            # Check if transcript data exists
+            if "transcript" not in data or not data["transcript"]:
+                return {
+                    "error": f"No earnings transcript available for {ticker} in {quarter}",
+                    "symbol": ticker,
+                    "quarter": quarter
+                }
+
+            # Process and enrich the transcript data
+            processed_transcript = self._process_transcript(data["transcript"])
+
+            return {
+                "symbol": data.get("symbol", ticker.upper()),
+                "quarter": data.get("quarter", quarter),
+                "transcript": processed_transcript,
+                "total_segments": len(processed_transcript),
+                "fetched_at": datetime.utcnow().isoformat()
+            }
+
+        except CircuitBreakerOpenError:
+            logger.warning(f"[ALPHA_VANTAGE] Circuit breaker open for earnings transcript {ticker} - {quarter}")
+            return {
+                "error": "Service temporarily unavailable (circuit breaker open)",
+                "symbol": ticker,
+                "quarter": quarter
+            }
         except asyncio.TimeoutError:
             print(f"Timeout fetching earnings transcript for {ticker} - {quarter}")
             return {
@@ -311,68 +324,76 @@ class EarningsService:
                 "earnings_events": []
             }
 
-        try:
-            session = await http_client.get_session()
-            url = (
-                f"https://www.alphavantage.co/query?"
-                f"function=EARNINGS_CALENDAR"
-                f"&symbol={ticker.upper()}"
-                f"&horizon={horizon}"
-                f"&apikey={self.alpha_vantage_api_key}"
-            )
+        cb = get_circuit_breaker("alpha_vantage")
+        session = await http_client.get_session()
+        url = (
+            f"https://www.alphavantage.co/query?"
+            f"function=EARNINGS_CALENDAR"
+            f"&symbol={ticker.upper()}"
+            f"&horizon={horizon}"
+            f"&apikey={self.alpha_vantage_api_key}"
+        )
 
-            print(f"Fetching earnings calendar for {ticker} with horizon {horizon}...")
-
+        async def _make_request():
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status != 200:
-                    return {
-                        "error": f"API returned status code {response.status}",
-                        "ticker": ticker,
-                        "earnings_events": []
-                    }
+                    raise aiohttp.ClientResponseError(
+                        response.request_info,
+                        response.history,
+                        status=response.status
+                    )
+                return await response.text()
 
-                # EARNINGS_CALENDAR returns CSV format, not JSON
-                text_data = await response.text()
+        try:
+            print(f"Fetching earnings calendar for {ticker} with horizon {horizon}...")
+            text_data = await cb.call(_make_request) if cb else await _make_request()
 
-                # Check for API errors in text response
-                if "Error Message" in text_data:
-                    return {
-                        "error": "API error occurred",
-                        "ticker": ticker,
-                        "earnings_events": []
-                    }
-
-                if "Premium Endpoint" in text_data or "higher API tier" in text_data:
-                    return {
-                        "error": "Earnings calendar requires premium Alpha Vantage subscription",
-                        "ticker": ticker,
-                        "earnings_events": []
-                    }
-
-                if "Thank you for using Alpha Vantage" in text_data and "rate limit" in text_data.lower():
-                    return {
-                        "error": "API rate limit reached. Please try again later.",
-                        "ticker": ticker,
-                        "earnings_events": []
-                    }
-
-                # Parse CSV data
-                events = self._parse_earnings_calendar_csv(text_data, ticker)
-
-                if not events:
-                    return {
-                        "error": f"No earnings calendar data available for {ticker}",
-                        "ticker": ticker,
-                        "earnings_events": []
-                    }
-
+            # Check for API errors in text response
+            if "Error Message" in text_data:
                 return {
-                    "ticker": ticker.upper(),
-                    "earnings_events": events,
-                    "total_events": len(events),
-                    "fetched_at": datetime.utcnow().isoformat()
+                    "error": "API error occurred",
+                    "ticker": ticker,
+                    "earnings_events": []
                 }
 
+            if "Premium Endpoint" in text_data or "higher API tier" in text_data:
+                return {
+                    "error": "Earnings calendar requires premium Alpha Vantage subscription",
+                    "ticker": ticker,
+                    "earnings_events": []
+                }
+
+            if "Thank you for using Alpha Vantage" in text_data and "rate limit" in text_data.lower():
+                return {
+                    "error": "API rate limit reached. Please try again later.",
+                    "ticker": ticker,
+                    "earnings_events": []
+                }
+
+            # Parse CSV data
+            events = self._parse_earnings_calendar_csv(text_data, ticker)
+
+            if not events:
+                return {
+                    "error": f"No earnings calendar data available for {ticker}",
+                    "ticker": ticker,
+                    "earnings_events": []
+                }
+
+            return {
+                "ticker": ticker.upper(),
+                "earnings_events": events,
+                "total_events": len(events),
+                "fetched_at": datetime.utcnow().isoformat()
+            }
+
+        except CircuitBreakerOpenError:
+            logger.warning(f"[ALPHA_VANTAGE] Circuit breaker open for earnings calendar {ticker}")
+            return {
+                "error": "Service temporarily unavailable (circuit breaker open)",
+                "ticker": ticker,
+                "earnings_events": []
+            }
         except asyncio.TimeoutError:
             print(f"Timeout fetching earnings calendar for {ticker}")
             return {

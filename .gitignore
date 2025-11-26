@@ -118,3 +118,4 @@ lib-cov
 
 # nyc test coverage
 .nyc_output
+.claude/settings.local.json

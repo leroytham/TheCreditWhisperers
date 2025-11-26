@@ -9,9 +9,13 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
+import logging
 from app.core.cache import cache_result, async_cache_result
 from app.core.config import settings
 from app.core.http_client import http_client
+from app.core.circuit_breakers import get_circuit_breaker, CircuitBreakerOpenError
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -484,27 +488,36 @@ class StockDataService:
             print(f"Cannot fetch company overview for {ticker}: Alpha Vantage API key not configured")
             return None
 
-        try:
-            url = (
-                f"https://www.alphavantage.co/query?"
-                f"function=OVERVIEW&symbol={ticker}&apikey={self.alpha_vantage_api_key}"
-            )
+        cb = get_circuit_breaker("alpha_vantage")
+        url = (
+            f"https://www.alphavantage.co/query?"
+            f"function=OVERVIEW&symbol={ticker}&apikey={self.alpha_vantage_api_key}"
+        )
 
+        async def _make_request():
             session = await http_client.get_session()
             async with session.get(url) as response:
                 if response.status != 200:
-                    print(f"Error fetching company overview for {ticker}: HTTP {response.status}")
-                    return None
+                    raise aiohttp.ClientResponseError(
+                        response.request_info,
+                        response.history,
+                        status=response.status
+                    )
+                return await response.json()
 
-                data = await response.json()
+        try:
+            data = await cb.call(_make_request) if cb else await _make_request()
 
-                # Check if we got valid data (Alpha Vantage returns empty dict or error message for invalid tickers)
-                if not data or "Symbol" not in data:
-                    print(f"No company overview data available for {ticker}")
-                    return None
+            # Check if we got valid data (Alpha Vantage returns empty dict or error message for invalid tickers)
+            if not data or "Symbol" not in data:
+                print(f"No company overview data available for {ticker}")
+                return None
 
-                return data
+            return data
 
+        except CircuitBreakerOpenError:
+            logger.warning(f"[ALPHA_VANTAGE] Circuit breaker open for company overview {ticker}")
+            return None
         except Exception as e:
             print(f"Error fetching company overview for {ticker}: {e}")
             return None

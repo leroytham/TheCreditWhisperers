@@ -16,6 +16,7 @@ from app.models import News, SentimentScore, RelevanceScore
 from app.core.cache import async_cache_result, cache_result
 from app.core.config import settings
 from app.core.http_client import http_client
+from app.core.circuit_breakers import get_circuit_breaker, CircuitBreakerOpenError
 from app.services.sector_service import sector_service_instance
 from app.services.sector_sentiment_service import sector_sentiment_service
 from app.config.yfinance_sector_mapping import (
@@ -100,153 +101,161 @@ class NewsService:
         if not self.alpha_vantage_api_key:
             return []
 
-        try:
-            # Build URL with optional time parameters
-            url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&limit={limit}&tickers={ticker}&apikey={self.alpha_vantage_api_key}"
+        cb = get_circuit_breaker("alpha_vantage")
 
-            if time_from:
-                url += f"&time_from={time_from}"
-            if time_to:
-                url += f"&time_to={time_to}"
+        # Build URL with optional time parameters
+        url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&limit={limit}&tickers={ticker}&apikey={self.alpha_vantage_api_key}"
 
+        if time_from:
+            url += f"&time_from={time_from}"
+        if time_to:
+            url += f"&time_to={time_to}"
+
+        async def _make_request():
             async with session.get(url, timeout=30) as response:
                 response.raise_for_status()
-                data = await response.json()
+                return await response.json()
 
-                # Check for rate limit or API error messages
-                if "Note" in data:
-                    print(f"Alpha Vantage rate limit hit: {data['Note']}")
-                    return []
-                if "Information" in data:
-                    print(f"Alpha Vantage information message: {data['Information']}")
-                    return []
-                if "Error Message" in data:
-                    print(f"Alpha Vantage error: {data['Error Message']}")
-                    return []
+        try:
+            data = await cb.call(_make_request) if cb else await _make_request()
 
-                raw_data = data.get("feed", [])
+            # Check for rate limit or API error messages
+            if "Note" in data:
+                print(f"Alpha Vantage rate limit hit: {data['Note']}")
+                return []
+            if "Information" in data:
+                print(f"Alpha Vantage information message: {data['Information']}")
+                return []
+            if "Error Message" in data:
+                print(f"Alpha Vantage error: {data['Error Message']}")
+                return []
 
-                if not raw_data:
-                    return []
+            raw_data = data.get("feed", [])
 
-                news_list = []
-                for article in raw_data:
-                    # Parse publish date and timestamp
-                    time_published = article.get("time_published", "")
-                    if not time_published:
-                        continue
+            if not raw_data:
+                return []
 
-                    try:
-                        # Parse the full datetime with timezone awareness
-                        pub_datetime = datetime.strptime(time_published, "%Y%m%dT%H%M%S")
-                        pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
-                        pub_date = pub_datetime.strftime('%Y-%m-%d')
-                    except ValueError:
-                        continue
+            news_list = []
+            for article in raw_data:
+                # Parse publish date and timestamp
+                time_published = article.get("time_published", "")
+                if not time_published:
+                    continue
 
-                    ticker_sentiments = article.get("ticker_sentiment", [])
+                try:
+                    # Parse the full datetime with timezone awareness
+                    pub_datetime = datetime.strptime(time_published, "%Y%m%dT%H%M%S")
+                    pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+                    pub_date = pub_datetime.strftime('%Y-%m-%d')
+                except ValueError:
+                    continue
 
-                    # Use Alpha Vantage's summary instead of web scraping
-                    body_content = article.get("summary", "")
+                ticker_sentiments = article.get("ticker_sentiment", [])
 
-                    if preserve_all_tickers:
-                        # SECTOR MODE: Preserve all ticker sentiments for multi-ticker processing
-                        # Convert all ticker sentiment scores to floats for easier processing
-                        processed_ticker_sentiments = []
-                        for ts in ticker_sentiments:
-                            try:
-                                processed_ts = {
-                                    "ticker": ts.get("ticker", ""),
-                                    "ticker_sentiment_score": float(ts.get("ticker_sentiment_score", "0")),
-                                    "ticker_sentiment_label": ts.get("ticker_sentiment_label", "Neutral"),
-                                    "relevance_score": float(ts.get("relevance_score", "0")) if ts.get("relevance_score") else 0.0
-                                }
-                                processed_ticker_sentiments.append(processed_ts)
-                            except (ValueError, TypeError):
-                                continue
+                # Use Alpha Vantage's summary instead of web scraping
+                body_content = article.get("summary", "")
 
-                        # Get overall sentiment from article
-                        overall_sentiment_score = article.get("overall_sentiment_score")
-                        overall_sentiment_label = article.get("overall_sentiment_label", "Neutral")
-                        
-                        # Convert overall_sentiment_score to float if it exists
-                        if overall_sentiment_score is not None:
-                            try:
-                                overall_sentiment_score = float(overall_sentiment_score)
-                            except (ValueError, TypeError):
-                                overall_sentiment_score = 0.0
-                        else:
-                            overall_sentiment_score = 0.0
-
-                        # Include article with normalized field names for frontend compatibility
-                        news_list.append({
-                            "title": article.get("title"),
-                            "url": article.get("url"),  # Normalized from 'link' to 'url'
-                            "link": article.get("url"),  # Keep for backwards compatibility
-                            "source": article.get("source"),  # Normalized from 'provider' to 'source'
-                            "provider": article.get("source"),  # Keep for backwards compatibility
-                            "source_domain": article.get("source_domain"),  # Add for modal
-                            "time_published": time_published,  # Add for CompactNewsCard
-                            "publish_date": pub_date,
-                            "publish_timestamp": pub_datetime.isoformat(),
-                            "summary": body_content,  # Normalized from 'body' to 'summary'
-                            "body": body_content,  # Keep for backwards compatibility
-                            "banner_image": article.get("banner_image"),
-                            "category_within_source": article.get("category_within_source"),  # Add for modal
-                            "authors": article.get("authors", []),  # Add for modal
-                            "ticker_sentiment": processed_ticker_sentiments,  # Full array!
-                            "overall_sentiment_score": overall_sentiment_score,  # Add for CompactNewsCard
-                            "overall_sentiment_label": overall_sentiment_label,  # Add for CompactNewsCard
-                            "topics": article.get("topics", [])
-                        })
-                    else:
-                        # SINGLE TICKER MODE: Extract sentiment for queried ticker only (original behavior)
-                        ticker_sentiment_score = None
-                        ticker_sentiment_label = "Neutral"
-                        ticker_relevance_score = None
-
-                        # Case-insensitive ticker matching
-                        for ts in ticker_sentiments:
-                            if ts.get("ticker", "").upper() == ticker.upper():
-                                # Convert string score to float
-                                score_str = ts.get("ticker_sentiment_score", "0")
-                                try:
-                                    ticker_sentiment_score = float(score_str)
-                                except (ValueError, TypeError):
-                                    ticker_sentiment_score = 0.0
-
-                                ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
-
-                                # Extract relevance score if available
-                                relevance_str = ts.get("relevance_score")
-                                if relevance_str is not None:
-                                    try:
-                                        ticker_relevance_score = float(relevance_str)
-                                    except (ValueError, TypeError):
-                                        ticker_relevance_score = None
-
-                                break
-
-                        # Skip articles without sentiment score for this ticker
-                        if ticker_sentiment_score is None:
+                if preserve_all_tickers:
+                    # SECTOR MODE: Preserve all ticker sentiments for multi-ticker processing
+                    # Convert all ticker sentiment scores to floats for easier processing
+                    processed_ticker_sentiments = []
+                    for ts in ticker_sentiments:
+                        try:
+                            processed_ts = {
+                                "ticker": ts.get("ticker", ""),
+                                "ticker_sentiment_score": float(ts.get("ticker_sentiment_score", "0")),
+                                "ticker_sentiment_label": ts.get("ticker_sentiment_label", "Neutral"),
+                                "relevance_score": float(ts.get("relevance_score", "0")) if ts.get("relevance_score") else 0.0
+                            }
+                            processed_ticker_sentiments.append(processed_ts)
+                        except (ValueError, TypeError):
                             continue
 
-                        news_list.append({
-                            "title": article.get("title"),
-                            "link": article.get("url"),
-                            "provider": article.get("source"),
-                            "publish_date": pub_date,
-                            "publish_timestamp": pub_datetime.isoformat(),
-                            "body": body_content,
-                            "ticker_sentiment_score": ticker_sentiment_score,
-                            "ticker_sentiment_label": ticker_sentiment_label,
-                            "ticker_relevance_score": ticker_relevance_score,
-                            "image": article.get("banner_image"),
-                            "topics": article.get("topics", [])
-                        })
+                    # Get overall sentiment from article
+                    overall_sentiment_score = article.get("overall_sentiment_score")
+                    overall_sentiment_label = article.get("overall_sentiment_label", "Neutral")
 
-                return news_list
+                    # Convert overall_sentiment_score to float if it exists
+                    if overall_sentiment_score is not None:
+                        try:
+                            overall_sentiment_score = float(overall_sentiment_score)
+                        except (ValueError, TypeError):
+                            overall_sentiment_score = 0.0
+                    else:
+                        overall_sentiment_score = 0.0
 
+                    # Include article with normalized field names for frontend compatibility
+                    news_list.append({
+                        "title": article.get("title"),
+                        "url": article.get("url"),  # Normalized from 'link' to 'url'
+                        "link": article.get("url"),  # Keep for backwards compatibility
+                        "source": article.get("source"),  # Normalized from 'provider' to 'source'
+                        "provider": article.get("source"),  # Keep for backwards compatibility
+                        "source_domain": article.get("source_domain"),  # Add for modal
+                        "time_published": time_published,  # Add for CompactNewsCard
+                        "publish_date": pub_date,
+                        "publish_timestamp": pub_datetime.isoformat(),
+                        "summary": body_content,  # Normalized from 'body' to 'summary'
+                        "body": body_content,  # Keep for backwards compatibility
+                        "banner_image": article.get("banner_image"),
+                        "category_within_source": article.get("category_within_source"),  # Add for modal
+                        "authors": article.get("authors", []),  # Add for modal
+                        "ticker_sentiment": processed_ticker_sentiments,  # Full array!
+                        "overall_sentiment_score": overall_sentiment_score,  # Add for CompactNewsCard
+                        "overall_sentiment_label": overall_sentiment_label,  # Add for CompactNewsCard
+                        "topics": article.get("topics", [])
+                    })
+                else:
+                    # SINGLE TICKER MODE: Extract sentiment for queried ticker only (original behavior)
+                    ticker_sentiment_score = None
+                    ticker_sentiment_label = "Neutral"
+                    ticker_relevance_score = None
+
+                    # Case-insensitive ticker matching
+                    for ts in ticker_sentiments:
+                        if ts.get("ticker", "").upper() == ticker.upper():
+                            # Convert string score to float
+                            score_str = ts.get("ticker_sentiment_score", "0")
+                            try:
+                                ticker_sentiment_score = float(score_str)
+                            except (ValueError, TypeError):
+                                ticker_sentiment_score = 0.0
+
+                            ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
+
+                            # Extract relevance score if available
+                            relevance_str = ts.get("relevance_score")
+                            if relevance_str is not None:
+                                try:
+                                    ticker_relevance_score = float(relevance_str)
+                                except (ValueError, TypeError):
+                                    ticker_relevance_score = None
+
+                            break
+
+                    # Skip articles without sentiment score for this ticker
+                    if ticker_sentiment_score is None:
+                        continue
+
+                    news_list.append({
+                        "title": article.get("title"),
+                        "link": article.get("url"),
+                        "provider": article.get("source"),
+                        "publish_date": pub_date,
+                        "publish_timestamp": pub_datetime.isoformat(),
+                        "body": body_content,
+                        "ticker_sentiment_score": ticker_sentiment_score,
+                        "ticker_sentiment_label": ticker_sentiment_label,
+                        "ticker_relevance_score": ticker_relevance_score,
+                        "image": article.get("banner_image"),
+                        "topics": article.get("topics", [])
+                    })
+
+            return news_list
+
+        except CircuitBreakerOpenError:
+            logger.warning(f"[ALPHA_VANTAGE] Circuit breaker open, skipping request for {ticker}")
+            return []
         except Exception as e:
             print(f"Error fetching news from Alpha Vantage for {ticker}: {e}")
             return []
@@ -502,32 +511,39 @@ class NewsService:
         if not self.finnhub_api_token:
             return []
 
-        try:
-            url = f"https://finnhub.io/api/v1/company-news?symbol={ticker}&from={start_date_str}&to={end_date_str}&token={self.finnhub_api_token}"
+        cb = get_circuit_breaker("finnhub")
+        url = f"https://finnhub.io/api/v1/company-news?symbol={ticker}&from={start_date_str}&to={end_date_str}&token={self.finnhub_api_token}"
+
+        async def _make_request():
             async with session.get(url, timeout=10) as response:
                 response.raise_for_status()
-                raw_news = await response.json()
-                if not raw_news:
-                    return []
+                return await response.json()
 
-                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_news]
+        try:
+            raw_news = await cb.call(_make_request) if cb else await _make_request()
+            if not raw_news:
+                return []
 
-                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+            scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_news]
+            results = await asyncio.gather(*(task for _, task in scrape_tasks))
 
-                news_list = []
-                for i, (article, _) in enumerate(scrape_tasks):
-                    timestamp = article.get("datetime")
-                    pub_datetime = datetime.fromtimestamp(timestamp)
-                    body_content = results[i] or article.get("summary", "")
-                    news_list.append({
-                        "title": article.get("headline"),
-                        "link": article.get("url"),
-                        "provider": article.get("source"),
-                        "publish_date": pub_datetime.strftime('%Y-%m-%d'),
-                        "publish_timestamp": pub_datetime.isoformat(),
-                        "body": body_content
-                    })
-                return news_list
+            news_list = []
+            for i, (article, _) in enumerate(scrape_tasks):
+                timestamp = article.get("datetime")
+                pub_datetime = datetime.fromtimestamp(timestamp)
+                body_content = results[i] or article.get("summary", "")
+                news_list.append({
+                    "title": article.get("headline"),
+                    "link": article.get("url"),
+                    "provider": article.get("source"),
+                    "publish_date": pub_datetime.strftime('%Y-%m-%d'),
+                    "publish_timestamp": pub_datetime.isoformat(),
+                    "body": body_content
+                })
+            return news_list
+        except CircuitBreakerOpenError:
+            logger.warning(f"[FINNHUB] Circuit breaker open, skipping request for {ticker}")
+            return []
         except Exception as e:
             print(f"Error fetching news from Finnhub for {ticker}: {e}")
             return []
@@ -537,36 +553,44 @@ class NewsService:
         if not self.news_api_key:
             return []
 
-        try:
-            url = f"https://newsapi.org/v2/everything?q={ticker}&from={start_date_str}&to={end_date_str}&sortBy=publishedAt&apiKey={self.news_api_key}"
+        cb = get_circuit_breaker("newsapi")
+        url = f"https://newsapi.org/v2/everything?q={ticker}&from={start_date_str}&to={end_date_str}&sortBy=publishedAt&apiKey={self.news_api_key}"
+
+        async def _make_request():
             async with session.get(url, timeout=10) as response:
                 response.raise_for_status()
-                raw_data = (await response.json()).get("articles", [])
-                if not raw_data:
-                    return []
+                return (await response.json()).get("articles", [])
 
-                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_data]
-                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+        try:
+            raw_data = await cb.call(_make_request) if cb else await _make_request()
+            if not raw_data:
+                return []
 
-                news_list = []
-                for i, (article, _) in enumerate(scrape_tasks):
-                    pub_date_iso = article.get("publishedAt")
-                    if pub_date_iso:
-                        pub_datetime = datetime.fromisoformat(pub_date_iso.replace('Z', '+00:00'))
-                        pub_date = pub_datetime.strftime('%Y-%m-%d')
-                    else:
-                        continue
+            scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_data]
+            results = await asyncio.gather(*(task for _, task in scrape_tasks))
 
-                    body_content = results[i] or article.get("description", "")
-                    news_list.append({
-                        "title": article.get("title"),
-                        "link": article.get("url"),
-                        "provider": article.get("source", {}).get("name", "Unknown"),
-                        "publish_date": pub_date,
-                        "publish_timestamp": pub_datetime.isoformat(),
-                        "body": body_content
-                    })
-                return news_list
+            news_list = []
+            for i, (article, _) in enumerate(scrape_tasks):
+                pub_date_iso = article.get("publishedAt")
+                if pub_date_iso:
+                    pub_datetime = datetime.fromisoformat(pub_date_iso.replace('Z', '+00:00'))
+                    pub_date = pub_datetime.strftime('%Y-%m-%d')
+                else:
+                    continue
+
+                body_content = results[i] or article.get("description", "")
+                news_list.append({
+                    "title": article.get("title"),
+                    "link": article.get("url"),
+                    "provider": article.get("source", {}).get("name", "Unknown"),
+                    "publish_date": pub_date,
+                    "publish_timestamp": pub_datetime.isoformat(),
+                    "body": body_content
+                })
+            return news_list
+        except CircuitBreakerOpenError:
+            logger.warning(f"[NEWSAPI] Circuit breaker open, skipping request for {ticker}")
+            return []
         except Exception as e:
             print(f"Error fetching news from NewsAPI for {ticker}: {e}")
             return []
@@ -576,36 +600,44 @@ class NewsService:
         if not self.marketaux_api_key:
             return []
 
-        try:
-            url = f"https://api.marketaux.com/v1/news/all?symbols={ticker}&published_after={start_date_str}&api_token={self.marketaux_api_key}"
+        cb = get_circuit_breaker("marketaux")
+        url = f"https://api.marketaux.com/v1/news/all?symbols={ticker}&published_after={start_date_str}&api_token={self.marketaux_api_key}"
+
+        async def _make_request():
             async with session.get(url, timeout=10) as response:
                 response.raise_for_status()
-                raw_data = (await response.json()).get("data", [])
-                if not raw_data:
-                    return []
+                return (await response.json()).get("data", [])
 
-                scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_data]
-                results = await asyncio.gather(*(task for _, task in scrape_tasks))
+        try:
+            raw_data = await cb.call(_make_request) if cb else await _make_request()
+            if not raw_data:
+                return []
 
-                news_list = []
-                for i, (article, _) in enumerate(scrape_tasks):
-                    pub_date_iso = article.get("published_at")
-                    if pub_date_iso:
-                        pub_datetime = datetime.fromisoformat(pub_date_iso)
-                        pub_date = pub_datetime.strftime('%Y-%m-%d')
-                    else:
-                        continue
+            scrape_tasks = [(article, self._scrape_article_content(session, article.get("url"))) for article in raw_data]
+            results = await asyncio.gather(*(task for _, task in scrape_tasks))
 
-                    body_content = results[i] or article.get("snippet", "")
-                    news_list.append({
-                        "title": article.get("title"),
-                        "link": article.get("url"),
-                        "provider": article.get("source"),
-                        "publish_date": pub_date,
-                        "publish_timestamp": pub_datetime.isoformat(),
-                        "body": body_content
-                    })
-                return news_list
+            news_list = []
+            for i, (article, _) in enumerate(scrape_tasks):
+                pub_date_iso = article.get("published_at")
+                if pub_date_iso:
+                    pub_datetime = datetime.fromisoformat(pub_date_iso)
+                    pub_date = pub_datetime.strftime('%Y-%m-%d')
+                else:
+                    continue
+
+                body_content = results[i] or article.get("snippet", "")
+                news_list.append({
+                    "title": article.get("title"),
+                    "link": article.get("url"),
+                    "provider": article.get("source"),
+                    "publish_date": pub_date,
+                    "publish_timestamp": pub_datetime.isoformat(),
+                    "body": body_content
+                })
+            return news_list
+        except CircuitBreakerOpenError:
+            logger.warning(f"[MARKETAUX] Circuit breaker open, skipping request for {ticker}")
+            return []
         except Exception as e:
             print(f"Error fetching news from MarketAux for {ticker}: {e}")
             return []

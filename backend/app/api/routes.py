@@ -24,6 +24,7 @@ from app.services.portfolio_sentiment_service import portfolio_sentiment_service
 from app.core.cache import redis_cache, async_cache_result, cache_result
 from app.core.config import settings
 from app.core.http_client import http_client
+from app.core.circuit_breakers import get_all_status, reset_circuit_breaker
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -126,6 +127,46 @@ async def health_check():
     # Return appropriate HTTP status code
     status_code = 200 if health_status["status"] == "healthy" else 503
     return health_status
+
+
+@router.get("/circuit-breakers")
+async def get_circuit_breaker_status():
+    """
+    Get status of all circuit breakers for external API monitoring.
+
+    Returns status for each API including:
+    - state: CLOSED (normal), OPEN (blocking), HALF_OPEN (testing)
+    - failure_count: Number of consecutive failures
+    - success_count: Successes in half-open state
+    - last_failure_time: Timestamp of last failure
+
+    Use this endpoint for monitoring API health and debugging rate limit issues.
+    """
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "circuit_breakers": get_all_status()
+    }
+
+
+@router.post("/circuit-breakers/{api_name}/reset")
+async def reset_circuit_breaker_endpoint(api_name: str):
+    """
+    Manually reset a circuit breaker to CLOSED state.
+    Use with caution - only for admin/debugging purposes.
+
+    Valid API names: alpha_vantage, finnhub, newsapi, marketaux, yahoo_finance
+    """
+    success = reset_circuit_breaker(api_name)
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Circuit breaker not found for API: {api_name}"
+        )
+    return {
+        "message": f"Circuit breaker for {api_name} reset successfully",
+        "new_status": get_all_status().get(api_name)
+    }
+
 
 @router.get("/stocks/{ticker}/historical-data")
 def get_historical_stock_data(ticker: str, timeframe: str = "1M"):

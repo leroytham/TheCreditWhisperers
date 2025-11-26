@@ -13,6 +13,7 @@ import aiohttp
 import pandas as pd
 from app.core.cache import async_cache_result
 from app.core.http_client import http_client
+from app.core.circuit_breakers import get_circuit_breaker, CircuitBreakerOpenError
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +352,7 @@ class BatchNewsService:
         limit: int
     ) -> List[Dict]:
         """Fetch news from Alpha Vantage for multiple tickers."""
+        cb = get_circuit_breaker("alpha_vantage")
         url = f"https://www.alphavantage.co/query"
         params = {
             "function": "NEWS_SENTIMENT",
@@ -362,17 +364,24 @@ class BatchNewsService:
         if time_from:
             params["time_from"] = time_from
 
-        try:
+        async def _make_request():
             session = await http_client.get_session()
             async with session.get(url, params=params, timeout=30) as response:
-                data = await response.json()
+                response.raise_for_status()
+                return await response.json()
 
-                if "Note" in data:  # Rate limit
-                    logger.warning(f"[BATCH-NEWS] Rate limit hit")
-                    return []
+        try:
+            data = await cb.call(_make_request) if cb else await _make_request()
 
-                return data.get("feed", [])
+            if "Note" in data:  # Rate limit
+                logger.warning(f"[BATCH-NEWS] Rate limit hit")
+                return []
 
+            return data.get("feed", [])
+
+        except CircuitBreakerOpenError:
+            logger.warning("[BATCH-NEWS] Circuit breaker open for Alpha Vantage")
+            return []
         except asyncio.TimeoutError:
             logger.error("[BATCH-NEWS] Request timeout")
             return []
