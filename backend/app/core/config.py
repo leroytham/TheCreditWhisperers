@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     AZURE_AUTHORITY: str = "https://login.microsoftonline.com/common"
     AZURE_REDIRECT_URI: Optional[str] = None  # Auto-generated if not provided
 
+    # Error Tracking (Sentry)
+    SENTRY_DSN: Optional[str] = None  # Set to enable Sentry error tracking
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1  # 10% of transactions for profiling
+
     def get_api_base_url(self) -> str:
         """
         Get the API base URL, supporting both new (API_BASE_URL) and legacy (API_BASE) variable names.

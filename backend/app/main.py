@@ -20,6 +20,48 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# SENTRY ERROR TRACKING
+# =============================================================================
+# Initialize Sentry for error tracking and performance monitoring.
+# Set SENTRY_DSN environment variable to enable.
+if settings.SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        from sentry_sdk.integrations.logging import LoggingIntegration
+
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            # Performance monitoring
+            traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+            # Profiling (requires Sentry Pro)
+            profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
+            # Environment tagging
+            environment=settings.ENVIRONMENT,
+            # Integrations
+            integrations=[
+                FastApiIntegration(transaction_style="endpoint"),
+                StarletteIntegration(transaction_style="endpoint"),
+                LoggingIntegration(
+                    level=logging.INFO,        # Capture INFO and above as breadcrumbs
+                    event_level=logging.ERROR  # Send ERROR and above as events
+                ),
+            ],
+            # Don't send PII (personal data)
+            send_default_pii=False,
+            # Release tracking (set via CI/CD)
+            release=os.getenv("APP_VERSION", "1.0.0"),
+        )
+        logger.info("✅ Sentry error tracking initialized")
+    except ImportError:
+        logger.warning("⚠️ sentry-sdk not installed. Error tracking disabled.")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to initialize Sentry: {e}")
+else:
+    logger.info("ℹ️ Sentry DSN not configured. Error tracking disabled.")
+
 # Suppress resource_tracker warnings from loky (used by sentence-transformers, torch)
 # These semaphore objects are properly cleaned up by the OS, but loky's tracker
 # complains about them during shutdown. This is a known issue with loky.
