@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     # Prometheus Metrics
     METRICS_ENABLED: bool = True  # Enable/disable Prometheus metrics endpoint
 
+    # Redis Pub/Sub Configuration (for distributed WebSocket notifications)
+    PUBSUB_ENABLED: bool = True                     # Enable/disable Redis Pub/Sub
+    PUBSUB_RECONNECT_DELAY: int = 5                 # Seconds between reconnect attempts
+    PUBSUB_MAX_RECONNECT_ATTEMPTS: int = 10         # Max reconnection attempts before giving up
+    PUBSUB_MESSAGE_TIMEOUT: float = 5.0             # Timeout for message handler (seconds)
+
     def get_api_base_url(self) -> str:
         """
         Get the API base URL, supporting both new (API_BASE_URL) and legacy (API_BASE) variable names.

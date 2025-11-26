@@ -9,7 +9,7 @@ from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
 from .api.health_routes import router as health_router
 from .api.metrics_routes import router as metrics_router
-from .api.websocket import websocket_endpoint
+from .api.websocket import websocket_endpoint, manager as ws_manager
 from .database import create_indexes
 from .core.config import settings
 from .core.http_client import http_client
@@ -280,6 +280,15 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"⚠️ Failed to initialize circuit breaker metrics: {e}")
 
+    # Initialize Redis Pub/Sub for distributed WebSocket notifications
+    if settings.PUBSUB_ENABLED:
+        try:
+            await ws_manager.initialize_pubsub()
+            logger.info("✅ WebSocket Pub/Sub initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to initialize WebSocket Pub/Sub: {e}")
+            logger.warning("WebSocket notifications will be local-only (single instance)")
+
     logger.info("Application startup complete")
 
 # Cleanup handler for multiprocessing resources
@@ -297,6 +306,13 @@ async def shutdown_event():
         logger.info("✅ HTTP connection pool closed")
     except Exception as e:
         logger.warning(f"⚠️ Error closing HTTP connection pool: {e}")
+
+    # Stop Redis Pub/Sub for WebSocket notifications
+    try:
+        await ws_manager.shutdown_pubsub()
+        logger.info("✅ WebSocket Pub/Sub stopped")
+    except Exception as e:
+        logger.warning(f"⚠️ Error stopping WebSocket Pub/Sub: {e}")
 
     # Force cleanup of any remaining loky executors
     try:
