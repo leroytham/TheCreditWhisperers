@@ -12,6 +12,7 @@ import yfinance as yf
 import aiohttp
 import pandas as pd
 from app.core.cache import async_cache_result
+from app.core.http_client import http_client
 
 logger = logging.getLogger(__name__)
 
@@ -361,23 +362,23 @@ class BatchNewsService:
         if time_from:
             params["time_from"] = time_from
 
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, params=params, timeout=30) as response:
-                    data = await response.json()
+        try:
+            session = await http_client.get_session()
+            async with session.get(url, params=params, timeout=30) as response:
+                data = await response.json()
 
-                    if "Note" in data:  # Rate limit
-                        logger.warning(f"[BATCH-NEWS] Rate limit hit")
-                        return []
+                if "Note" in data:  # Rate limit
+                    logger.warning(f"[BATCH-NEWS] Rate limit hit")
+                    return []
 
-                    return data.get("feed", [])
+                return data.get("feed", [])
 
-            except asyncio.TimeoutError:
-                logger.error("[BATCH-NEWS] Request timeout")
-                return []
-            except Exception as e:
-                logger.error(f"[BATCH-NEWS] Request failed: {e}")
-                return []
+        except asyncio.TimeoutError:
+            logger.error("[BATCH-NEWS] Request timeout")
+            return []
+        except Exception as e:
+            logger.error(f"[BATCH-NEWS] Request failed: {e}")
+            return []
 
 
 # Singleton instances

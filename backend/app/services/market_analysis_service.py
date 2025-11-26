@@ -12,6 +12,7 @@ from .stock_data_service import stock_data_service
 from .news_service import NewsService
 from app.core.cache import cache_result
 from app.core.config import settings
+from app.core.http_client import http_client
 
 
 class MarketAnalysisService:
@@ -349,28 +350,28 @@ class MarketAnalysisService:
             all_articles = []
 
             async def fetch_all_constituent_news():
-                async with aiohttp.ClientSession() as session:
-                    tasks = []
-                    for constituent_ticker in top_tickers:
-                        task = self.news_service._fetch_alpha_vantage_news(
-                            session=session,
-                            ticker=constituent_ticker,
-                            time_from=time_from,
-                            time_to=time_to,
-                            limit=10,  # Fetch fewer per constituent
-                            preserve_all_tickers=True
-                        )
-                        tasks.append(task)
+                session = await http_client.get_session()
+                tasks = []
+                for constituent_ticker in top_tickers:
+                    task = self.news_service._fetch_alpha_vantage_news(
+                        session=session,
+                        ticker=constituent_ticker,
+                        time_from=time_from,
+                        time_to=time_to,
+                        limit=10,  # Fetch fewer per constituent
+                        preserve_all_tickers=True
+                    )
+                    tasks.append(task)
 
-                    # Fetch all in parallel
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                # Fetch all in parallel
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    # Flatten results
-                    for result in results:
-                        if isinstance(result, list):
-                            all_articles.extend(result)
+                # Flatten results
+                for result in results:
+                    if isinstance(result, list):
+                        all_articles.extend(result)
 
-                    return all_articles
+                return all_articles
 
             # Run the async function
             loop = asyncio.new_event_loop()
@@ -483,16 +484,16 @@ class MarketAnalysisService:
         try:
             # Use asyncio to run the async news fetching method
             async def fetch_news():
-                async with aiohttp.ClientSession() as session:
-                    articles = await self.news_service._fetch_alpha_vantage_news(
-                        session=session,
-                        ticker=ticker,
-                        time_from=time_from,
-                        time_to=time_to,
-                        limit=50,  # Fetch up to 50 articles for the 3-day window
-                        preserve_all_tickers=True  # Get full article data for modal display
-                    )
-                    return articles
+                session = await http_client.get_session()
+                articles = await self.news_service._fetch_alpha_vantage_news(
+                    session=session,
+                    ticker=ticker,
+                    time_from=time_from,
+                    time_to=time_to,
+                    limit=50,  # Fetch up to 50 articles for the 3-day window
+                    preserve_all_tickers=True  # Get full article data for modal display
+                )
+                return articles
 
             # Run the async function
             loop = asyncio.new_event_loop()

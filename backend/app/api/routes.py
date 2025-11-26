@@ -23,6 +23,7 @@ from app.services.portfolio_timeseries_service import portfolio_timeseries_servi
 from app.services.portfolio_sentiment_service import portfolio_sentiment_service
 from app.core.cache import redis_cache, async_cache_result, cache_result
 from app.core.config import settings
+from app.core.http_client import http_client
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -2769,17 +2770,16 @@ async def get_portfolio_news(username: str, account_name: str):
         # Feature 6: Parallel bulk fetching with preserve_all_tickers mode
         # Use asyncio.gather to fetch all ticker news in parallel
         import asyncio
-        import aiohttp
 
         # Fetch raw Alpha Vantage data for all tickers in parallel
-        async with aiohttp.ClientSession() as session:
-            raw_feed_tasks = [
-                news_service_instance._fetch_alpha_vantage_news(
-                    session, ticker, limit=1000, preserve_all_tickers=True
-                )
-                for ticker in unique_tickers
-            ]
-            raw_feed_results = await asyncio.gather(*raw_feed_tasks, return_exceptions=True)
+        session = await http_client.get_session()
+        raw_feed_tasks = [
+            news_service_instance._fetch_alpha_vantage_news(
+                session, ticker, limit=1000, preserve_all_tickers=True
+            )
+            for ticker in unique_tickers
+        ]
+        raw_feed_results = await asyncio.gather(*raw_feed_tasks, return_exceptions=True)
 
         # Collect all raw feed articles with full metadata
         all_raw_articles = []

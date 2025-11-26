@@ -12,6 +12,7 @@ from .api.metrics_routes import router as metrics_router
 from .api.websocket import websocket_endpoint
 from .database import create_indexes
 from .core.config import settings
+from .core.http_client import http_client
 import logging
 import warnings
 import os
@@ -256,6 +257,13 @@ async def startup_event():
         logger.error(f"Failed to create database indexes: {e}")
         # Continue startup even if index creation fails
 
+    # Initialize shared HTTP session with connection pooling
+    try:
+        await http_client.get_session()
+        logger.info("✅ HTTP connection pool initialized")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to initialize HTTP connection pool: {e}")
+
     logger.info("Application startup complete")
 
 # Cleanup handler for multiprocessing resources
@@ -266,6 +274,13 @@ async def shutdown_event():
     This helps prevent resource_tracker warnings from loky.
     """
     logger.info("Shutting down application and cleaning up resources...")
+
+    # Close shared HTTP session
+    try:
+        await http_client.close()
+        logger.info("✅ HTTP connection pool closed")
+    except Exception as e:
+        logger.warning(f"⚠️ Error closing HTTP connection pool: {e}")
 
     # Force cleanup of any remaining loky executors
     try:

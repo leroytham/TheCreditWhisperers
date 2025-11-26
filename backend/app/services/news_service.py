@@ -15,6 +15,7 @@ from typing import List, Dict, Tuple, Optional
 from app.models import News, SentimentScore, RelevanceScore
 from app.core.cache import async_cache_result, cache_result
 from app.core.config import settings
+from app.core.http_client import http_client
 from app.services.sector_service import sector_service_instance
 from app.services.sector_sentiment_service import sector_sentiment_service
 from app.config.yfinance_sector_mapping import (
@@ -708,8 +709,8 @@ class NewsService:
             months = self._get_timeframe_months(timeframe)
 
             # Fetch data with appropriate max_batches for timeframe
-            async with aiohttp.ClientSession() as session:
-                articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=months)
+            session = await http_client.get_session()
+            articles = await self._fetch_alpha_vantage_batch(session, ticker, months_back=months)
 
             if articles:
                 # Store in cache with timeframe-specific TTL
@@ -854,15 +855,15 @@ class NewsService:
         months = self._get_timeframe_months(timeframe, is_sector=is_sector)
         print(f"[NEWS FETCH] Fetching {months} months of data for {ticker} (timeframe: {timeframe}, is_sector: {is_sector})")
 
-        async with aiohttp.ClientSession() as session:
-            # Always use batch fetch to get sufficient data (1Y for most timeframes, 5Y for 5Y)
-            # The filtering to the actual timeframe is done in the API layer
-            articles = await self._fetch_alpha_vantage_batch(
-                session,
-                ticker,
-                months_back=months,
-                preserve_all_tickers=preserve_all_tickers
-            )
+        session = await http_client.get_session()
+        # Always use batch fetch to get sufficient data (1Y for most timeframes, 5Y for 5Y)
+        # The filtering to the actual timeframe is done in the API layer
+        articles = await self._fetch_alpha_vantage_batch(
+            session,
+            ticker,
+            months_back=months,
+            preserve_all_tickers=preserve_all_tickers
+        )
 
         print(f"[NEWS FETCH] Retrieved {len(articles) if articles else 0} articles for {ticker}")
 
@@ -894,94 +895,94 @@ class NewsService:
         Returns:
             List of news articles with ticker_sentiment_score included (if from Alpha Vantage)
         """
-        async with aiohttp.ClientSession() as session:
-            # Try Alpha Vantage first
-            news_articles = await self._fetch_alpha_vantage_news(session, ticker)
+        session = await http_client.get_session()
+        # Try Alpha Vantage first
+        news_articles = await self._fetch_alpha_vantage_news(session, ticker)
 
-            # Check if we should fall back to old methods
-            should_fallback = False
+        # Check if we should fall back to old methods
+        should_fallback = False
 
-            if not news_articles:
-                print(f"Alpha Vantage returned no articles for {ticker}. Falling back to multi-source aggregation.")
-                should_fallback = True
+        if not news_articles:
+            print(f"Alpha Vantage returned no articles for {ticker}. Falling back to multi-source aggregation.")
+            should_fallback = True
 
-            # If Alpha Vantage failed or returned no results, use fallback sources
-            if should_fallback:
-                print(f"Using fallback news sources for {ticker}...")
-                today = datetime.now(timezone.utc).date()
-                # Extend to 90 days to fetch maximum amount of news
-                ninety_days_ago = today - timedelta(days=89)
-                start_date_str = ninety_days_ago.strftime("%Y-%m-%d")
-                end_date_str = today.strftime("%Y-%m-%d")
+        # If Alpha Vantage failed or returned no results, use fallback sources
+        if should_fallback:
+            print(f"Using fallback news sources for {ticker}...")
+            today = datetime.now(timezone.utc).date()
+            # Extend to 90 days to fetch maximum amount of news
+            ninety_days_ago = today - timedelta(days=89)
+            start_date_str = ninety_days_ago.strftime("%Y-%m-%d")
+            end_date_str = today.strftime("%Y-%m-%d")
 
-                # Fetch from all fallback sources concurrently
-                tasks = [
-                    self._fetch_yfinance_news(session, ticker, count, ninety_days_ago, today),
-                    self._fetch_finnhub_news(session, ticker, start_date_str, end_date_str),
-                    self._fetch_newsapi_news(session, ticker, start_date_str, end_date_str),
-                    self._fetch_marketaux_news(session, ticker, start_date_str)
-                ]
+            # Fetch from all fallback sources concurrently
+            tasks = [
+                self._fetch_yfinance_news(session, ticker, count, ninety_days_ago, today),
+                self._fetch_finnhub_news(session, ticker, start_date_str, end_date_str),
+                self._fetch_newsapi_news(session, ticker, start_date_str, end_date_str),
+                self._fetch_marketaux_news(session, ticker, start_date_str)
+            ]
 
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                # Organize news by source and find earliest date per source
-                source_news = {
-                    'yfinance': [],
-                    'finnhub': [],
-                    'newsapi': [],
-                    'marketaux': []
-                }
-                source_names = ['yfinance', 'finnhub', 'newsapi', 'marketaux']
-                
-                for idx, res in enumerate(results):
-                    if isinstance(res, list) and res:
-                        source_news[source_names[idx]] = res
-                    elif not isinstance(res, list):
-                        print(f"An error occurred in {source_names[idx]} fetch task: {res}")
+            # Organize news by source and find earliest date per source
+            source_news = {
+                'yfinance': [],
+                'finnhub': [],
+                'newsapi': [],
+                'marketaux': []
+            }
+            source_names = ['yfinance', 'finnhub', 'newsapi', 'marketaux']
 
-                # Find the earliest date from each source
-                earliest_dates_per_source = {}
-                for source_name, articles in source_news.items():
-                    if articles:
-                        dates = []
-                        for article in articles:
-                            try:
-                                pub_date = datetime.strptime(article.get("publish_date", ""), "%Y-%m-%d").date()
-                                dates.append(pub_date)
-                            except (ValueError, TypeError):
-                                continue
-                        
-                        if dates:
-                            earliest_date = min(dates)
-                            earliest_dates_per_source[source_name] = earliest_date.strftime("%Y-%m-%d")
-                            print(f"{source_name}: {len(articles)} articles, earliest: {earliest_date}")
+            for idx, res in enumerate(results):
+                if isinstance(res, list) and res:
+                    source_news[source_names[idx]] = res
+                elif not isinstance(res, list):
+                    print(f"An error occurred in {source_names[idx]} fetch task: {res}")
 
-                # Combine and deduplicate news from all sources (no filtering)
-                all_news = {}
-                combined_sources = []
-                
-                for articles in source_news.values():
-                    combined_sources.extend(articles)
+            # Find the earliest date from each source
+            earliest_dates_per_source = {}
+            for source_name, articles in source_news.items():
+                if articles:
+                    dates = []
+                    for article in articles:
+                        try:
+                            pub_date = datetime.strptime(article.get("publish_date", ""), "%Y-%m-%d").date()
+                            dates.append(pub_date)
+                        except (ValueError, TypeError):
+                            continue
 
-                for article in combined_sources:
-                    if article and article.get("title"):
-                        key = article["title"].lower().strip()
-                        if key not in all_news:
-                            all_news[key] = article
+                    if dates:
+                        earliest_date = min(dates)
+                        earliest_dates_per_source[source_name] = earliest_date.strftime("%Y-%m-%d")
+                        print(f"{source_name}: {len(articles)} articles, earliest: {earliest_date}")
 
-                news_articles = list(all_news.values())
-                
-                # Store earliest dates metadata for the frontend
-                if news_articles and earliest_dates_per_source:
-                    # Add metadata to each article about source coverage
-                    for article in news_articles:
-                        article['_source_earliest_dates'] = earliest_dates_per_source
-                
-                print(f"Fetched and combined {len(news_articles)} unique news articles for {ticker} from fallback sources.")
-                if earliest_dates_per_source:
-                    print(f"Source coverage earliest dates: {earliest_dates_per_source}")
-            else:
-                print(f"Fetched {len(news_articles)} news articles for {ticker} from Alpha Vantage.")
+            # Combine and deduplicate news from all sources (no filtering)
+            all_news = {}
+            combined_sources = []
+
+            for articles in source_news.values():
+                combined_sources.extend(articles)
+
+            for article in combined_sources:
+                if article and article.get("title"):
+                    key = article["title"].lower().strip()
+                    if key not in all_news:
+                        all_news[key] = article
+
+            news_articles = list(all_news.values())
+
+            # Store earliest dates metadata for the frontend
+            if news_articles and earliest_dates_per_source:
+                # Add metadata to each article about source coverage
+                for article in news_articles:
+                    article['_source_earliest_dates'] = earliest_dates_per_source
+
+            print(f"Fetched and combined {len(news_articles)} unique news articles for {ticker} from fallback sources.")
+            if earliest_dates_per_source:
+                print(f"Source coverage earliest dates: {earliest_dates_per_source}")
+        else:
+            print(f"Fetched {len(news_articles)} news articles for {ticker} from Alpha Vantage.")
 
         # Sort by date, newest first
         sorted_news = sorted(news_articles, key=lambda x: x['publish_date'], reverse=True)

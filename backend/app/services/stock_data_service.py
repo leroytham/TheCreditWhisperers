@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from app.core.cache import cache_result, async_cache_result
 from app.core.config import settings
+from app.core.http_client import http_client
 
 load_dotenv()
 
@@ -489,20 +490,20 @@ class StockDataService:
                 f"function=OVERVIEW&symbol={ticker}&apikey={self.alpha_vantage_api_key}"
             )
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        print(f"Error fetching company overview for {ticker}: HTTP {response.status}")
-                        return None
+            session = await http_client.get_session()
+            async with session.get(url) as response:
+                if response.status != 200:
+                    print(f"Error fetching company overview for {ticker}: HTTP {response.status}")
+                    return None
 
-                    data = await response.json()
+                data = await response.json()
 
-                    # Check if we got valid data (Alpha Vantage returns empty dict or error message for invalid tickers)
-                    if not data or "Symbol" not in data:
-                        print(f"No company overview data available for {ticker}")
-                        return None
+                # Check if we got valid data (Alpha Vantage returns empty dict or error message for invalid tickers)
+                if not data or "Symbol" not in data:
+                    print(f"No company overview data available for {ticker}")
+                    return None
 
-                    return data
+                return data
 
         except Exception as e:
             print(f"Error fetching company overview for {ticker}: {e}")

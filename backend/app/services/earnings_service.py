@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import aiohttp
 from typing import List, Dict, Optional
 from app.core.cache import async_cache_result
+from app.core.http_client import http_client
 
 
 class EarningsService:
@@ -83,62 +84,62 @@ class EarningsService:
             }
 
         try:
-            async with aiohttp.ClientSession() as session:
-                url = (
-                    f"https://www.alphavantage.co/query?"
-                    f"function=EARNINGS_CALL_TRANSCRIPT"
-                    f"&symbol={ticker.upper()}"
-                    f"&quarter={quarter}"
-                    f"&apikey={self.alpha_vantage_api_key}"
-                )
+            session = await http_client.get_session()
+            url = (
+                f"https://www.alphavantage.co/query?"
+                f"function=EARNINGS_CALL_TRANSCRIPT"
+                f"&symbol={ticker.upper()}"
+                f"&quarter={quarter}"
+                f"&apikey={self.alpha_vantage_api_key}"
+            )
 
-                print(f"Fetching earnings transcript for {ticker} - {quarter}...")
+            print(f"Fetching earnings transcript for {ticker} - {quarter}...")
 
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        return {
-                            "error": f"API returned status code {response.status}",
-                            "symbol": ticker,
-                            "quarter": quarter
-                        }
-
-                    data = await response.json()
-
-                    # Check for API errors
-                    if "Error Message" in data:
-                        return {
-                            "error": data["Error Message"],
-                            "symbol": ticker,
-                            "quarter": quarter
-                        }
-
-                    if "Note" in data:
-                        # Rate limit or other API notice
-                        return {
-                            "error": "API rate limit reached. Please try again later.",
-                            "symbol": ticker,
-                            "quarter": quarter,
-                            "note": data["Note"]
-                        }
-
-                    # Check if transcript data exists
-                    if "transcript" not in data or not data["transcript"]:
-                        return {
-                            "error": f"No earnings transcript available for {ticker} in {quarter}",
-                            "symbol": ticker,
-                            "quarter": quarter
-                        }
-
-                    # Process and enrich the transcript data
-                    processed_transcript = self._process_transcript(data["transcript"])
-
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
                     return {
-                        "symbol": data.get("symbol", ticker.upper()),
-                        "quarter": data.get("quarter", quarter),
-                        "transcript": processed_transcript,
-                        "total_segments": len(processed_transcript),
-                        "fetched_at": datetime.utcnow().isoformat()
+                        "error": f"API returned status code {response.status}",
+                        "symbol": ticker,
+                        "quarter": quarter
                     }
+
+                data = await response.json()
+
+                # Check for API errors
+                if "Error Message" in data:
+                    return {
+                        "error": data["Error Message"],
+                        "symbol": ticker,
+                        "quarter": quarter
+                    }
+
+                if "Note" in data:
+                    # Rate limit or other API notice
+                    return {
+                        "error": "API rate limit reached. Please try again later.",
+                        "symbol": ticker,
+                        "quarter": quarter,
+                        "note": data["Note"]
+                    }
+
+                # Check if transcript data exists
+                if "transcript" not in data or not data["transcript"]:
+                    return {
+                        "error": f"No earnings transcript available for {ticker} in {quarter}",
+                        "symbol": ticker,
+                        "quarter": quarter
+                    }
+
+                # Process and enrich the transcript data
+                processed_transcript = self._process_transcript(data["transcript"])
+
+                return {
+                    "symbol": data.get("symbol", ticker.upper()),
+                    "quarter": data.get("quarter", quarter),
+                    "transcript": processed_transcript,
+                    "total_segments": len(processed_transcript),
+                    "fetched_at": datetime.utcnow().isoformat()
+                }
 
         except asyncio.TimeoutError:
             print(f"Timeout fetching earnings transcript for {ticker} - {quarter}")
@@ -311,66 +312,66 @@ class EarningsService:
             }
 
         try:
-            async with aiohttp.ClientSession() as session:
-                url = (
-                    f"https://www.alphavantage.co/query?"
-                    f"function=EARNINGS_CALENDAR"
-                    f"&symbol={ticker.upper()}"
-                    f"&horizon={horizon}"
-                    f"&apikey={self.alpha_vantage_api_key}"
-                )
+            session = await http_client.get_session()
+            url = (
+                f"https://www.alphavantage.co/query?"
+                f"function=EARNINGS_CALENDAR"
+                f"&symbol={ticker.upper()}"
+                f"&horizon={horizon}"
+                f"&apikey={self.alpha_vantage_api_key}"
+            )
 
-                print(f"Fetching earnings calendar for {ticker} with horizon {horizon}...")
+            print(f"Fetching earnings calendar for {ticker} with horizon {horizon}...")
 
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    if response.status != 200:
-                        return {
-                            "error": f"API returned status code {response.status}",
-                            "ticker": ticker,
-                            "earnings_events": []
-                        }
-
-                    # EARNINGS_CALENDAR returns CSV format, not JSON
-                    text_data = await response.text()
-
-                    # Check for API errors in text response
-                    if "Error Message" in text_data:
-                        return {
-                            "error": "API error occurred",
-                            "ticker": ticker,
-                            "earnings_events": []
-                        }
-
-                    if "Premium Endpoint" in text_data or "higher API tier" in text_data:
-                        return {
-                            "error": "Earnings calendar requires premium Alpha Vantage subscription",
-                            "ticker": ticker,
-                            "earnings_events": []
-                        }
-
-                    if "Thank you for using Alpha Vantage" in text_data and "rate limit" in text_data.lower():
-                        return {
-                            "error": "API rate limit reached. Please try again later.",
-                            "ticker": ticker,
-                            "earnings_events": []
-                        }
-
-                    # Parse CSV data
-                    events = self._parse_earnings_calendar_csv(text_data, ticker)
-
-                    if not events:
-                        return {
-                            "error": f"No earnings calendar data available for {ticker}",
-                            "ticker": ticker,
-                            "earnings_events": []
-                        }
-
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
                     return {
-                        "ticker": ticker.upper(),
-                        "earnings_events": events,
-                        "total_events": len(events),
-                        "fetched_at": datetime.utcnow().isoformat()
+                        "error": f"API returned status code {response.status}",
+                        "ticker": ticker,
+                        "earnings_events": []
                     }
+
+                # EARNINGS_CALENDAR returns CSV format, not JSON
+                text_data = await response.text()
+
+                # Check for API errors in text response
+                if "Error Message" in text_data:
+                    return {
+                        "error": "API error occurred",
+                        "ticker": ticker,
+                        "earnings_events": []
+                    }
+
+                if "Premium Endpoint" in text_data or "higher API tier" in text_data:
+                    return {
+                        "error": "Earnings calendar requires premium Alpha Vantage subscription",
+                        "ticker": ticker,
+                        "earnings_events": []
+                    }
+
+                if "Thank you for using Alpha Vantage" in text_data and "rate limit" in text_data.lower():
+                    return {
+                        "error": "API rate limit reached. Please try again later.",
+                        "ticker": ticker,
+                        "earnings_events": []
+                    }
+
+                # Parse CSV data
+                events = self._parse_earnings_calendar_csv(text_data, ticker)
+
+                if not events:
+                    return {
+                        "error": f"No earnings calendar data available for {ticker}",
+                        "ticker": ticker,
+                        "earnings_events": []
+                    }
+
+                return {
+                    "ticker": ticker.upper(),
+                    "earnings_events": events,
+                    "total_events": len(events),
+                    "fetched_at": datetime.utcnow().isoformat()
+                }
 
         except asyncio.TimeoutError:
             print(f"Timeout fetching earnings calendar for {ticker}")
