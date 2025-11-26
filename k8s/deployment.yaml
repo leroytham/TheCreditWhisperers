@@ -1,0 +1,120 @@
+# =============================================================================
+# TheCreditWhisperers - Kubernetes Deployment
+# =============================================================================
+# Defines the backend application deployment with:
+# - Multiple replicas for high availability
+# - Resource limits for proper scheduling
+# - Health probes for self-healing (liveness, readiness, startup)
+# - Environment variables from ConfigMap and Secret
+#
+# Usage: kubectl apply -f k8s/deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: creditwhisperers-backend
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: backend
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: creditwhisperers
+      component: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: creditwhisperers
+        component: backend
+        version: v1
+    spec:
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: backend
+          image: creditwhisperers/backend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # Environment variables from ConfigMap and Secret
+          envFrom:
+            - configMapRef:
+                name: creditwhisperers-config
+            - secretRef:
+                name: creditwhisperers-secrets
+
+          # Resource management
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+
+          # =================================================================
+          # Health Probes - Critical for Resilience & Self-Healing
+          # =================================================================
+
+          # Liveness Probe: Is the container alive?
+          # If this fails, Kubernetes will restart the container
+          # Uses /health/live - fast check, no dependency verification
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Readiness Probe: Is the container ready to serve traffic?
+          # If this fails, the pod is removed from service endpoints
+          # Uses /health/ready - checks MongoDB and Redis connectivity
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Startup Probe: For slow-starting containers (ML models)
+          # Disables liveness/readiness until startup succeeds
+          # Allows up to 5 minutes (30 * 10s) for initial startup
+          # Uses /health/startup - verifies all dependencies are ready
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+            successThreshold: 1
+
+          # Security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+
+      # Pod-level settings
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst

@@ -1,0 +1,114 @@
+# =============================================================================
+# TheCreditWhisperers - Docker Compose Configuration
+# =============================================================================
+# Full stack deployment with:
+# - FastAPI backend (with React frontend bundled)
+# - MongoDB database
+# - Redis cache
+#
+# Usage:
+#   docker-compose up --build        # Start all services
+#   docker-compose down              # Stop all services
+#   docker-compose down -v           # Stop and remove volumes
+#   docker-compose logs -f backend   # Follow backend logs
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend Service (FastAPI + React Static Files)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: creditwhisperers-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      - MONGO_URI=mongodb://mongodb:27017/creditwhisperers
+      # Cache
+      - REDIS_URL=redis://redis:6379/0
+      # URLs (container serves both frontend and backend)
+      - FRONTEND_URL=http://localhost:8000
+      - API_BASE_URL=http://localhost:8000
+      # Development settings
+      - DEBUG=True
+      - ENVIRONMENT=development
+      # Cache TTLs (seconds)
+      - PRICE_CACHE_TTL=300
+      - NEWS_CACHE_TTL=600
+      - SENTIMENT_CACHE_TTL=900
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # MongoDB Database
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: creditwhisperers-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: creditwhisperers-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - creditwhisperers-network
+
+# -----------------------------------------------------------------------------
+# Volumes (Persistent Data)
+# -----------------------------------------------------------------------------
+volumes:
+  mongodb_data:
+    name: creditwhisperers-mongodb-data
+  redis_data:
+    name: creditwhisperers-redis-data
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  creditwhisperers-network:
+    name: creditwhisperers-network
+    driver: bridge

@@ -1,0 +1,55 @@
+# =============================================================================
+# TheCreditWhisperers - Kubernetes Service
+# =============================================================================
+# Exposes the backend deployment as a network service.
+# ClusterIP type for internal cluster access (use with Ingress for external).
+#
+# Usage: kubectl apply -f k8s/service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: creditwhisperers-backend
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: creditwhisperers
+    component: backend
+
+---
+# =============================================================================
+# WebSocket Service (Optional - for sticky sessions)
+# =============================================================================
+# If you need WebSocket support with session affinity, use this service
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: creditwhisperers-websocket
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: websocket
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  ports:
+    - name: ws
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: creditwhisperers
+    component: backend

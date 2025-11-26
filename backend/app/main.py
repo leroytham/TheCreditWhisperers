@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from .api import routes as api_routes
 from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
+from .api.health_routes import router as health_router
 from .api.websocket import websocket_endpoint
 from .database import create_indexes
 from .core.config import settings
@@ -76,11 +77,13 @@ app.add_middleware(
 app.include_router(api_routes.router)
 app.include_router(notification_router)
 app.include_router(portfolio_router)
+app.include_router(health_router)
 
 # Routes WITH /api prefix (for production deployment)
 app.include_router(api_routes.router, prefix="/api")
 app.include_router(notification_router, prefix="/api")
 app.include_router(portfolio_router, prefix="/api")
+app.include_router(health_router, prefix="/api")
 
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")
@@ -122,10 +125,8 @@ else:
     logger.warning(f"Static directory not found: {STATIC_DIR}")
     logger.warning("Frontend will not be served. Run 'npm run build' in frontend/")
 
-# Health check endpoint (must come before catch-all route)
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "websocket_endpoint": "/ws/notifications/{client_id}"}
+# Note: Health check endpoints are now in health_routes.py
+# Provides /health/live, /health/ready, /health/startup for Kubernetes probes
 
 # Catch-all route to serve index.html for React Router
 # This MUST be defined LAST so API routes take precedence

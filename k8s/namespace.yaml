@@ -1,0 +1,16 @@
+# =============================================================================
+# TheCreditWhisperers - Kubernetes Namespace
+# =============================================================================
+# Creates an isolated namespace for all application resources.
+# This enables multi-tenant deployment and resource isolation.
+#
+# Usage: kubectl apply -f k8s/namespace.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: creditwhisperers
+  labels:
+    app: creditwhisperers
+    environment: production
+    managed-by: kubectl

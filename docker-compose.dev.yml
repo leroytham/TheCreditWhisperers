@@ -1,0 +1,63 @@
+# =============================================================================
+# TheCreditWhisperers - Development Docker Compose Override
+# =============================================================================
+# Extends docker-compose.yml with development features:
+# - Hot-reload for both frontend and backend
+# - Volume mounts for live code changes
+# - Separate frontend container (React dev server on port 3000)
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Access:
+#   - Frontend (React dev server): http://localhost:3000
+#   - Backend (FastAPI):           http://localhost:8000
+#   - MongoDB:                     localhost:27017
+#   - Redis:                       localhost:6379
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Frontend Development Server (React with Hot Reload)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: creditwhisperers-frontend-dev
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm start"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - backend
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # Backend Development Server (FastAPI with Hot Reload)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: creditwhisperers-backend-dev
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - DEBUG=True
+      - ENVIRONMENT=development
+
+# -----------------------------------------------------------------------------
+# Additional Volumes for Development
+# -----------------------------------------------------------------------------
+volumes:
+  frontend_node_modules:
+    name: creditwhisperers-frontend-node-modules

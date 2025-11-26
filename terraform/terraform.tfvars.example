@@ -1,0 +1,95 @@
+# =============================================================================
+# TheCreditWhisperers - Terraform Variables Example
+# =============================================================================
+# Copy this file to terraform.tfvars and customize values
+#
+# SECURITY WARNING: Never commit terraform.tfvars to version control!
+# Add terraform.tfvars to your .gitignore file
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars with your values
+#   terraform plan -var-file="terraform.tfvars"
+
+# =============================================================================
+# Project Configuration
+# =============================================================================
+project_name = "creditwhisperers"
+environment  = "production"  # Options: dev, staging, production
+location     = "japanwest"   # Azure region
+
+# =============================================================================
+# App Service Configuration
+# =============================================================================
+# SKU Options:
+#   F1        - Free (limited, no Always On)
+#   B1-B3     - Basic (good for dev/staging)
+#   S1-S3     - Standard (production, auto-scale)
+#   P1v3-P3v3 - Premium (high performance)
+#
+app_service_sku = "B1"
+app_always_on   = true  # Keep app warm (not available for F1)
+
+# =============================================================================
+# Redis Cache Configuration
+# =============================================================================
+# SKU Options:
+#   Basic    - Single node, no SLA (dev/test)
+#   Standard - Primary + replica, 99.9% SLA
+#   Premium  - Clustering, persistence, VNet
+#
+# Capacity:
+#   Basic/Standard: 0 (250MB), 1 (1GB), 2 (2.5GB), 3 (6GB), 4 (13GB), 5 (26GB), 6 (53GB)
+#   Premium: 1 (6GB), 2 (13GB), 3 (26GB), 4 (53GB)
+#
+redis_sku      = "Basic"
+redis_capacity = 0  # 250MB
+
+# =============================================================================
+# Cosmos DB Configuration
+# =============================================================================
+# Throughput (RU/s):
+#   Minimum: 400 RU/s
+#   Recommended for production: 1000+ RU/s
+#
+# Consistency Levels (performance vs consistency tradeoff):
+#   Strong          - Highest consistency, higher latency
+#   BoundedStaleness - Predictable staleness
+#   Session         - Good balance (recommended)
+#   ConsistentPrefix - Read own writes
+#   Eventual        - Lowest latency, eventual consistency
+#
+cosmos_throughput        = 400
+cosmos_consistency_level = "Session"
+enable_cosmos_db         = true  # Set to false if using external MongoDB
+
+# =============================================================================
+# Monitoring Configuration
+# =============================================================================
+log_retention_days = 30  # 7-730 days
+
+# =============================================================================
+# Feature Flags
+# =============================================================================
+enable_staging_slot = true  # Blue-green deployment support
+
+# =============================================================================
+# Cost Estimates (Monthly, USD)
+# =============================================================================
+# These are approximate costs for Japan West region:
+#
+# Basic Setup (B1 + Basic Redis + 400 RU Cosmos):
+#   App Service B1:    ~$13/month
+#   Redis Basic C0:    ~$16/month
+#   Cosmos DB 400 RU:  ~$24/month
+#   App Insights:      ~$2/month (1GB included)
+#   Total:             ~$55/month
+#
+# Standard Setup (S1 + Standard Redis + 1000 RU Cosmos):
+#   App Service S1:    ~$69/month
+#   Redis Standard C1: ~$42/month
+#   Cosmos DB 1000 RU: ~$58/month
+#   App Insights:      ~$2/month
+#   Total:             ~$171/month
+#
+# Note: Actual costs may vary. Use Azure Pricing Calculator for estimates.

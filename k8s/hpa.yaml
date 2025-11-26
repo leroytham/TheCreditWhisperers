@@ -1,0 +1,76 @@
+# =============================================================================
+# TheCreditWhisperers - Horizontal Pod Autoscaler
+# =============================================================================
+# Automatically scales the number of pod replicas based on resource utilization.
+# This demonstrates auto-scaling capability for the Resilience & Scalability criterion.
+#
+# Features:
+# - Scales between 2-10 replicas
+# - CPU target: 70% utilization
+# - Memory target: 80% utilization
+# - Controlled scale-up/scale-down behavior
+#
+# Requirements:
+# - Metrics Server must be installed in the cluster
+#   (kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml)
+#
+# Usage: kubectl apply -f k8s/hpa.yaml
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: creditwhisperers-backend-hpa
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: creditwhisperers-backend
+
+  # Replica range
+  minReplicas: 2
+  maxReplicas: 10
+
+  # Scaling metrics
+  metrics:
+    # Scale based on CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # Scale based on memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+  # Scaling behavior policies
+  behavior:
+    # Scale up quickly when needed
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+
+    # Scale down slowly to avoid thrashing
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+      selectPolicy: Min

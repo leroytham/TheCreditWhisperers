@@ -1,0 +1,100 @@
+# =============================================================================
+# TheCreditWhisperers - Kubernetes Ingress
+# =============================================================================
+# Provides external HTTP/HTTPS access to the application.
+# Configured for nginx ingress controller with TLS support.
+#
+# Prerequisites:
+# - Nginx Ingress Controller installed
+#   (kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.2/deploy/static/provider/cloud/deploy.yaml)
+# - cert-manager for automatic TLS certificates (optional)
+#   (kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml)
+#
+# Usage: kubectl apply -f k8s/ingress.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: creditwhisperers-ingress
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: ingress
+  annotations:
+    # Ingress class
+    kubernetes.io/ingress.class: nginx
+
+    # TLS with cert-manager (optional - comment out if not using cert-manager)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+
+    # Nginx-specific configurations
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+
+    # Rate limiting (optional)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+
+spec:
+  # TLS configuration
+  tls:
+    - hosts:
+        - creditwhisperers.example.com
+      secretName: creditwhisperers-tls
+
+  # Routing rules
+  rules:
+    - host: creditwhisperers.example.com
+      http:
+        paths:
+          # Main application route
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: creditwhisperers-backend
+                port:
+                  number: 80
+
+          # WebSocket route (optional - uses sticky sessions service)
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: creditwhisperers-websocket
+                port:
+                  number: 80
+
+---
+# =============================================================================
+# Alternative: LoadBalancer Service (if not using Ingress)
+# =============================================================================
+# Uncomment this if you want direct LoadBalancer access instead of Ingress
+
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: creditwhisperers-lb
+#   namespace: creditwhisperers
+#   labels:
+#     app: creditwhisperers
+#     component: loadbalancer
+# spec:
+#   type: LoadBalancer
+#   ports:
+#     - name: http
+#       port: 80
+#       targetPort: 8000
+#       protocol: TCP
+#     - name: https
+#       port: 443
+#       targetPort: 8000
+#       protocol: TCP
+#   selector:
+#     app: creditwhisperers
+#     component: backend
