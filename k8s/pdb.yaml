@@ -1,0 +1,56 @@
+# =============================================================================
+# TheCreditWhisperers - Pod Disruption Budget
+# =============================================================================
+# Ensures high availability during voluntary disruptions:
+# - Node maintenance/upgrades
+# - Cluster autoscaler scale-down
+# - kubectl drain operations
+# - Rolling deployments
+#
+# This PDB guarantees at least 1 pod is always available, preventing
+# complete service outage during planned maintenance.
+#
+# Usage: kubectl apply -f k8s/pdb.yaml
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: creditwhisperers-pdb
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: backend
+spec:
+  # Minimum pods that must remain available during disruptions
+  # With 2 replicas (from deployment.yaml), this allows 1 pod to be disrupted
+  minAvailable: 1
+
+  # Alternative: Use maxUnavailable instead
+  # maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app: creditwhisperers
+      component: backend
+
+---
+# =============================================================================
+# WebSocket PDB (Optional - for stateful WebSocket connections)
+# =============================================================================
+# If you have dedicated WebSocket pods with session affinity,
+# this ensures WebSocket connections aren't all disrupted at once.
+
+# apiVersion: policy/v1
+# kind: PodDisruptionBudget
+# metadata:
+#   name: creditwhisperers-websocket-pdb
+#   namespace: creditwhisperers
+#   labels:
+#     app: creditwhisperers
+#     component: websocket
+# spec:
+#   minAvailable: 1
+#   selector:
+#     matchLabels:
+#       app: creditwhisperers
+#       component: websocket

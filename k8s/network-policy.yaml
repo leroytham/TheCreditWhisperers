@@ -1,0 +1,148 @@
+# =============================================================================
+# TheCreditWhisperers - Kubernetes Network Policies
+# =============================================================================
+# Implements network segmentation for security (defense in depth):
+# - Restricts ingress to only allowed sources (ingress controller)
+# - Allows necessary egress for external API calls
+# - Provides isolation between namespaces
+#
+# Prerequisites:
+# - Network plugin that supports NetworkPolicy (Calico, Cilium, Weave)
+# - Ingress controller with proper namespace labels
+#
+# Usage: kubectl apply -f k8s/network-policy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: creditwhisperers-backend-policy
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+spec:
+  # Apply to backend pods
+  podSelector:
+    matchLabels:
+      app: creditwhisperers
+      component: backend
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # =============================================================================
+  # Ingress Rules - Who can connect TO our pods
+  # =============================================================================
+  ingress:
+    # Allow traffic from ingress controller (nginx-ingress namespace)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+
+    # Allow traffic from same namespace (inter-pod communication)
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8000
+
+    # Allow health checks from kubelet (node network)
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 8000
+
+  # =============================================================================
+  # Egress Rules - Where our pods can connect TO
+  # =============================================================================
+  egress:
+    # Allow DNS resolution (required for external API calls)
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Allow connections to external APIs (HTTPS)
+    # Yahoo Finance, Finnhub, Alpha Vantage, News API
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Block access to internal cluster network (security)
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+    # Allow MongoDB connection (if in-cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - protocol: TCP
+          port: 27017
+
+    # Allow Redis connection (if in-cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+
+    # Allow Azure CosmosDB (managed service - external)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 10255  # CosmosDB MongoDB API
+        - protocol: TCP
+          port: 10250
+
+    # Allow Azure Redis Cache (managed service - external, TLS)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 6380  # Redis TLS
+
+---
+# =============================================================================
+# Default Deny Policy (Optional - stricter security)
+# =============================================================================
+# Uncomment to deny all traffic by default in the namespace.
+# Only explicitly allowed traffic will be permitted.
+
+# apiVersion: networking.k8s.io/v1
+# kind: NetworkPolicy
+# metadata:
+#   name: default-deny-all
+#   namespace: creditwhisperers
+# spec:
+#   podSelector: {}
+#   policyTypes:
+#     - Ingress
+#     - Egress
