@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring
     SENTRY_PROFILES_SAMPLE_RATE: float = 0.1  # 10% of transactions for profiling
 
+    # OpenTelemetry Distributed Tracing
+    OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None  # e.g., http://localhost:4317
+    OTEL_SERVICE_NAME: str = "creditwhisperers-backend"
+    OTEL_ENABLED: bool = True  # Enable/disable OpenTelemetry tracing
+
+    # Prometheus Metrics
+    METRICS_ENABLED: bool = True  # Enable/disable Prometheus metrics endpoint
+
     def get_api_base_url(self) -> str:
         """
         Get the API base URL, supporting both new (API_BASE_URL) and legacy (API_BASE) variable names.

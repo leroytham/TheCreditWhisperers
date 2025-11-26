@@ -8,6 +8,7 @@ from .api import routes as api_routes
 from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
 from .api.health_routes import router as health_router
+from .api.metrics_routes import router as metrics_router
 from .api.websocket import websocket_endpoint
 from .database import create_indexes
 from .core.config import settings
@@ -109,6 +110,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# =============================================================================
+# PROMETHEUS METRICS MIDDLEWARE
+# =============================================================================
+# Add Prometheus metrics collection for observability
+if settings.METRICS_ENABLED:
+    try:
+        from .middleware.prometheus_middleware import PrometheusMiddleware
+        app.add_middleware(PrometheusMiddleware, app_name="creditwhisperers")
+        logger.info("✅ Prometheus metrics middleware enabled")
+    except ImportError:
+        logger.warning("⚠️ prometheus-client not installed. Metrics disabled.")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to initialize Prometheus middleware: {e}")
+
 # Include the API router from routes.py
 # IMPORTANT: We include routers TWICE to support both localhost and production:
 # - Localhost: setupProxy.js strips /api prefix, so backend needs routes without prefix
@@ -120,12 +135,14 @@ app.include_router(api_routes.router)
 app.include_router(notification_router)
 app.include_router(portfolio_router)
 app.include_router(health_router)
+app.include_router(metrics_router)  # Prometheus metrics endpoint
 
 # Routes WITH /api prefix (for production deployment)
 app.include_router(api_routes.router, prefix="/api")
 app.include_router(notification_router, prefix="/api")
 app.include_router(portfolio_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(metrics_router, prefix="/api")  # Prometheus metrics endpoint
 
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")
@@ -203,6 +220,23 @@ async def startup_event():
     Initialize database indexes and perform startup tasks.
     """
     logger.info("Starting up application...")
+
+    # Initialize OpenTelemetry distributed tracing
+    if settings.OTEL_ENABLED and settings.OTEL_EXPORTER_OTLP_ENDPOINT:
+        try:
+            from .core.telemetry import init_telemetry
+            if init_telemetry(
+                app=app,
+                service_name=settings.OTEL_SERVICE_NAME,
+                otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+            ):
+                logger.info("✅ OpenTelemetry tracing initialized")
+            else:
+                logger.info("ℹ️ OpenTelemetry tracing not configured")
+        except ImportError:
+            logger.warning("⚠️ OpenTelemetry packages not installed. Tracing disabled.")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to initialize OpenTelemetry: {e}")
 
     # Test MongoDB connection
     try:
