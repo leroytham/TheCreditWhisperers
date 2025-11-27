@@ -1,0 +1,48 @@
+# Prometheus Configuration for TheCreditWhisperers
+# Scrapes metrics from the FastAPI backend
+
+global:
+  scrape_interval: 15s      # How often to scrape targets
+  evaluation_interval: 15s  # How often to evaluate rules
+  external_labels:
+    monitor: 'creditwhisperers'
+
+# Alerting configuration (optional - for future alertmanager integration)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []  # Add alertmanager:9093 when deployed
+
+# Load alert rules from file
+rule_files:
+  - /etc/prometheus/rules.yaml
+
+# Scrape configurations
+scrape_configs:
+  # Backend API metrics
+  - job_name: 'creditwhisperers-backend'
+    static_configs:
+      - targets: ['backend:8000']
+        labels:
+          service: 'backend'
+          environment: 'development'
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Redis metrics (if redis_exporter is added later)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # MongoDB metrics (if mongodb_exporter is added later)
+  # - job_name: 'mongodb'
+  #   static_configs:
+  #     - targets: ['mongodb-exporter:9216']
