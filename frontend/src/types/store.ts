@@ -1,17 +1,17 @@
 import type {
   User,
   SelectedAccount,
-  Notification,
+  Toast,
   PriceAlert,
   NotificationCategory,
   PriorityLevel,
 } from './index';
 
 // =============================================================================
-// NOTIFICATION OPTIONS
+// TOAST OPTIONS (for ephemeral UI notifications)
 // =============================================================================
 
-export interface NotificationOptions {
+export interface ToastOptions {
   title?: string;
   category?: NotificationCategory;
   priority?: PriorityLevel;
@@ -90,23 +90,17 @@ export interface AppStoreState {
   togglePriceAlert: (id: string | number) => void;
   getActiveAlertsForTicker: (ticker: string) => PriceAlert[];
 
-  // Notifications
-  notifications: Notification[];
-  addNotification: (notification: Partial<Notification>) => void;
-  removeNotification: (id: string | number) => void;
-  updateNotification: (id: string | number, updates: Partial<Notification>) => void;
-  markAsRead: (id: string | number) => void;
-  markAllAsRead: () => void;
-  archiveNotification: (id: string | number) => void;
-  getUnreadCount: () => number;
-  clearNotifications: () => void;
-  clearActiveNotifications: () => void;
-  clearArchivedNotifications: () => void;
-  notifySuccess: (message: string, options?: NotificationOptions) => void;
-  notifyError: (message: string, options?: NotificationOptions) => void;
-  notifyWarning: (message: string, options?: NotificationOptions) => void;
-  notifyInfo: (message: string, options?: NotificationOptions) => void;
-  notifyWithMetadata: (config: NotificationConfig) => void;
+  // Toasts (ephemeral UI notifications)
+  // NOTE: For server-persisted notifications, use React Query hooks in useNotifications.js
+  toasts: Toast[];
+  addToast: (toast: Partial<Toast>) => void;
+  removeToast: (id: string | number) => void;
+  clearToasts: () => void;
+  notifySuccess: (message: string, options?: ToastOptions) => void;
+  notifyError: (message: string, options?: ToastOptions) => void;
+  notifyWarning: (message: string, options?: ToastOptions) => void;
+  notifyInfo: (message: string, options?: ToastOptions) => void;
+  notifyWithMetadata: (config: ToastConfig) => void;
 
   // Preferences
   preferences: UserPreferences;
@@ -124,15 +118,14 @@ export interface AppStoreState {
 }
 
 // =============================================================================
-// NOTIFICATION CONFIG (for notifyWithMetadata)
+// TOAST CONFIG (for notifyWithMetadata)
 // =============================================================================
 
-export interface NotificationConfig extends NotificationOptions {
+export interface ToastConfig extends ToastOptions {
   type?: 'success' | 'error' | 'warning' | 'info' | 'critical';
   message: string;
   subcategory?: string;
   preview?: string;
-  showAsToast?: boolean;
   modalTitle?: string;
   subject?: string;
   body?: string;

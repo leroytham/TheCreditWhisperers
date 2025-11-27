@@ -30,8 +30,8 @@ export const defaultMockState: Partial<AppStoreState> = {
   // Price Alerts
   priceAlerts: [],
 
-  // Notifications
-  notifications: [],
+  // Toasts (ephemeral UI notifications)
+  toasts: [],
 
   // Preferences
   preferences: {
@@ -90,17 +90,10 @@ export const mockActions = {
   togglePriceAlert: jest.fn(),
   getActiveAlertsForTicker: jest.fn().mockReturnValue([]),
 
-  // Notification Actions
-  addNotification: jest.fn(),
-  removeNotification: jest.fn(),
-  updateNotification: jest.fn(),
-  markAsRead: jest.fn(),
-  markAllAsRead: jest.fn(),
-  archiveNotification: jest.fn(),
-  getUnreadCount: jest.fn().mockReturnValue(0),
-  clearNotifications: jest.fn(),
-  clearActiveNotifications: jest.fn(),
-  clearArchivedNotifications: jest.fn(),
+  // Toast Actions (ephemeral UI notifications)
+  addToast: jest.fn(),
+  removeToast: jest.fn(),
+  clearToasts: jest.fn(),
   notifySuccess: jest.fn(),
   notifyError: jest.fn(),
   notifyWarning: jest.fn(),
@@ -169,7 +162,6 @@ export function resetStoreMocks(): void {
   // Reset default return values
   mockActions.isInWatchlist.mockReturnValue(false);
   mockActions.getActiveAlertsForTicker.mockReturnValue([]);
-  mockActions.getUnreadCount.mockReturnValue(0);
   mockActions.shouldRefresh.mockReturnValue(true);
 }
 

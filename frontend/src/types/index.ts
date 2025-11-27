@@ -51,11 +51,34 @@ export interface PerformanceMetric {
   calculation_date: string;
 }
 
-// Notifications
+// Notifications & Toasts
 export type NotificationType = 'success' | 'error' | 'warning' | 'info' | 'critical';
 export type NotificationCategory = 'Portfolio' | 'Market' | 'News' | 'System';
 export type PriorityLevel = 'low' | 'medium' | 'high' | 'critical';
 
+/**
+ * Toast: Ephemeral UI notification displayed in ToastContainer
+ * These are NOT persisted and auto-dismiss after duration
+ */
+export interface Toast {
+  id: string | number;
+  type: NotificationType;
+  category: NotificationCategory;
+  subcategory?: string;
+  priority: PriorityLevel;
+  title?: string;
+  message: string;
+  preview?: string;
+  timestamp: string;
+  duration?: number | null;
+  actionUrl?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Notification: Server-persisted notification managed via React Query
+ * Used in NotificationPage for notification history
+ */
 export interface Notification {
   id: string | number;
   type: NotificationType;

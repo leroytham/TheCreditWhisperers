@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import type { AppStoreState, NotificationOptions, NotificationConfig } from '../types/store';
-import type { Notification, PriceAlert } from '../types';
+import type { AppStoreState } from '../types/store';
+import type { Toast, PriceAlert } from '../types';
 
 /**
- * Subcategory map for notification categories
+ * Subcategory map for toast categories
  */
 const subcategoryMap: Record<string, string> = {
   'Market': 'Market Signals',
@@ -149,14 +149,15 @@ const useAppStore = create<AppStoreState>()(
           );
         },
 
-        // ===== NOTIFICATIONS =====
-        notifications: [],
+        // ===== TOASTS (Ephemeral UI notifications) =====
+        // NOTE: For server-persisted notifications, use React Query hooks in useNotifications.js
+        toasts: [],
 
-        addNotification: (notification) => set((state) => {
+        addToast: (toast) => set((state) => {
           // Generate subcategory if not provided
-          const category = notification.category || 'System';
+          const category = toast.category || 'System';
 
-          const newNotification: Notification = {
+          const newToast: Toast = {
             id: Date.now() + Math.random(), // Ensure unique ID
             timestamp: new Date().toISOString(),
             type: 'info', // 'success' | 'error' | 'warning' | 'info' | 'critical'
@@ -164,72 +165,34 @@ const useAppStore = create<AppStoreState>()(
             subcategory: subcategoryMap[category] || 'General',
             priority: 'medium', // 'low' | 'medium' | 'high' | 'critical'
             message: '',
-            isRead: false,
-            isArchived: false,
-            showAsToast: true, // Show in toast container
             duration: 5000, // Auto-dismiss duration in ms (null = no auto-dismiss)
             actionUrl: null, // Optional link for "View Details"
             metadata: {}, // Flexible object for custom data
-            ...notification,
+            ...toast,
           };
 
           // Generate preview field from message if not provided
-          if (!newNotification.preview && newNotification.message) {
-            newNotification.preview = newNotification.message.length > 80
-              ? newNotification.message.substring(0, 80) + '...'
-              : newNotification.message;
+          if (!newToast.preview && newToast.message) {
+            newToast.preview = newToast.message.length > 80
+              ? newToast.message.substring(0, 80) + '...'
+              : newToast.message;
           }
 
           return {
-            notifications: [...state.notifications, newNotification],
+            toasts: [...state.toasts, newToast],
           };
         }),
 
-        removeNotification: (id) => set((state) => ({
-          notifications: state.notifications.filter((n) => n.id !== id),
+        removeToast: (id) => set((state) => ({
+          toasts: state.toasts.filter((t) => t.id !== id),
         })),
 
-        updateNotification: (id, updates) => set((state) => ({
-          notifications: state.notifications.map((n) =>
-            n.id === id ? { ...n, ...updates } : n
-          ),
-        })),
+        clearToasts: () => set({ toasts: [] }),
 
-        markAsRead: (id) => set((state) => ({
-          notifications: state.notifications.map((n) =>
-            n.id === id ? { ...n, isRead: true } : n
-          ),
-        })),
-
-        markAllAsRead: () => set((state) => ({
-          notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
-        })),
-
-        archiveNotification: (id) => set((state) => ({
-          notifications: state.notifications.map((n) =>
-            n.id === id ? { ...n, isArchived: true, showAsToast: false } : n
-          ),
-        })),
-
-        getUnreadCount: () => {
-          const { notifications } = get();
-          return notifications.filter((n) => !n.isRead && !n.isArchived).length;
-        },
-
-        clearNotifications: () => set({ notifications: [] }),
-
-        clearActiveNotifications: () => set((state) => ({
-          notifications: state.notifications.filter((n) => n.isArchived),
-        })),
-
-        clearArchivedNotifications: () => set((state) => ({
-          notifications: state.notifications.filter((n) => !n.isArchived),
-        })),
-
-        // Helper methods for specific notification types
+        // Helper methods for creating toasts
         notifySuccess: (message, options = {}) => {
-          const { addNotification } = get();
-          addNotification({
+          const { addToast } = get();
+          addToast({
             type: 'success',
             title: options.title || 'Success',
             message,
@@ -241,8 +204,8 @@ const useAppStore = create<AppStoreState>()(
         },
 
         notifyError: (message, options = {}) => {
-          const { addNotification } = get();
-          addNotification({
+          const { addToast } = get();
+          addToast({
             type: 'error',
             title: options.title || 'Error',
             message,
@@ -254,8 +217,8 @@ const useAppStore = create<AppStoreState>()(
         },
 
         notifyWarning: (message, options = {}) => {
-          const { addNotification } = get();
-          addNotification({
+          const { addToast } = get();
+          addToast({
             type: 'warning',
             title: options.title || 'Warning',
             message,
@@ -267,8 +230,8 @@ const useAppStore = create<AppStoreState>()(
         },
 
         notifyInfo: (message, options = {}) => {
-          const { addNotification } = get();
-          addNotification({
+          const { addToast } = get();
+          addToast({
             type: 'info',
             title: options.title || 'Information',
             message,
@@ -279,10 +242,10 @@ const useAppStore = create<AppStoreState>()(
           });
         },
 
-        // Helper for creating enriched notifications with full metadata
+        // Helper for creating enriched toasts with full metadata
         notifyWithMetadata: (config) => {
-          const { addNotification } = get();
-          addNotification({
+          const { addToast } = get();
+          addToast({
             type: config.type || 'info',
             title: config.title || 'Notification',
             message: config.message || '',
@@ -290,10 +253,8 @@ const useAppStore = create<AppStoreState>()(
             subcategory: config.subcategory,
             priority: config.priority || 'medium',
             preview: config.preview,
-            // Standard fields
             duration: config.duration !== undefined ? config.duration : 5000,
             actionUrl: config.actionUrl,
-            showAsToast: config.showAsToast !== undefined ? config.showAsToast : true,
             metadata: {
               ...(config.metadata || {}),
               // Optional rich data fields stored in metadata
@@ -366,7 +327,7 @@ const useAppStore = create<AppStoreState>()(
           preferences: state.preferences,
           selectedTimeframe: state.selectedTimeframe,
           priceAlerts: state.priceAlerts,
-          notifications: state.notifications,
+          // NOTE: toasts are NOT persisted - they are ephemeral UI messages
         }),
       }
     ),

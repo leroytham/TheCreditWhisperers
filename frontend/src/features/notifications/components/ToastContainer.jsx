@@ -6,55 +6,47 @@ import useAppStore from '../../../store/useAppStore';
  * ToastContainer Component
  *
  * Manages multiple simultaneous toast notifications with positioning and stacking
- * Displays notifications in top-right corner with auto-dismiss functionality
+ * Displays toasts in top-right corner with auto-dismiss functionality
+ *
+ * NOTE: Toasts are ephemeral UI messages from Zustand store.
+ * For server-persisted notifications, see NotificationPageEnhanced.
  */
 const ToastContainer = () => {
-  const notifications = useAppStore(state => state.notifications);
-  const removeNotification = useAppStore(state => state.removeNotification);
-  const updateNotification = useAppStore(state => state.updateNotification);
+  const toasts = useAppStore(state => state.toasts);
+  const removeToast = useAppStore(state => state.removeToast);
 
-  // Filter for active toast notifications (not archived, recent)
-  const activeToasts = notifications
-    .filter(n => !n.isArchived && n.showAsToast)
-    .slice(-5); // Show max 5 toasts at once
+  // Show max 5 toasts at once (most recent)
+  const activeToasts = toasts.slice(-5);
 
   const handleDismiss = (id) => {
-    removeNotification(id);
+    removeToast(id);
   };
 
   const handleRemindLater = (id) => {
-    // Mark as archived and schedule for later
-    updateNotification(id, {
-      isArchived: true,
-      showAsToast: false,
-      remindAt: Date.now() + (30 * 60 * 1000) // 30 minutes
-    });
+    // For ephemeral toasts, just dismiss (remind feature only for server notifications)
+    removeToast(id);
   };
 
   const handleAcknowledge = (id) => {
-    // Mark as read and remove from toast view
-    updateNotification(id, {
-      isRead: true,
-      isArchived: true,
-      showAsToast: false
-    });
+    // Just remove the toast
+    removeToast(id);
   };
 
   return (
     <div className="fixed top-20 right-8 z-50 flex flex-col gap-3 pointer-events-none">
-      {activeToasts.map((notification, index) => (
+      {activeToasts.map((toast) => (
         <div
-          key={notification.id}
+          key={toast.id}
           className="pointer-events-auto"
           style={{
             animation: 'slideInRight 0.3s ease-out',
           }}
         >
           <ToastNotification
-            notification={notification}
-            onDismiss={() => handleDismiss(notification.id)}
-            onRemind={() => handleRemindLater(notification.id)}
-            onAcknowledge={() => handleAcknowledge(notification.id)}
+            notification={toast}
+            onDismiss={() => handleDismiss(toast.id)}
+            onRemind={() => handleRemindLater(toast.id)}
+            onAcknowledge={() => handleAcknowledge(toast.id)}
           />
         </div>
       ))}

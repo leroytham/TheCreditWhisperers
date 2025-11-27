@@ -21,7 +21,7 @@ export const usePriceAlerts = (options = {}) => {
     watchlist,
     priceAlerts,
     updatePriceAlert,
-    addNotification,
+    addToast,
   } = useAppStore();
 
   // Get active alerts
@@ -98,12 +98,12 @@ export const usePriceAlerts = (options = {}) => {
           alert.condition
         );
 
-        addNotification(notification);
+        addToast(notification);
 
         console.log(`🔔 Price alert triggered for ${alert.ticker}: ${alert.condition} $${alert.targetPrice}`);
       }
     });
-  }, [priceData, activeAlerts]);
+  }, [priceData, activeAlerts, updatePriceAlert, addToast]);
 
   return {
     activeAlerts,

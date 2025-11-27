@@ -19,7 +19,7 @@ export const useNewsNotifications = (options = {}) => {
 
   const {
     watchlist,
-    addNotification,
+    addToast,
   } = useAppStore();
 
   // Keep track of last news counts to detect new articles
@@ -87,7 +87,7 @@ export const useNewsNotifications = (options = {}) => {
           data.sentiment
         );
 
-        addNotification(notification);
+        addToast(notification);
 
         console.log(`📰 New news notification: ${newArticles} article(s) for ${ticker}`);
       }
@@ -95,7 +95,7 @@ export const useNewsNotifications = (options = {}) => {
       // Update the reference
       lastNewsCountsRef.current[ticker] = newCount;
     });
-  }, [newsData, addNotification]);
+  }, [newsData, addToast]);
 
   // Clean up counts for removed watchlist items
   useEffect(() => {

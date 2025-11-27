@@ -29,7 +29,7 @@ export const useNotificationSocket = (clientId, options = {}) => {
   const mountedRef = useRef(true); // Track if component is mounted
   const connectionAttemptRef = useRef(0); // Track connection attempts
   const keepaliveCleanupRef = useRef(null); // Store keepalive interval cleanup
-  const { addNotification } = useAppStore();
+  const { addToast } = useAppStore();
 
   // Get WebSocket URL based on environment
   const getWebSocketUrl = () => {
@@ -93,11 +93,11 @@ export const useNotificationSocket = (clientId, options = {}) => {
           console.log('📨 WebSocket message:', data);
 
           if (data.type === 'notification') {
-            // Add notification to store
-            addNotification(data.data);
+            // Add toast for UI display
+            addToast(data.data);
           } else if (data.type === 'ticker_update') {
             // Handle ticker-specific updates
-            addNotification({
+            addToast({
               ...data.data,
               metadata: { ticker: data.ticker },
             });
@@ -161,9 +161,9 @@ export const useNotificationSocket = (clientId, options = {}) => {
         } else if (reconnectCount >= maxReconnectAttempts && event.code !== 1000) {
           console.warn('Max reconnection attempts reached - WebSocket unavailable');
           setHasError(true);
-          // Only show error notification after max attempts in production
+          // Only show error toast after max attempts in production
           if (process.env.NODE_ENV === 'production') {
-            addNotification({
+            addToast({
               type: 'warning',
               title: 'Real-time Updates Unavailable',
               message: 'Unable to connect to real-time notifications. You can still use the app, but won\'t receive live updates.',

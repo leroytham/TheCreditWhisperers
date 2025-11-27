@@ -449,12 +449,15 @@ export const usePriceAlerts = (filters = {}) => {
 };
 
 /**
- * Hook to sync server notifications with local Zustand store
- * This maintains backward compatibility with existing components
+ * Hook to sync server notifications with local toast display
+ *
+ * When a new notification arrives (e.g., via WebSocket):
+ * 1. Invalidates React Query cache to refresh server notifications
+ * 2. Adds to Zustand toasts for ephemeral UI display
  */
 export const useNotificationSync = () => {
   const queryClient = useQueryClient();
-  const { addNotification } = useAppStore();
+  const { addToast } = useAppStore();
 
   // Listen for new notifications from WebSocket
   const handleNewNotification = useCallback(
@@ -469,12 +472,21 @@ export const useNotificationSync = () => {
       // Invalidate unread count
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unreadCount });
 
-      // Add to Zustand store for toast display
+      // Add to Zustand toasts for ephemeral UI display
       if (normalizedNotification.show_as_toast || normalizedNotification.showAsToast) {
-        addNotification(normalizedNotification);
+        addToast({
+          type: normalizedNotification.type || 'info',
+          title: normalizedNotification.title,
+          message: normalizedNotification.message,
+          category: normalizedNotification.category || 'System',
+          priority: normalizedNotification.priority || 'medium',
+          duration: normalizedNotification.duration || 5000,
+          actionUrl: normalizedNotification.actionUrl,
+          metadata: normalizedNotification.metadata,
+        });
       }
     },
-    [queryClient, addNotification]
+    [queryClient, addToast]
   );
 
   return {

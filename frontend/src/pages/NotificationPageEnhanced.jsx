@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, RefreshCw, AlertTriangle, Info, CheckCheck } from 'lucide-react';
+import { Bell, RefreshCw, AlertTriangle } from 'lucide-react';
 import AppHeader from '../components/layout/AppHeader';
 import NotificationList from '../features/notifications/components/NotificationList';
 import NotificationModal from '../features/notifications/components/NotificationModal';
@@ -17,37 +17,39 @@ import {
  * NotificationPageEnhanced - Server-backed Notification Center
  *
  * Displays notifications from the server with real-time updates,
- * filtering, and preference management
+ * filtering, and preference management.
+ *
+ * NOTE: This page uses React Query for server-persisted notifications.
+ * Ephemeral toasts are handled separately by ToastContainer using Zustand.
  */
 const NotificationPageEnhanced = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('active');
   const [selectedNotification, setSelectedNotification] = useState(null);
-  const [isServerEnabled, setIsServerEnabled] = useState(true); // Feature flag for server mode
 
-  // Server-backed notifications (when enabled)
+  // Server-backed notifications
   const serverFilters = {
     is_archived: activeTab === 'archive',
     limit: 100,
   };
 
   const {
-    notifications: serverNotifications,
+    notifications,
     totalCount,
     isLoading: isLoadingNotifications,
     error: notificationsError,
     refetch: refetchNotifications,
-    markAsRead: serverMarkAsRead,
-    markAllAsRead: serverMarkAllAsRead,
-    archive: serverArchive,
-    deleteNotification: serverDelete,
-    clearNotifications: serverClear,
+    markAsRead,
+    markAllAsRead,
+    archive,
+    deleteNotification,
+    clearNotifications,
     isMarkingAsRead,
     isMarkingAllAsRead,
     isArchiving,
     isDeleting,
     isClearing,
-  } = useNotifications(isServerEnabled ? serverFilters : null);
+  } = useNotifications(serverFilters);
 
   const { unreadCount, isLoading: isLoadingCount } = useUnreadCount();
   const { handleNewNotification } = useNotificationSync();
@@ -68,6 +70,9 @@ const NotificationPageEnhanced = () => {
     System: true,
   });
 
+  // For test notifications (development only)
+  const { notifyWithMetadata } = useAppStore();
+
   // Sync local filters with server preferences
   useEffect(() => {
     if (preferences) {
@@ -79,19 +84,6 @@ const NotificationPageEnhanced = () => {
       });
     }
   }, [preferences]);
-
-  // Fallback to local store if server is disabled
-  const {
-    notifications: localNotifications,
-    markAsRead: localMarkAsRead,
-    archiveNotification: localArchive,
-    markAllAsRead: localMarkAllAsRead,
-    clearActiveNotifications,
-    clearArchivedNotifications
-  } = useAppStore();
-
-  // Determine which notifications to use
-  const notifications = isServerEnabled ? serverNotifications : localNotifications;
 
   // Filter notifications based on category filters
   const filterNotifications = (notificationsList) => {
@@ -115,9 +107,7 @@ const NotificationPageEnhanced = () => {
     ? archivedNotifications
     : [];
 
-  const newCount = isServerEnabled
-    ? unreadCount
-    : activeNotifications.filter(n => !n.is_read && !n.isRead).length;
+  const newCount = unreadCount;
 
   // Handlers
   const handleNotificationClick = async (notification) => {
@@ -125,11 +115,7 @@ const NotificationPageEnhanced = () => {
 
     // Mark as read when clicked
     if (!notification.is_read && !notification.isRead) {
-      if (isServerEnabled) {
-        await serverMarkAsRead(notification.id);
-      } else {
-        localMarkAsRead(notification.id);
-      }
+      await markAsRead(notification.id);
     }
   };
 
@@ -138,28 +124,18 @@ const NotificationPageEnhanced = () => {
   };
 
   const handleMarkAllAsRead = async () => {
-    if (isServerEnabled) {
-      await serverMarkAllAsRead();
-    } else {
-      localMarkAllAsRead();
-    }
+    await markAllAsRead();
   };
 
   const handleArchive = async (notificationId) => {
-    if (isServerEnabled) {
-      await serverArchive(notificationId);
-    } else {
-      localArchive(notificationId);
-    }
+    await archive(notificationId);
     setSelectedNotification(null);
   };
 
   const handleDelete = async (notificationId) => {
     const confirm = window.confirm('Are you sure you want to delete this notification?');
     if (confirm) {
-      if (isServerEnabled) {
-        await serverDelete(notificationId);
-      }
+      await deleteNotification(notificationId);
       setSelectedNotification(null);
     }
   };
@@ -168,15 +144,7 @@ const NotificationPageEnhanced = () => {
     const tabName = activeTab === 'active' ? 'active' : 'archived';
     const confirm = window.confirm(`Are you sure you want to clear all ${tabName} notifications?`);
     if (confirm) {
-      if (isServerEnabled) {
-        await serverClear(activeTab === 'archive');
-      } else {
-        if (activeTab === 'active') {
-          clearActiveNotifications();
-        } else {
-          clearArchivedNotifications();
-        }
-      }
+      await clearNotifications(activeTab === 'archive');
     }
   };
 
@@ -185,38 +153,30 @@ const NotificationPageEnhanced = () => {
     const newFilters = { ...categoryFilters, [category]: enabled };
     setCategoryFilters(newFilters);
 
-    // Update server preferences if enabled
-    if (isServerEnabled) {
-      const preferenceKey = `enable_${category.toLowerCase()}`;
-      await updatePreferences({ [preferenceKey]: enabled });
-    }
+    // Update server preferences
+    const preferenceKey = `enable_${category.toLowerCase()}`;
+    await updatePreferences({ [preferenceKey]: enabled });
   };
 
   const handleGenerateTestNotification = async () => {
-    if (isServerEnabled) {
-      try {
-        const response = await apiService.post('/notifications/test/create-sample');
-        handleNewNotification(response.data);
-      } catch (error) {
-        console.error('Failed to create test notification:', error);
-      }
-    } else {
-      // Use local store test notifications
-      const { notifyWithMetadata } = useAppStore.getState();
+    try {
+      const response = await apiService.post('/notifications/test/create-sample');
+      handleNewNotification(response.data);
+    } catch (error) {
+      console.error('Failed to create test notification:', error);
+      // Fallback: show a local toast
       notifyWithMetadata({
         type: 'info',
         category: 'System',
         title: 'Test Notification',
-        message: 'This is a test notification from the enhanced page',
+        message: 'This is a test notification (server unavailable)',
         preview: 'Test notification...',
       });
     }
   };
 
   const handleRefresh = () => {
-    if (isServerEnabled) {
-      refetchNotifications();
-    }
+    refetchNotifications();
   };
 
   const handleLogout = async () => {
@@ -234,7 +194,7 @@ const NotificationPageEnhanced = () => {
   };
 
   // Error display
-  if (notificationsError && isServerEnabled) {
+  if (notificationsError) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppHeader activeTab="notifications" onLogout={handleLogout} />
@@ -247,10 +207,10 @@ const NotificationPageEnhanced = () => {
                   <h3 className="text-sm font-medium text-red-800">Error loading notifications</h3>
                   <p className="text-sm text-red-700 mt-1">{notificationsError.message}</p>
                   <button
-                    onClick={() => setIsServerEnabled(false)}
+                    onClick={handleRefresh}
                     className="mt-2 text-sm text-red-600 underline hover:text-red-500"
                   >
-                    Switch to local mode
+                    Try again
                   </button>
                 </div>
               </div>
@@ -268,27 +228,20 @@ const NotificationPageEnhanced = () => {
       <main className="p-4 sm:p-6 lg:p-8">
         <div className="max-w-full mx-auto">
 
-          {/* Page Header with Server Status */}
+          {/* Page Header */}
           <section className="pb-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-semibold text-gray-900">
                 Notification Center
-                {isServerEnabled && (
-                  <span className="ml-2 px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                    Server-Backed
-                  </span>
-                )}
               </h1>
-              {isServerEnabled && (
-                <button
-                  onClick={handleRefresh}
-                  disabled={isLoadingNotifications}
-                  className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                  title="Refresh notifications"
-                >
-                  <RefreshCw className={`h-5 w-5 ${isLoadingNotifications ? 'animate-spin' : ''}`} />
-                </button>
-              )}
+              <button
+                onClick={handleRefresh}
+                disabled={isLoadingNotifications}
+                className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                title="Refresh notifications"
+              >
+                <RefreshCw className={`h-5 w-5 ${isLoadingNotifications ? 'animate-spin' : ''}`} />
+              </button>
             </div>
 
             <nav className="-mb-px flex space-x-8 mt-4" aria-label="Tabs">
@@ -336,7 +289,7 @@ const NotificationPageEnhanced = () => {
             <section className="bg-white p-4 rounded-lg shadow my-8 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900">
                 {displayedNotifications.length} Notifications{' '}
-                {isServerEnabled && !isLoadingCount && (
+                {!isLoadingCount && (
                   <span className="text-gray-500 font-normal">({newCount} New)</span>
                 )}
               </h2>
@@ -400,7 +353,7 @@ const NotificationPageEnhanced = () => {
                   </div>
                 </div>
 
-                {isServerEnabled && preferences && (
+                {preferences && (
                   <>
                     <div className="border-t pt-6">
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Delivery Settings</h3>
@@ -451,30 +404,6 @@ const NotificationPageEnhanced = () => {
                     Price alerts and news notifications are managed through your watchlist.
                   </p>
                 </div>
-
-                {!isServerEnabled && (
-                  <div className="border-t pt-6">
-                    <div className="bg-yellow-50 p-4 rounded-md">
-                      <div className="flex">
-                        <Info className="h-5 w-5 text-yellow-400" />
-                        <div className="ml-3">
-                          <h3 className="text-sm font-medium text-yellow-800">
-                            Local Mode Active
-                          </h3>
-                          <p className="mt-1 text-sm text-yellow-700">
-                            Preferences are stored locally and will not sync across devices.
-                          </p>
-                          <button
-                            onClick={() => setIsServerEnabled(true)}
-                            className="mt-2 text-sm text-yellow-600 underline hover:text-yellow-500"
-                          >
-                            Switch to server mode
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           ) : (
@@ -498,20 +427,12 @@ const NotificationPageEnhanced = () => {
                     ))}
                   </div>
 
-                  {isServerEnabled && (
-                    <div className="mt-6 pt-6 border-t">
-                      <div className="text-sm text-gray-500">
-                        <CheckCheck className="h-4 w-4 inline mr-1" />
-                        Synced with server
-                      </div>
-                    </div>
-                  )}
                 </div>
               </aside>
 
               {/* Notifications List */}
               <section className="lg:col-span-2">
-                {isLoadingNotifications && isServerEnabled ? (
+                {isLoadingNotifications ? (
                   <div className="bg-white p-8 rounded-lg shadow">
                     <div className="flex items-center justify-center">
                       <RefreshCw className="h-8 w-8 text-gray-400 animate-spin" />

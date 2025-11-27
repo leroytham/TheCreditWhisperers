@@ -8,7 +8,7 @@
  * - Watchlist management
  * - Recent searches
  * - Price alerts
- * - Notifications
+ * - Toasts (ephemeral UI notifications)
  * - User preferences
  * - Filters
  * - Cache invalidation
@@ -32,7 +32,7 @@ const resetStore = () => {
     recentSearches: [],
     maxRecentSearches: 10,
     priceAlerts: [],
-    notifications: [],
+    toasts: [],
     preferences: {
       showSentimentColors: true,
       autoRefresh: false,
@@ -353,7 +353,8 @@ describe('useAppStore', () => {
         result.current.addPriceAlert({
           ticker: 'AAPL',
           condition: 'above',
-          price: 200,
+          target_price: 200,
+          priority: 'medium',
           triggered: false,
         });
       });
@@ -362,7 +363,7 @@ describe('useAppStore', () => {
       expect(result.current.priceAlerts[0]).toMatchObject({
         ticker: 'AAPL',
         condition: 'above',
-        price: 200,
+        target_price: 200,
         isActive: true,
         triggered: false,
       });
@@ -374,7 +375,7 @@ describe('useAppStore', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', price: 200, triggered: false });
+        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', target_price: 200, priority: 'medium', triggered: false });
       });
 
       const alertId = result.current.priceAlerts[0].id;
@@ -390,23 +391,23 @@ describe('useAppStore', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', price: 200, triggered: false });
+        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', target_price: 200, priority: 'medium', triggered: false });
       });
 
       const alertId = result.current.priceAlerts[0].id;
 
       act(() => {
-        result.current.updatePriceAlert(alertId, { price: 250 });
+        result.current.updatePriceAlert(alertId, { target_price: 250 });
       });
 
-      expect(result.current.priceAlerts[0].price).toBe(250);
+      expect(result.current.priceAlerts[0].target_price).toBe(250);
     });
 
     it('togglePriceAlert toggles isActive', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', price: 200, triggered: false });
+        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', target_price: 200, priority: 'medium', triggered: false });
       });
 
       const alertId = result.current.priceAlerts[0].id;
@@ -422,9 +423,9 @@ describe('useAppStore', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', price: 200, triggered: false });
-        result.current.addPriceAlert({ ticker: 'MSFT', condition: 'below', price: 300, triggered: false });
-        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'below', price: 150, triggered: false });
+        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'above', target_price: 200, priority: 'medium', triggered: false });
+        result.current.addPriceAlert({ ticker: 'MSFT', condition: 'below', target_price: 300, priority: 'medium', triggered: false });
+        result.current.addPriceAlert({ ticker: 'AAPL', condition: 'below', target_price: 150, priority: 'medium', triggered: false });
       });
 
       const aaplAlerts = result.current.getActiveAlertsForTicker('AAPL');
@@ -434,151 +435,82 @@ describe('useAppStore', () => {
   });
 
   // =========================================================================
-  // NOTIFICATIONS
+  // TOASTS (Ephemeral UI Notifications)
   // =========================================================================
-  describe('Notifications', () => {
-    it('initializes with empty notifications', () => {
+  describe('Toasts', () => {
+    it('initializes with empty toasts', () => {
       const { result } = renderHook(() => useAppStore());
-      expect(result.current.notifications).toEqual([]);
+      expect(result.current.toasts).toEqual([]);
     });
 
-    it('addNotification creates a notification with defaults', () => {
+    it('addToast creates a toast with defaults', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addNotification({
-          message: 'Test notification',
+        result.current.addToast({
+          message: 'Test toast',
         });
       });
 
-      expect(result.current.notifications).toHaveLength(1);
-      expect(result.current.notifications[0]).toMatchObject({
-        message: 'Test notification',
+      expect(result.current.toasts).toHaveLength(1);
+      expect(result.current.toasts[0]).toMatchObject({
+        message: 'Test toast',
         type: 'info',
         category: 'System',
-        isRead: false,
-        isArchived: false,
-        showAsToast: true,
       });
     });
 
-    it('removeNotification removes by id', () => {
+    it('removeToast removes by id', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addNotification({ message: 'Test' });
+        result.current.addToast({ message: 'Test' });
       });
 
-      const id = result.current.notifications[0].id;
+      const id = result.current.toasts[0].id;
 
       act(() => {
-        result.current.removeNotification(id);
+        result.current.removeToast(id);
       });
 
-      expect(result.current.notifications).toHaveLength(0);
+      expect(result.current.toasts).toHaveLength(0);
     });
 
-    it('markAsRead marks notification as read', () => {
+    it('clearToasts clears all', () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
-        result.current.addNotification({ message: 'Test' });
+        result.current.addToast({ message: 'Test 1' });
+        result.current.addToast({ message: 'Test 2' });
+        result.current.clearToasts();
       });
 
-      const id = result.current.notifications[0].id;
-
-      act(() => {
-        result.current.markAsRead(id);
-      });
-
-      expect(result.current.notifications[0].isRead).toBe(true);
+      expect(result.current.toasts).toHaveLength(0);
     });
 
-    it('markAllAsRead marks all notifications as read', () => {
-      const { result } = renderHook(() => useAppStore());
-
-      act(() => {
-        result.current.addNotification({ message: 'Test 1' });
-        result.current.addNotification({ message: 'Test 2' });
-      });
-
-      act(() => {
-        result.current.markAllAsRead();
-      });
-
-      expect(result.current.notifications.every((n) => n.isRead)).toBe(true);
-    });
-
-    it('archiveNotification archives and hides from toast', () => {
-      const { result } = renderHook(() => useAppStore());
-
-      act(() => {
-        result.current.addNotification({ message: 'Test' });
-      });
-
-      const id = result.current.notifications[0].id;
-
-      act(() => {
-        result.current.archiveNotification(id);
-      });
-
-      expect(result.current.notifications[0].isArchived).toBe(true);
-      expect(result.current.notifications[0].showAsToast).toBe(false);
-    });
-
-    it('getUnreadCount returns correct count', () => {
-      const { result } = renderHook(() => useAppStore());
-
-      act(() => {
-        result.current.addNotification({ message: 'Test 1' });
-        result.current.addNotification({ message: 'Test 2' });
-        result.current.addNotification({ message: 'Test 3' });
-      });
-
-      expect(result.current.getUnreadCount()).toBe(3);
-
-      act(() => {
-        result.current.markAsRead(result.current.notifications[0].id);
-      });
-
-      expect(result.current.getUnreadCount()).toBe(2);
-    });
-
-    it('clearNotifications clears all', () => {
-      const { result } = renderHook(() => useAppStore());
-
-      act(() => {
-        result.current.addNotification({ message: 'Test 1' });
-        result.current.addNotification({ message: 'Test 2' });
-        result.current.clearNotifications();
-      });
-
-      expect(result.current.notifications).toHaveLength(0);
-    });
-
-    describe('Notification Helper Methods', () => {
-      it('notifySuccess creates success notification', () => {
+    describe('Toast Helper Methods', () => {
+      it('notifySuccess creates success toast', () => {
         const { result } = renderHook(() => useAppStore());
 
         act(() => {
           result.current.notifySuccess('Operation successful');
         });
 
-        expect(result.current.notifications[0]).toMatchObject({
+        expect(result.current.toasts[0]).toMatchObject({
           type: 'success',
           message: 'Operation successful',
           priority: 'low',
         });
       });
 
-      it('notifyError creates error notification without auto-dismiss', () => {
+      it('notifyError creates error toast without auto-dismiss', () => {
         const { result } = renderHook(() => useAppStore());
 
         act(() => {
           result.current.notifyError('Something went wrong');
         });
 
-        expect(result.current.notifications[0]).toMatchObject({
+        expect(result.current.toasts[0]).toMatchObject({
           type: 'error',
           message: 'Something went wrong',
           priority: 'high',
@@ -586,28 +518,28 @@ describe('useAppStore', () => {
         });
       });
 
-      it('notifyWarning creates warning notification', () => {
+      it('notifyWarning creates warning toast', () => {
         const { result } = renderHook(() => useAppStore());
 
         act(() => {
           result.current.notifyWarning('Please review');
         });
 
-        expect(result.current.notifications[0]).toMatchObject({
+        expect(result.current.toasts[0]).toMatchObject({
           type: 'warning',
           message: 'Please review',
           priority: 'medium',
         });
       });
 
-      it('notifyInfo creates info notification', () => {
+      it('notifyInfo creates info toast', () => {
         const { result } = renderHook(() => useAppStore());
 
         act(() => {
           result.current.notifyInfo('FYI: Something happened');
         });
 
-        expect(result.current.notifications[0]).toMatchObject({
+        expect(result.current.toasts[0]).toMatchObject({
           type: 'info',
           message: 'FYI: Something happened',
           priority: 'low',
