@@ -1,8 +1,15 @@
 # =============================================================================
-# TheCreditWhisperers - Kubernetes Ingress
+# TheCreditWhisperers - Kubernetes Ingress (Microservices)
 # =============================================================================
-# Provides external HTTP/HTTPS access to the application.
-# Configured for nginx ingress controller with TLS support.
+# Provides external HTTP/HTTPS access to the microservices architecture.
+# Routes traffic between frontend and backend services.
+#
+# Architecture:
+#   / (default)     → Frontend Service (nginx + React SPA)
+#   /api/*          → Backend Service (FastAPI)
+#   /ws/*           → Backend Service (WebSocket)
+#   /metrics        → Backend Service (Prometheus metrics)
+#   /health/*       → Backend Service (Health probes)
 #
 # Prerequisites:
 # - Nginx Ingress Controller installed
@@ -40,6 +47,9 @@ metadata:
     nginx.ingress.kubernetes.io/limit-rps: "100"
     nginx.ingress.kubernetes.io/limit-connections: "50"
 
+    # Use regex for path matching
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
 spec:
   # TLS configuration
   tls:
@@ -47,26 +57,61 @@ spec:
         - creditwhisperers.example.com
       secretName: creditwhisperers-tls
 
-  # Routing rules
+  # Routing rules - Microservices Architecture
   rules:
     - host: creditwhisperers.example.com
       http:
         paths:
-          # Main application route
-          - path: /
-            pathType: Prefix
+          # =================================================================
+          # Backend API Routes (highest priority - most specific paths first)
+          # =================================================================
+
+          # API routes → Backend Service
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: creditwhisperers-backend
                 port:
                   number: 80
 
-          # WebSocket route (optional - uses sticky sessions service)
-          - path: /ws
-            pathType: Prefix
+          # WebSocket routes → Backend Service (with sticky sessions)
+          - path: /ws(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: creditwhisperers-websocket
+                port:
+                  number: 80
+
+          # Health check routes → Backend Service
+          - path: /health(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-backend
+                port:
+                  number: 80
+
+          # Prometheus metrics → Backend Service
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: creditwhisperers-backend
+                port:
+                  number: 80
+
+          # =================================================================
+          # Frontend Routes (catch-all - lowest priority)
+          # =================================================================
+
+          # All other routes → Frontend Service (React SPA)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: creditwhisperers-frontend
                 port:
                   number: 80
 

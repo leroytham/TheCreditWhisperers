@@ -1,26 +1,55 @@
 # =============================================================================
-# TheCreditWhisperers - Docker Compose Configuration
+# TheCreditWhisperers - Docker Compose Configuration (Microservices)
 # =============================================================================
-# Full stack deployment with:
-# - FastAPI backend (with React frontend bundled)
+# Microservices architecture deployment with:
+# - nginx frontend (React SPA + API proxy)
+# - FastAPI backend (API only)
 # - MongoDB database
 # - Redis cache
+#
+# This demonstrates true microservices separation for cloud-native architecture.
 #
 # Usage:
 #   docker-compose up --build        # Start all services
 #   docker-compose down              # Stop all services
 #   docker-compose down -v           # Stop and remove volumes
 #   docker-compose logs -f backend   # Follow backend logs
+#   docker-compose logs -f frontend  # Follow frontend logs
 
 version: '3.8'
 
 services:
   # ---------------------------------------------------------------------------
-  # Backend Service (FastAPI + React Static Files)
+  # Frontend Service (nginx + React SPA)
   # ---------------------------------------------------------------------------
+  # Serves React static files and proxies API requests to backend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: creditwhisperers-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # Backend Service (FastAPI API)
+  # ---------------------------------------------------------------------------
+  # Handles all API requests, WebSocket connections, and business logic
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: creditwhisperers-backend
     ports:
@@ -30,8 +59,8 @@ services:
       - MONGO_URI=mongodb://mongodb:27017/creditwhisperers
       # Cache
       - REDIS_URL=redis://redis:6379/0
-      # URLs (container serves both frontend and backend)
-      - FRONTEND_URL=http://localhost:8000
+      # URLs (microservices architecture)
+      - FRONTEND_URL=http://localhost:3000
       - API_BASE_URL=http://localhost:8000
       # Development settings
       - DEBUG=True

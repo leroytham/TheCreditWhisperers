@@ -2,8 +2,6 @@
 
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from .api import routes as api_routes
 from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
@@ -16,7 +14,6 @@ from .core.http_client import http_client
 import logging
 import warnings
 import os
-from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -156,63 +153,15 @@ async def websocket_route(websocket: WebSocket, client_id: str):
         raise
 
 # =============================================================================
-# STATIC FILE SERVING FOR REACT FRONTEND
+# MICROSERVICES ARCHITECTURE NOTE
 # =============================================================================
-# The React frontend is built and copied to app/static/ during deployment
-# We serve it from the FastAPI backend to support:
-# 1. Single deployment (frontend + backend together)
-# 2. React Router client-side routing (catch-all route)
-# 3. Proper static asset serving (JS, CSS, images)
-
-# Get the static directory paths
-# React build creates: build/index.html and build/static/js/, build/static/css/
-# After copying to backend/app/static/, we have:
-#   - backend/app/static/index.html (for catch-all route)
-#   - backend/app/static/static/js/ (for asset files)
-STATIC_DIR = Path(__file__).parent / "static"
-STATIC_ASSETS_DIR = STATIC_DIR / "static"  # The nested static folder from React build
-
-# Mount the React build's static assets (JS, CSS, images) at /static
-# This serves files like /static/js/main.js → backend/app/static/static/js/main.js
-if STATIC_ASSETS_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_ASSETS_DIR)), name="static")
-    logger.info(f"Mounted static assets directory: {STATIC_ASSETS_DIR}")
-elif STATIC_DIR.exists():
-    # Fallback: mount the outer directory if inner doesn't exist (for dev)
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-    logger.warning(f"Using fallback static directory: {STATIC_DIR}")
-else:
-    logger.warning(f"Static directory not found: {STATIC_DIR}")
-    logger.warning("Frontend will not be served. Run 'npm run build' in frontend/")
-
-# Note: Health check endpoints are now in health_routes.py
-# Provides /health/live, /health/ready, /health/startup for Kubernetes probes
-
-# Catch-all route to serve index.html for React Router
-# This MUST be defined LAST so API routes take precedence
-# Handles all routes like /, /login, /portfolio, etc. by serving index.html
-# React Router then handles the client-side routing
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    """
-    Serve the React frontend for all non-API routes.
-    This enables React Router to handle client-side routing.
-
-    NOTE: This route is defined last so API routes take precedence.
-    API routes are already registered above via app.include_router()
-    """
-    index_path = STATIC_DIR / "index.html"
-
-    if index_path.exists():
-        return FileResponse(index_path)
-    else:
-        # If index.html doesn't exist, show helpful error
-        return {
-            "error": "Frontend not built",
-            "message": "Run 'cd frontend && npm run build' to build the React app",
-            "static_dir": str(STATIC_DIR),
-            "index_exists": index_path.exists()
-        }
+# The React frontend is now served by a separate nginx container.
+# This backend service only handles API requests.
+# See frontend/Dockerfile and frontend/nginx.conf for frontend serving.
+#
+# Architecture:
+#   Frontend (nginx:alpine) → /api/* proxy → Backend (FastAPI)
+#   Frontend (nginx:alpine) → /ws/*  proxy → Backend (FastAPI WebSocket)
 
 # Startup event handler
 @app.on_event("startup")

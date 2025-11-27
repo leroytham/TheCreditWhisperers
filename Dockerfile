@@ -1,6 +1,16 @@
 # =============================================================================
-# TheCreditWhisperers - Multi-stage Docker Build
+# TheCreditWhisperers - Multi-stage Docker Build (LEGACY - Monolith)
 # =============================================================================
+# NOTE: This is the legacy monolithic Dockerfile that bundles frontend + backend.
+#
+# For the new microservices architecture, use:
+#   - frontend/Dockerfile  (nginx + React SPA)
+#   - backend/Dockerfile   (FastAPI API only)
+#
+# This file is kept for backward compatibility and CI/CD pipelines that
+# haven't been updated yet.
+# =============================================================================
+#
 # This Dockerfile creates a production-ready container with:
 # - React frontend built and served as static files
 # - FastAPI backend with ML models (FinBERT, Sentence Transformers)

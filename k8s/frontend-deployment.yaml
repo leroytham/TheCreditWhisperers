@@ -1,0 +1,98 @@
+# =============================================================================
+# TheCreditWhisperers - Frontend Kubernetes Deployment
+# =============================================================================
+# Deploys the nginx-based React frontend as a separate microservice.
+# Demonstrates cloud-native architecture with service separation.
+#
+# Features:
+# - Multiple replicas for high availability
+# - Health probes for self-healing
+# - Resource limits for proper scheduling
+# - Rolling update strategy
+#
+# Usage: kubectl apply -f k8s/frontend-deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: creditwhisperers-frontend
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: frontend
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: creditwhisperers
+      component: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: creditwhisperers
+        component: frontend
+        version: v1
+    spec:
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 10
+
+      containers:
+        - name: frontend
+          image: creditwhisperers/frontend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+
+          # Resource management (nginx is lightweight)
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+
+          # =================================================================
+          # Health Probes
+          # =================================================================
+
+          # Liveness Probe: Is the container alive?
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Readiness Probe: Is the container ready to serve traffic?
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+
+      # Pod-level settings
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst

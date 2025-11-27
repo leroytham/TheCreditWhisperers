@@ -1,0 +1,58 @@
+# =============================================================================
+# TheCreditWhisperers - Frontend Horizontal Pod Autoscaler
+# =============================================================================
+# Automatically scales frontend pods based on CPU/Memory utilization.
+# Demonstrates cloud-native auto-scaling for microservices.
+#
+# Usage: kubectl apply -f k8s/frontend-hpa.yaml
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: creditwhisperers-frontend-hpa
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: creditwhisperers-frontend
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    # Scale based on CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    # Scale based on memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    # Scale up quickly when needed
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Max
+    # Scale down conservatively to avoid thrashing
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+      selectPolicy: Min
