@@ -84,6 +84,28 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
 
+    # Cookie Configuration (for httpOnly token storage)
+    COOKIE_NAME: str = "access_token"
+    COOKIE_SECURE: bool = True  # Set to False for localhost development
+    COOKIE_HTTPONLY: bool = True
+    COOKIE_SAMESITE: str = "lax"  # "lax" or "strict"
+    COOKIE_PATH: str = "/"
+    COOKIE_MAX_AGE: int = 86400  # 24 hours in seconds
+
+    @field_validator('COOKIE_SECURE', mode='before')
+    @classmethod
+    def parse_cookie_secure(cls, v):
+        """Handle various COOKIE_SECURE value formats."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            v_lower = v.lower().strip()
+            if v_lower in ('true', '1', 'yes', 'on'):
+                return True
+            if v_lower in ('false', '0', 'no', 'off', ''):
+                return False
+        return True  # Default to secure
+
     # Error Tracking (Sentry)
     SENTRY_DSN: Optional[str] = None  # Set to enable Sentry error tracking
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring

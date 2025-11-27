@@ -75,25 +75,32 @@ const PortfolioPage = () => {
   const [isAddPortfolioModalOpen, setIsAddPortfolioModalOpen] = useState(false);
   const [isEditPortfolioModalOpen, setIsEditPortfolioModalOpen] = useState(false);
 
-  // Session and token management
+  // Session management - handle OAuth redirect and verify authentication
   useEffect(() => {
-    const token = searchParams.get('token');
     const user = searchParams.get('user');
 
-    if (token) {
-      // Store JWT token for API authentication
-      localStorage.setItem('auth_token', token);
-
-      if (user) {
-        sessionStorage.setItem('user', user);
-      }
-
-      // Remove sensitive data from URL for security
+    if (user) {
+      // Store user info for display (token is now in httpOnly cookie)
+      sessionStorage.setItem('user', user);
+      // Remove user param from URL for cleaner display
       window.history.replaceState({}, '', '/portfolio');
-    } else if (!localStorage.getItem('auth_token')) {
-      // No token in URL and no stored token - redirect to login
-      navigate('/login');
     }
+
+    // Verify authentication by calling /auth/me endpoint
+    // The httpOnly cookie will be sent automatically
+    const checkAuth = async () => {
+      try {
+        const { default: apiService } = await import('../services/api');
+        await apiService.get('/auth/me');
+      } catch (error) {
+        // If authentication fails, redirect to login
+        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+          navigate('/login');
+        }
+      }
+    };
+
+    checkAuth();
   }, [navigate, searchParams]);
 
   // Update view when account changes
@@ -101,11 +108,17 @@ const PortfolioPage = () => {
     setView(selectedAccount ? 'detail' : 'select');
   }, [selectedAccount]);
 
-  // Logout handler
-  const handleLogout = () => {
+  // Logout handler - calls backend to clear httpOnly cookie
+  const handleLogout = async () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
     if (confirmLogout) {
-      localStorage.removeItem('auth_token');
+      try {
+        const { default: apiService } = await import('../services/api');
+        await apiService.post('/auth/logout');
+      } catch (error) {
+        // Continue logout even if API call fails
+        console.error('Logout API error:', error);
+      }
       sessionStorage.removeItem('user');
       clearAccount();
       navigate('/login');

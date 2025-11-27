@@ -2,12 +2,13 @@
 JWT Authentication module for TheCreditWhisperers.
 
 This module provides JWT token creation and validation for securing API endpoints.
+Supports both httpOnly cookies (primary) and Authorization header (fallback).
 """
 
 import jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import HTTPException, Header, status
+from fastapi import HTTPException, Header, Cookie, Request, status
 
 from app.core.config import settings
 
@@ -54,15 +55,21 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
+async def get_current_user(
+    request: Request,
+    access_token: Optional[str] = Cookie(None, alias="access_token"),
+    authorization: Optional[str] = Header(None)
+) -> str:
     """
     FastAPI dependency to validate JWT and extract user_id.
 
-    This replaces the placeholder authentication that returned "default_user_id".
-    Now properly validates JWT tokens and raises 401 for invalid/missing tokens.
+    Reads JWT from httpOnly cookie (primary) or Authorization header (fallback).
+    This supports the migration from localStorage to httpOnly cookies.
 
     Args:
-        authorization: The Authorization header value (expects "Bearer <token>")
+        request: The FastAPI request object
+        access_token: JWT from httpOnly cookie (primary)
+        authorization: Authorization header value (fallback, expects "Bearer <token>")
 
     Returns:
         The user_id (sub claim) from the validated token
@@ -70,21 +77,20 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
     Raises:
         HTTPException: 401 if token is missing, invalid, or expired
     """
-    if not authorization:
+    token = access_token
+
+    # Fallback: Check Authorization header (for migration period and API clients)
+    if not token and authorization:
+        if authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header required",
+            detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization format. Expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    token = authorization.split(" ")[1]
     payload = decode_access_token(token)
 
     if not payload:
@@ -97,22 +103,35 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
     return payload.get("sub")
 
 
-async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[str]:
+async def get_current_user_optional(
+    request: Request,
+    access_token: Optional[str] = Cookie(None, alias="access_token"),
+    authorization: Optional[str] = Header(None)
+) -> Optional[str]:
     """
     Optional version of get_current_user that returns None instead of raising 401.
 
     Useful for endpoints that can work with or without authentication.
+    Reads JWT from httpOnly cookie (primary) or Authorization header (fallback).
 
     Args:
-        authorization: The Authorization header value
+        request: The FastAPI request object
+        access_token: JWT from httpOnly cookie (primary)
+        authorization: Authorization header value (fallback)
 
     Returns:
         The user_id if authenticated, None otherwise
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    token = access_token
+
+    # Fallback: Check Authorization header
+    if not token and authorization:
+        if authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+
+    if not token:
         return None
 
-    token = authorization.split(" ")[1]
     payload = decode_access_token(token)
 
     if not payload:

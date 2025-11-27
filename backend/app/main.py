@@ -109,6 +109,14 @@ app.add_middleware(
 )
 
 # =============================================================================
+# CSRF PROTECTION MIDDLEWARE
+# =============================================================================
+# Protects against Cross-Site Request Forgery when using httpOnly cookies
+from .middleware.csrf import CSRFMiddleware
+app.add_middleware(CSRFMiddleware)
+logger.info("✅ CSRF protection middleware enabled")
+
+# =============================================================================
 # PROMETHEUS METRICS MIDDLEWARE
 # =============================================================================
 # Add Prometheus metrics collection for observability

@@ -13,7 +13,16 @@ import {
 } from '../features/notifications/utils/notificationHelpers';
 
 /**
+ * Helper to read CSRF token from cookie
+ */
+function getCsrfToken() {
+  const match = document.cookie.match(/csrf_token=([^;]+)/);
+  return match ? match[1] : null;
+}
+
+/**
  * Create axios instance with base configuration
+ * withCredentials: true is required to send/receive httpOnly cookies
  */
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -21,25 +30,30 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // IMPORTANT: Send cookies with requests
 });
 
 /**
- * Request interceptor - Add auth tokens, logging, etc.
+ * Request interceptor - Add CSRF token for state-changing requests
+ * Note: Auth token is now in httpOnly cookie (sent automatically by browser)
  */
 api.interceptors.request.use(
   (config) => {
     // Add timestamp for debugging
     config.metadata = { startTime: new Date() };
 
-    // Add auth token if available
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Add CSRF token for state-changing requests (POST, PUT, DELETE, PATCH)
+    const method = config.method?.toLowerCase();
+    if (method && !['get', 'head', 'options'].includes(method)) {
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken;
+      }
     }
 
     // Log request in development
     if (process.env.NODE_ENV === 'development') {
-      console.log('=� API Request:', {
+      console.log('=> API Request:', {
         method: config.method.toUpperCase(),
         url: config.url,
         params: config.params,
@@ -50,7 +64,7 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('L Request Error:', error);
+    console.error('Request Error:', error);
     return Promise.reject(error);
   }
 );
@@ -153,8 +167,7 @@ api.interceptors.response.use(
     // Handle specific error codes
     switch (status) {
       case HTTP_STATUS.UNAUTHORIZED:
-        // Clear token and redirect to login
-        localStorage.removeItem('auth_token');
+        // Redirect to login (cookie will be cleared by backend logout or expiry)
         window.location.href = '/login';
         throw new Error('Session expired. Please login again.');
 

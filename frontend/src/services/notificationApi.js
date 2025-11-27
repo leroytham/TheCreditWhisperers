@@ -76,20 +76,35 @@ const normalizeResponse = (data) => {
   return data;
 };
 
+/**
+ * Helper to read CSRF token from cookie
+ */
+function getCsrfToken() {
+  const match = document.cookie.match(/csrf_token=([^;]+)/);
+  return match ? match[1] : null;
+}
+
 // Create axios instance with default config
+// withCredentials: true is required for httpOnly cookie authentication
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // IMPORTANT: Send cookies with requests
 });
 
-// Add auth token to requests if available
+// Add CSRF token to state-changing requests
+// Note: Auth token is now in httpOnly cookie (sent automatically by browser)
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Add CSRF token for state-changing requests (POST, PUT, DELETE, PATCH)
+    const method = config.method?.toLowerCase();
+    if (method && !['get', 'head', 'options'].includes(method)) {
+      const csrfToken = getCsrfToken();
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken;
+      }
     }
     return config;
   },
@@ -109,8 +124,7 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
-      localStorage.removeItem('auth_token');
+      // Redirect to login (cookie will be cleared by backend logout or expiry)
       window.location.href = '/login';
     }
     return Promise.reject(error);

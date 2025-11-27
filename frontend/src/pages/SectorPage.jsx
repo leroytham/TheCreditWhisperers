@@ -30,20 +30,38 @@ const SectorPage = () => {
   const [performanceContext, setPerformanceContext] = useState(null);
   const [activeSubTab, setActiveSubTab] = useState('overview');
 
-  // Session management
+  // Session management - verify authentication via httpOnly cookie
   useEffect(() => {
     const user = searchParams.get("user");
     if (user) {
       sessionStorage.setItem("user", user);
-    } else if (!sessionStorage.getItem("user")) {
-      navigate("/login");
     }
+
+    // Verify authentication by calling /auth/me endpoint
+    const checkAuth = async () => {
+      try {
+        const { default: apiService } = await import('../services/api');
+        await apiService.get('/auth/me');
+      } catch (error) {
+        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+          navigate("/login");
+        }
+      }
+    };
+
+    checkAuth();
   }, [navigate, searchParams]);
 
-  // Logout handler
-  const handleLogout = () => {
+  // Logout handler - calls backend to clear httpOnly cookie
+  const handleLogout = async () => {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
     if (confirmLogout) {
+      try {
+        const { default: apiService } = await import('../services/api');
+        await apiService.post('/auth/logout');
+      } catch (error) {
+        console.error('Logout API error:', error);
+      }
       sessionStorage.removeItem("user");
       navigate("/login");
     }

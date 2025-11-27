@@ -219,11 +219,16 @@ const NotificationPageEnhanced = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
     if (confirmLogout) {
+      try {
+        const { default: apiService } = await import('../services/api');
+        await apiService.post('/auth/logout');
+      } catch (error) {
+        console.error('Logout API error:', error);
+      }
       sessionStorage.removeItem('user');
-      localStorage.removeItem('auth_token');
       window.location.href = '/login';
     }
   };

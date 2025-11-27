@@ -1,15 +1,16 @@
 # app/api/routes.py
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Response, Depends
 import yfinance as yf
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
 import certifi
 import asyncio
 import uuid
+import secrets
 
 import msal
 import os
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
 # Import the modular services
 from app.services.news_service import news_service_instance
@@ -25,6 +26,7 @@ from app.core.cache import redis_cache, async_cache_result, cache_result
 from app.core.config import settings
 from app.core.http_client import http_client
 from app.core.circuit_breakers import get_all_status, reset_circuit_breaker
+from app.core.auth import get_current_user
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -1656,16 +1658,75 @@ async def azure_auth_callback(request: Request):
         from app.core.auth import create_access_token
         access_token = create_access_token(user_id=user_id, email=username)
 
-        # Redirect to frontend with token (frontend will store it and clear from URL)
-        return RedirectResponse(
-            f"{FRONTEND_URL}/portfolio?token={access_token}&user={username}"
+        # Create redirect response and set httpOnly cookie
+        response = RedirectResponse(
+            url=f"{FRONTEND_URL}/portfolio?user={username}",
+            status_code=302
         )
+
+        # Set httpOnly cookie for secure token storage (immune to XSS)
+        response.set_cookie(
+            key=settings.COOKIE_NAME,
+            value=access_token,
+            max_age=settings.COOKIE_MAX_AGE,
+            httponly=settings.COOKIE_HTTPONLY,
+            secure=settings.COOKIE_SECURE,
+            samesite=settings.COOKIE_SAMESITE,
+            path=settings.COOKIE_PATH,
+        )
+
+        return response
 
     except Exception as e:
         print(f"Azure login callback exception: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
         return RedirectResponse(f"{FRONTEND_URL}/login?error=azure_failed")
+
+
+@router.post("/auth/logout")
+async def logout(response: Response):
+    """
+    Clear authentication cookie to log out the user.
+    Frontend should call this endpoint and then redirect to login.
+    """
+    response.delete_cookie(
+        key=settings.COOKIE_NAME,
+        path=settings.COOKIE_PATH,
+    )
+    # Also clear CSRF token cookie
+    response.delete_cookie(key="csrf_token", path="/")
+    return {"message": "Logged out successfully"}
+
+
+@router.get("/auth/csrf-token")
+async def get_csrf_token(response: Response):
+    """
+    Generate a CSRF token for state-changing requests.
+    Frontend must include this token in X-CSRF-Token header for POST/PUT/DELETE.
+    The token is also set as a readable cookie for the frontend to access.
+    """
+    token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key="csrf_token",
+        value=token,
+        httponly=False,  # Must be readable by JavaScript
+        secure=settings.COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
+    return {"csrf_token": token}
+
+
+@router.get("/auth/me")
+async def get_current_user_info(
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Verify authentication status and return current user info.
+    Used by frontend to check if user is authenticated after page load.
+    """
+    return {"user_id": user_id, "authenticated": True}
 
 
 # ============================================================================
