@@ -22,8 +22,8 @@ const NotificationPage = () => {
     System: true,
   });
 
-  // Get notifications from store
-  const { notifications, markAsRead, archiveNotification, markAllAsRead, clearNotifications, clearActiveNotifications, clearArchivedNotifications, notifySuccess, notifyError, notifyWarning, notifyInfo } = useAppStore();
+  // Get notifications from store (and logout for auth)
+  const { notifications, markAsRead, archiveNotification, markAllAsRead, clearNotifications, clearActiveNotifications, clearArchivedNotifications, notifySuccess, notifyError, notifyWarning, notifyInfo, logout: zustandLogout } = useAppStore();
 
   // Filter notifications based on category filters
   const filterNotifications = (notificationsList) => {
@@ -120,8 +120,8 @@ const NotificationPage = () => {
   const handleLogout = () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
     if (confirmLogout) {
-      sessionStorage.removeItem('user');
-      window.location.href = '/login';
+      zustandLogout();  // Clears user, isAuthenticated, AND selectedAccount
+      navigate('/login');
     }
   };
 

@@ -70,8 +70,8 @@ const NotificationPageEnhanced = () => {
     System: true,
   });
 
-  // For test notifications (development only)
-  const { notifyWithMetadata } = useAppStore();
+  // For test notifications (development only) and auth
+  const { notifyWithMetadata, logout: zustandLogout } = useAppStore();
 
   // Sync local filters with server preferences
   useEffect(() => {
@@ -188,8 +188,8 @@ const NotificationPageEnhanced = () => {
       } catch (error) {
         console.error('Logout API error:', error);
       }
-      sessionStorage.removeItem('user');
-      window.location.href = '/login';
+      zustandLogout();  // Clears user, isAuthenticated, AND selectedAccount
+      navigate('/login');
     }
   };
 

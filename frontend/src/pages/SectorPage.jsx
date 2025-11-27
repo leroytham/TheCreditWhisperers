@@ -6,6 +6,7 @@ import AppHeader from "../components/layout/AppHeader";
 import SectorSelector from "../features/sector/components/SectorSelector/SectorSelector";
 import PerformanceView from "../features/sector/components/PerformanceView/PerformanceView";
 import { resolveDisplayTicker } from "../features/sector/utils/tickerResolver";
+import useAppStore from "../store/useAppStore";
 
 /**
  * SectorPage - Main sector analysis page
@@ -29,12 +30,14 @@ const SectorPage = () => {
   const [view, setView] = useState('filter'); // 'filter' | 'performance'
   const [performanceContext, setPerformanceContext] = useState(null);
   const [activeSubTab, setActiveSubTab] = useState('overview');
+  const setUser = useAppStore((state) => state.setUser);
+  const zustandLogout = useAppStore((state) => state.logout);
 
   // Session management - verify authentication via httpOnly cookie
   useEffect(() => {
     const user = searchParams.get("user");
     if (user) {
-      sessionStorage.setItem("user", user);
+      setUser(user);  // Update Zustand store
     }
 
     // Verify authentication by calling /auth/me endpoint
@@ -50,7 +53,7 @@ const SectorPage = () => {
     };
 
     checkAuth();
-  }, [navigate, searchParams]);
+  }, [navigate, searchParams, setUser]);
 
   // Logout handler - calls backend to clear httpOnly cookie
   const handleLogout = async () => {
@@ -62,7 +65,7 @@ const SectorPage = () => {
       } catch (error) {
         console.error('Logout API error:', error);
       }
-      sessionStorage.removeItem("user");
+      zustandLogout();  // Clears user, isAuthenticated, AND selectedAccount
       navigate("/login");
     }
   };

@@ -12,6 +12,7 @@ import { useNewsData } from '../features/entity/hooks/useNewsData';
 import { useDailySentiment } from '../features/entity/hooks/useDailySentiment';
 import { useSignificantEvents } from '../features/entity/hooks/useSignificantEvents';
 import { DEFAULT_TICKER } from '../features/shared/utils/constants';
+import useAppStore from '../store/useAppStore';
 
 /**
  * EntityPage - Main entity analysis page
@@ -41,12 +42,14 @@ const EntityPage = () => {
   const [activeSubTab, setActiveSubTab] = useState('overview');
   const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
   const [priceTimeframe, setPriceTimeframe] = useState('1D'); // Add price chart timeframe state
+  const setUser = useAppStore((state) => state.setUser);
+  const zustandLogout = useAppStore((state) => state.logout);
 
   // Session management - verify authentication via httpOnly cookie
   useEffect(() => {
     const user = searchParams.get('user');
     if (user) {
-      sessionStorage.setItem('user', user);
+      setUser(user);  // Update Zustand store
     }
 
     // Verify authentication by calling /auth/me endpoint
@@ -62,7 +65,7 @@ const EntityPage = () => {
     };
 
     checkAuth();
-  }, [navigate, searchParams]);
+  }, [navigate, searchParams, setUser]);
 
   // Update ticker from URL parameter
   useEffect(() => {
@@ -82,7 +85,7 @@ const EntityPage = () => {
       } catch (error) {
         console.error('Logout API error:', error);
       }
-      sessionStorage.removeItem('user');
+      zustandLogout();  // Clears user, isAuthenticated, AND selectedAccount
       navigate('/login');
     }
   };

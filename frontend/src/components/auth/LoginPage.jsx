@@ -3,6 +3,7 @@ import '../../index.css';
 import { Link } from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
 import apiService from '../../services/api';
+import useAppStore from '../../store/useAppStore';
 
 
 
@@ -11,7 +12,8 @@ export default function LoginCard() {
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [message, setMessage] = useState('');
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
+  const setUser = useAppStore((state) => state.setUser); 
 
 
   const handleSubmit = async (e) => {
@@ -23,12 +25,8 @@ export default function LoginCard() {
 
       if (data.success) {
         setMessage("Login successful!");
-        sessionStorage.setItem("user", JSON.stringify(data.user));
+        setUser(data.user);  // Update Zustand store (persisted to localStorage)
         navigate("/entity");
-
-        if (remember) {
-          localStorage.setItem("user", JSON.stringify(data.user));
-        }
       } else {
         setMessage(" " + (data.message || "Login failed"));
       }

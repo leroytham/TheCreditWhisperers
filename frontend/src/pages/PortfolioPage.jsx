@@ -16,6 +16,7 @@ import PortfolioHoldingsDetail from '../features/portfolio/components/HoldingsDe
 import { DetailedRelatedNews } from '../features/shared/components';
 import { usePortfolioNews } from '../features/portfolio/hooks/usePortfolioNews';
 import { useSelectedAccount } from '../hooks/useSelectedAccount';
+import useAppStore from '../store/useAppStore';
 
 /**
  * PortfolioPage Component
@@ -55,6 +56,8 @@ const PortfolioPage = () => {
 
   // Use Zustand store for centralized account state
   const { selectedAccount, selectAccount, clearSelectedAccount } = useSelectedAccount();
+  const setUser = useAppStore((state) => state.setUser);
+  const zustandLogout = useAppStore((state) => state.logout);
 
   // View state: 'select' for account selection or 'detail' for portfolio details
   const [view, setView] = useState(selectedAccount ? 'detail' : 'select');
@@ -80,8 +83,8 @@ const PortfolioPage = () => {
     const user = searchParams.get('user');
 
     if (user) {
-      // Store user info for display (token is now in httpOnly cookie)
-      sessionStorage.setItem('user', user);
+      // Update Zustand store with user info (token is now in httpOnly cookie)
+      setUser(user);
       // Remove user param from URL for cleaner display
       window.history.replaceState({}, '', '/portfolio');
     }
@@ -119,8 +122,7 @@ const PortfolioPage = () => {
         // Continue logout even if API call fails
         console.error('Logout API error:', error);
       }
-      sessionStorage.removeItem('user');
-      clearSelectedAccount();
+      zustandLogout();  // Clears user, isAuthenticated, AND selectedAccount
       navigate('/login');
     }
   };
