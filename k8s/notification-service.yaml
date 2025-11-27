@@ -1,0 +1,55 @@
+# =============================================================================
+# TheCreditWhisperers - Notification Service Kubernetes Service
+# =============================================================================
+# Exposes the notification microservice as a network service.
+# Includes both standard HTTP service and WebSocket service with sticky sessions.
+#
+# Usage: kubectl apply -f k8s/notification-service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: creditwhisperers-notification
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: notification
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8001
+      protocol: TCP
+  selector:
+    app: creditwhisperers
+    component: notification
+
+---
+# =============================================================================
+# Notification WebSocket Service (with sticky sessions)
+# =============================================================================
+# For WebSocket connections that require session affinity
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: creditwhisperers-notification-ws
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: notification-websocket
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+  ports:
+    - name: ws
+      port: 80
+      targetPort: 8001
+      protocol: TCP
+  selector:
+    app: creditwhisperers
+    component: notification

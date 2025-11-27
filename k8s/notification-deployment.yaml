@@ -1,0 +1,118 @@
+# =============================================================================
+# TheCreditWhisperers - Notification Service Kubernetes Deployment
+# =============================================================================
+# Defines the notification microservice deployment with:
+# - Multiple replicas for high availability
+# - Resource limits for proper scheduling
+# - Health probes for self-healing
+# - Environment variables from ConfigMap and Secret
+#
+# Usage: kubectl apply -f k8s/notification-deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: creditwhisperers-notification
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: notification
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: creditwhisperers
+      component: notification
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: creditwhisperers
+        component: notification
+        version: v1
+    spec:
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: notification
+          image: creditwhisperers/notification:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8001
+              protocol: TCP
+
+          # Environment variables from ConfigMap and Secret
+          envFrom:
+            - configMapRef:
+                name: creditwhisperers-config
+            - secretRef:
+                name: creditwhisperers-secrets
+
+          # Additional environment variables for service communication
+          env:
+            - name: BACKEND_URL
+              value: "http://creditwhisperers-backend:80"
+
+          # Resource management (lighter than backend - notification is simpler)
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+          # =================================================================
+          # Health Probes - Critical for Resilience & Self-Healing
+          # =================================================================
+
+          # Liveness Probe: Is the container alive?
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Readiness Probe: Is the container ready to serve traffic?
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # Startup Probe: For initial startup
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
+            successThreshold: 1
+
+          # Security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+
+      # Pod-level settings
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst

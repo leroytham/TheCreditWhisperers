@@ -5,11 +5,14 @@
 # Routes traffic between frontend and backend services.
 #
 # Architecture:
-#   / (default)     → Frontend Service (nginx + React SPA)
-#   /api/*          → Backend Service (FastAPI)
-#   /ws/*           → Backend Service (WebSocket)
-#   /metrics        → Backend Service (Prometheus metrics)
-#   /health/*       → Backend Service (Health probes)
+#   / (default)           → Frontend Service (nginx + React SPA)
+#   /api/notifications/*  → Notification Service (Notifications API)
+#   /api/price-alerts/*   → Notification Service (Price Alerts API)
+#   /api/*                → Backend Service (FastAPI)
+#   /ws/notifications/*   → Notification Service (WebSocket notifications)
+#   /ws/*                 → Backend Service (WebSocket)
+#   /metrics              → Backend Service (Prometheus metrics)
+#   /health/*             → Backend Service (Health probes)
 #
 # Prerequisites:
 # - Nginx Ingress Controller installed
@@ -63,7 +66,38 @@ spec:
       http:
         paths:
           # =================================================================
-          # Backend API Routes (highest priority - most specific paths first)
+          # Notification Service Routes (highest priority - most specific)
+          # =================================================================
+
+          # Notifications API → Notification Service
+          - path: /api/notifications(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-notification
+                port:
+                  number: 80
+
+          # Price Alerts API → Notification Service
+          - path: /api/price-alerts(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-notification
+                port:
+                  number: 80
+
+          # Notification WebSocket → Notification Service (with sticky sessions)
+          - path: /ws/notifications(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-notification-ws
+                port:
+                  number: 80
+
+          # =================================================================
+          # Backend API Routes (general)
           # =================================================================
 
           # API routes → Backend Service

@@ -1,0 +1,71 @@
+# =============================================================================
+# TheCreditWhisperers - Notification Service Horizontal Pod Autoscaler
+# =============================================================================
+# Automatically scales the notification service based on resource utilization.
+#
+# Features:
+# - Scales between 2-8 replicas
+# - CPU target: 70% utilization
+# - Memory target: 80% utilization
+# - Controlled scale-up/scale-down behavior
+#
+# Usage: kubectl apply -f k8s/notification-hpa.yaml
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: creditwhisperers-notification-hpa
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: notification-autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: creditwhisperers-notification
+
+  # Replica range (slightly lower than backend - notifications are lighter)
+  minReplicas: 2
+  maxReplicas: 8
+
+  # Scaling metrics
+  metrics:
+    # Scale based on CPU utilization
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # Scale based on memory utilization
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+  # Scaling behavior policies
+  behavior:
+    # Scale up quickly when needed (important for real-time notifications)
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+
+    # Scale down slowly to avoid dropping WebSocket connections
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+      selectPolicy: Min

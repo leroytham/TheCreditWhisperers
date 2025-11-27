@@ -4,17 +4,19 @@
 # Microservices architecture deployment with:
 # - nginx frontend (React SPA + API proxy)
 # - FastAPI backend (API only)
+# - Notification service (WebSocket, alerts, real-time updates)
 # - MongoDB database
-# - Redis cache
+# - Redis cache (with Pub/Sub for inter-service communication)
 #
 # This demonstrates true microservices separation for cloud-native architecture.
 #
 # Usage:
-#   docker-compose up --build        # Start all services
-#   docker-compose down              # Stop all services
-#   docker-compose down -v           # Stop and remove volumes
-#   docker-compose logs -f backend   # Follow backend logs
-#   docker-compose logs -f frontend  # Follow frontend logs
+#   docker-compose up --build               # Start all services
+#   docker-compose down                     # Stop all services
+#   docker-compose down -v                  # Stop and remove volumes
+#   docker-compose logs -f backend          # Follow backend logs
+#   docker-compose logs -f notification     # Follow notification logs
+#   docker-compose logs -f frontend         # Follow frontend logs
 
 version: '3.8'
 
@@ -32,6 +34,8 @@ services:
       - "3000:80"
     depends_on:
       backend:
+        condition: service_healthy
+      notification:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -81,6 +85,42 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # Notification Service (WebSocket, Price Alerts, Real-time Updates)
+  # ---------------------------------------------------------------------------
+  # Dedicated microservice for all notification functionality
+  notification:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: creditwhisperers-notification
+    ports:
+      - "8001:8001"
+    environment:
+      # Database
+      - MONGO_URI=mongodb://mongodb:27017/creditwhisperers
+      # Redis (for Pub/Sub)
+      - REDIS_URL=redis://redis:6379/0
+      # Service communication
+      - BACKEND_URL=http://backend:8000
+      # Development settings
+      - DEBUG=True
+      - ENVIRONMENT=development
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - creditwhisperers-network
 
