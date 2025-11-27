@@ -190,9 +190,23 @@ api.interceptors.response.use(
       case HTTP_STATUS.SERVER_ERROR:
       case HTTP_STATUS.BAD_GATEWAY:
       case HTTP_STATUS.SERVICE_UNAVAILABLE:
-        throw new Error(ERROR_MESSAGES.SERVER_ERROR);
+        // Use generic message but include error_id for support reference if available
+        const errorId = data?.error_id;
+        const serverErrorMsg = errorId
+          ? `${ERROR_MESSAGES.SERVER_ERROR} Reference: ${errorId}`
+          : ERROR_MESSAGES.SERVER_ERROR;
+        throw new Error(serverErrorMsg);
 
       default:
+        // For 4xx errors, detail is safe to show; for 5xx, use generic message
+        if (status >= 500) {
+          const genericErrorId = data?.error_id;
+          const genericMsg = genericErrorId
+            ? `An error occurred. Reference: ${genericErrorId}`
+            : ERROR_MESSAGES.GENERIC;
+          throw new Error(genericMsg);
+        }
+        // 4xx errors - detail is safe to expose
         throw new Error(data?.detail || ERROR_MESSAGES.GENERIC);
     }
   }

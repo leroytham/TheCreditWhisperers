@@ -2,6 +2,9 @@
 
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import HTTPException
+import uuid
 from .api import routes as api_routes
 from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
@@ -136,6 +139,80 @@ if settings.METRICS_ENABLED:
         logger.warning("⚠️ prometheus-client not installed. Metrics disabled.")
     except Exception as e:
         logger.warning(f"⚠️ Failed to initialize Prometheus middleware: {e}")
+
+# =============================================================================
+# GLOBAL EXCEPTION HANDLERS
+# =============================================================================
+# Security: Prevent internal error details from leaking to API clients.
+# All 500-level errors return generic messages with correlation IDs for debugging.
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all handler for unhandled exceptions.
+    - Logs full details internally for debugging
+    - Returns generic message to client (no internal details)
+    - Generates correlation ID for tracking
+    """
+    error_id = str(uuid.uuid4())[:8]
+
+    # Log full details internally (including stack trace)
+    logger.error(
+        f"Unhandled exception [error_id={error_id}] "
+        f"path={request.url.path} method={request.method}",
+        exc_info=exc
+    )
+
+    # Send to Sentry if configured
+    if settings.SENTRY_DSN:
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(exc)
+        except Exception:
+            pass  # Don't fail if Sentry capture fails
+
+    # Return generic message to client - NO internal details
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An internal error occurred. Please try again later.",
+            "error_id": error_id,
+            "support": "If this persists, contact support with the error_id above."
+        }
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Handle HTTPExceptions with sanitization for 500-level errors.
+    - 4xx errors: Return original detail (client errors are safe to expose)
+    - 5xx errors: Sanitize to prevent internal detail leakage
+    """
+    if exc.status_code >= 500:
+        error_id = str(uuid.uuid4())[:8]
+
+        # Log the original detail internally
+        logger.error(
+            f"HTTP {exc.status_code} [error_id={error_id}] "
+            f"path={request.url.path} original_detail={exc.detail}",
+        )
+
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "detail": "An internal error occurred. Please try again later.",
+                "error_id": error_id
+            }
+        )
+
+    # 4xx errors - safe to return original detail
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None)
+    )
+
 
 # Include the API router from routes.py
 # IMPORTANT: We include routers TWICE to support both localhost and production:

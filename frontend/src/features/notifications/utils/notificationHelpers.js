@@ -6,6 +6,10 @@
 
 /**
  * Get user-friendly error message from API error
+ *
+ * Security: For 500+ errors, we NEVER expose the raw error detail to users.
+ * Instead, we show a generic message with an error_id for support reference.
+ * This prevents leaking internal implementation details.
  */
 export const getErrorMessage = (error) => {
   if (!error.response) {
@@ -14,11 +18,23 @@ export const getErrorMessage = (error) => {
 
   const { status, data } = error.response;
 
-  if (data?.detail) {
+  // For 500+ server errors, always use generic message to prevent information leakage
+  // Include error_id from backend if available for support reference
+  if (status >= 500) {
+    const errorId = data?.error_id;
+    if (errorId) {
+      return `Something went wrong. Reference: ${errorId}`;
+    }
+    // Fall through to status-based messages below
+  }
+
+  // For 4xx client errors, showing the detail is safe and helpful
+  if (status < 500 && data?.detail) {
     return typeof data.detail === 'string' ? data.detail : 'An error occurred';
   }
 
-  if (data?.message) {
+  // Also check for message field (some endpoints use this)
+  if (status < 500 && data?.message) {
     return data.message;
   }
 
@@ -33,6 +49,7 @@ export const getErrorMessage = (error) => {
     500: 'Server error. Please try again later.',
     502: 'Bad gateway. The server is temporarily unavailable.',
     503: 'Service unavailable. Please try again later.',
+    504: 'Gateway timeout. Please try again later.',
   };
 
   return statusMessages[status] || `An error occurred (${status})`;
