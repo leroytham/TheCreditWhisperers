@@ -83,15 +83,15 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
     const fetchNews = yfinanceKey
       ? apiService.getSectorAggregatedNews(yfinanceKey, { limit: 1000, timeframe: '1W' })
           .then(r => r.data)
-      : fetch(`/api/news?ticker=${encodeURIComponent(newsTicker)}`)
-          .then(r => r.json());
+      : apiService.getNews(newsTicker)
+          .then(r => r.data);
 
     // Use sector daily sentiment endpoint if yfinanceKey is available, otherwise use stock endpoint
     const fetchDailySentiment = yfinanceKey
       ? apiService.getSectorDailySentiment(yfinanceKey, 30)
           .then(r => r.data)
-      : fetch(`/api/daily-sentiment?ticker=${encodeURIComponent(newsTicker)}`)
-          .then(r => r.json());
+      : apiService.getDailySentiment(newsTicker)
+          .then(r => r.data);
 
     Promise.allSettled([fetchNews, fetchConstituents, fetchDailySentiment])
       .then(([newsRes, constRes, dailySentimentRes]) => {
@@ -275,8 +275,8 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
     const fetchSignificantEvents = async () => {
       try {
         const newsTicker = resolveNewsTicker(ticker);
-        const response = await fetch(`/api/stocks/${encodeURIComponent(newsTicker)}/significant-events?timeframe=${encodeURIComponent(timeframe)}`);
-        const analysis = await response.json();
+        const response = await apiService.getStockEvents(newsTicker, timeframe);
+        const analysis = response.data;
 
         if (cancelled) return;
 
@@ -323,8 +323,8 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
 
     const pollPriceData = async () => {
       try {
-        const response = await fetch(`/api/price?ticker=${encodeURIComponent(ticker)}&timeframe=${encodeURIComponent(timeframe)}`);
-        const priceData = await response.json();
+        const response = await apiService.getPrice(ticker, timeframe);
+        const priceData = response.data;
 
         // Update only price-related data, preserve everything else
         setData(prev => ({

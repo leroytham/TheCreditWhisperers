@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import apiService from '../../../services/api';
 
 export const useRollingSentiment = (ticker, timeframe = '1D') => {
   const [data, setData] = useState([]);
@@ -29,23 +30,10 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
 
     const fetchRollingSentiment = async () => {
       try {
-        const params = new URLSearchParams({
-          ticker: ticker || '',
-          timeframe: timeframe || ''
-        });
+        console.log('[useRollingSentiment] Fetching:', { ticker, timeframe });
 
-        const url = `/api/rolling-sentiment?${params.toString()}`;
-        console.log('[useRollingSentiment] Fetching:', url);
-
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Rolling sentiment API error (${response.status}):`, errorText);
-          throw new Error(`Failed to fetch rolling sentiment: ${response.status} ${response.statusText}`);
-        }
-
-        const result = await response.json();
+        const response = await apiService.getRollingSentiment(ticker, timeframe);
+        const result = response.data;
         console.log('[useRollingSentiment] Response:', result);
 
         setData(result.data || []);

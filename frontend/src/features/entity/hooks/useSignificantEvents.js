@@ -7,6 +7,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
+import apiService from '../../../services/api';
 
 export const useSignificantEvents = (ticker, timeframe = '1D', options = {}) => {
   const queryClient = useQueryClient();
@@ -15,11 +16,8 @@ export const useSignificantEvents = (ticker, timeframe = '1D', options = {}) => 
   const { data, isLoading, error } = useQuery({
     queryKey: ['significantEvents', ticker, timeframe],
     queryFn: async () => {
-      const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${timeframe}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch significant events: ${response.statusText}`);
-      }
-      const data = await response.json();
+      const response = await apiService.getStockEvents(ticker, timeframe);
+      const data = response.data;
 
       const rawEvents = data.events || [];
       // Transform events to match UI expectations
@@ -56,20 +54,23 @@ export const useSignificantEvents = (ticker, timeframe = '1D', options = {}) => 
         queryClient.prefetchQuery({
           queryKey: ['significantEvents', ticker, tf],
           queryFn: async () => {
-            const response = await fetch(`/api/stocks/${ticker}/significant-events?timeframe=${tf}`);
-            if (!response.ok) return [];
-            const data = await response.json();
-            const rawEvents = data.events || [];
-            return rawEvents.map(event => {
-              const movePct = event.total_move_pct * 100;
-              return {
-                ...event,
-                trend: movePct >= 0 ? 'Upward' : 'Downward',
-                total_move_pct: movePct,
-                end_date: event.start_date,
-                days: 1
-              };
-            });
+            try {
+              const response = await apiService.getStockEvents(ticker, tf);
+              const data = response.data;
+              const rawEvents = data.events || [];
+              return rawEvents.map(event => {
+                const movePct = event.total_move_pct * 100;
+                return {
+                  ...event,
+                  trend: movePct >= 0 ? 'Upward' : 'Downward',
+                  total_move_pct: movePct,
+                  end_date: event.start_date,
+                  days: 1
+                };
+              });
+            } catch {
+              return [];
+            }
           },
           staleTime: 5 * 60 * 1000,
         });

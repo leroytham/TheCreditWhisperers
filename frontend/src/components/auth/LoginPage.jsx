@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import '../../index.css';
 import { Link } from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
+import apiService from '../../services/api';
 
 
 
@@ -17,13 +18,8 @@ export default function LoginCard() {
     e.preventDefault();
 
     try {
-      const res = await fetch("http://localhost:8000/LoginAdmin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
+      const res = await apiService.login(username, password);
+      const data = res.data;
 
       if (data.success) {
         setMessage("Login successful!");

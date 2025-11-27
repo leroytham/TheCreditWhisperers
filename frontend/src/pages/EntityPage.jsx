@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import AppHeader from '../components/layout/AppHeader';
+import apiService from '../services/api';
 import PerformanceView from '../features/entity/components/PerformanceView/PerformanceView';
 import EarningsTranscript from '../features/entity/components/EarningsTranscript';
 import { usePriceData } from '../features/entity/hooks/usePriceData';
@@ -137,9 +138,12 @@ const EntityPage = () => {
         queryClient.prefetchQuery({
           queryKey: ['dailySentiment', ticker, tf],
           queryFn: async () => {
-            const response = await fetch(`/api/daily-sentiment?ticker=${ticker}&timeframe=${tf}`);
-            if (!response.ok) return { daily: {} };
-            return response.json();
+            try {
+              const response = await apiService.getDailySentiment(ticker, tf);
+              return response.data;
+            } catch {
+              return { daily: {} };
+            }
           },
           staleTime: 5 * 60 * 1000,
         });
@@ -151,9 +155,12 @@ const EntityPage = () => {
         queryClient.prefetchQuery({
           queryKey: ['price', ticker, tf],
           queryFn: async () => {
-            const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${tf}`);
-            if (!response.ok) return { prices: [] };
-            return response.json();
+            try {
+              const response = await apiService.getPrice(ticker, tf);
+              return response.data;
+            } catch {
+              return { prices: [] };
+            }
           },
           staleTime: 5 * 60 * 1000,
         });

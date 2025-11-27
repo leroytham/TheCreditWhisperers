@@ -4,7 +4,8 @@
  */
 
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
-import { notificationApi, preferencesApi, priceAlertApi } from '../../../services/notificationApi';
+import apiService from '../../../services/api';
+import { normalizeNotification, normalizeNotificationResponse } from '../utils/normalizers';
 import useAppStore from '../../../store/useAppStore';
 import { useCallback } from 'react';
 
@@ -31,14 +32,20 @@ export const useNotifications = (filters = {}) => {
     refetch,
   } = useQuery({
     queryKey: [...QUERY_KEYS.notifications, filters],
-    queryFn: () => notificationApi.getNotifications(filters),
+    queryFn: async () => {
+      const response = await apiService.notifications.getAll(filters);
+      return normalizeNotificationResponse(response.data);
+    },
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
   });
 
   // Mutations
   const markAsReadMutation = useMutation({
-    mutationFn: notificationApi.markAsRead,
+    mutationFn: async (notificationId) => {
+      const response = await apiService.notifications.markAsRead(notificationId);
+      return response.data;
+    },
     onMutate: async (notificationId) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.notifications });
@@ -77,7 +84,10 @@ export const useNotifications = (filters = {}) => {
   });
 
   const markAllAsReadMutation = useMutation({
-    mutationFn: notificationApi.markAllAsRead,
+    mutationFn: async () => {
+      const response = await apiService.notifications.markAllAsRead();
+      return response.data;
+    },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.notifications });
 
@@ -108,7 +118,10 @@ export const useNotifications = (filters = {}) => {
   });
 
   const archiveMutation = useMutation({
-    mutationFn: notificationApi.archiveNotification,
+    mutationFn: async (notificationId) => {
+      const response = await apiService.notifications.archive(notificationId);
+      return response.data;
+    },
     onMutate: async (notificationId) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.notifications });
 
@@ -140,7 +153,10 @@ export const useNotifications = (filters = {}) => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: notificationApi.deleteNotification,
+    mutationFn: async (notificationId) => {
+      const response = await apiService.notifications.delete(notificationId);
+      return response.data;
+    },
     onMutate: async (notificationId) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.notifications });
 
@@ -172,7 +188,10 @@ export const useNotifications = (filters = {}) => {
   });
 
   const clearMutation = useMutation({
-    mutationFn: (isArchived) => notificationApi.clearNotifications(isArchived),
+    mutationFn: async (isArchived) => {
+      const response = await apiService.notifications.clear(isArchived);
+      return response.data;
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.notifications });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unreadCount });
@@ -217,8 +236,10 @@ export const useInfiniteNotifications = (filters = {}, limit = 50) => {
     isLoading,
   } = useInfiniteQuery({
     queryKey: [...QUERY_KEYS.notifications, 'infinite', filters],
-    queryFn: ({ pageParam = 0 }) =>
-      notificationApi.getNotifications({ ...filters, offset: pageParam, limit }),
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await apiService.notifications.getAll({ ...filters, offset: pageParam, limit });
+      return normalizeNotificationResponse(response.data);
+    },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
       const loadedCount = allPages.reduce((sum, page) => sum + page.notifications.length, 0);
@@ -246,7 +267,10 @@ export const useInfiniteNotifications = (filters = {}, limit = 50) => {
 export const useUnreadCount = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.unreadCount,
-    queryFn: notificationApi.getUnreadCount,
+    queryFn: async () => {
+      const response = await apiService.notifications.getUnreadCount();
+      return response.data;
+    },
     staleTime: 60 * 1000, // 1 minute
     refetchInterval: 60 * 1000, // Refetch every minute
   });
@@ -266,12 +290,18 @@ export const useNotificationPreferences = () => {
 
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.preferences,
-    queryFn: preferencesApi.getPreferences,
+    queryFn: async () => {
+      const response = await apiService.preferences.get();
+      return response.data;
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   const updateMutation = useMutation({
-    mutationFn: preferencesApi.updatePreferences,
+    mutationFn: async (preferences) => {
+      const response = await apiService.preferences.update(preferences);
+      return response.data;
+    },
     onMutate: async (updates) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.preferences });
 
@@ -311,12 +341,18 @@ export const usePriceAlerts = (filters = {}) => {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: [...QUERY_KEYS.priceAlerts, filters],
-    queryFn: () => priceAlertApi.getAlerts(filters),
+    queryFn: async () => {
+      const response = await apiService.priceAlerts.getAll(filters);
+      return response.data;
+    },
     staleTime: 30 * 1000, // 30 seconds
   });
 
   const createMutation = useMutation({
-    mutationFn: priceAlertApi.createAlert,
+    mutationFn: async (alert) => {
+      const response = await apiService.priceAlerts.create(alert);
+      return response.data;
+    },
     onSuccess: (newAlert) => {
       // Add the new alert to the cache
       queryClient.setQueryData([...QUERY_KEYS.priceAlerts, filters], (old) => {
@@ -333,7 +369,10 @@ export const usePriceAlerts = (filters = {}) => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ alertId, updates }) => priceAlertApi.updateAlert(alertId, updates),
+    mutationFn: async ({ alertId, updates }) => {
+      const response = await apiService.priceAlerts.update(alertId, updates);
+      return response.data;
+    },
     onMutate: async ({ alertId, updates }) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.priceAlerts });
 
@@ -362,7 +401,10 @@ export const usePriceAlerts = (filters = {}) => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: priceAlertApi.deleteAlert,
+    mutationFn: async (alertId) => {
+      const response = await apiService.priceAlerts.delete(alertId);
+      return response.data;
+    },
     onMutate: async (alertId) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.priceAlerts });
 
@@ -417,23 +459,20 @@ export const useNotificationSync = () => {
   // Listen for new notifications from WebSocket
   const handleNewNotification = useCallback(
     (notification) => {
-      // Import normalization function dynamically
-      import('../../../services/notificationApi').then(({ normalizeNotification }) => {
-        // Normalize the notification data
-        const normalizedNotification = normalizeNotification(notification);
+      // Normalize the notification data
+      const normalizedNotification = normalizeNotification(notification);
 
-        // Invalidate all notification queries to force refetch
-        // This ensures all active queries (with different filter combinations) get the new data
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.notifications });
+      // Invalidate all notification queries to force refetch
+      // This ensures all active queries (with different filter combinations) get the new data
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.notifications });
 
-        // Invalidate unread count
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unreadCount });
+      // Invalidate unread count
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unreadCount });
 
-        // Add to Zustand store for toast display
-        if (normalizedNotification.show_as_toast || normalizedNotification.showAsToast) {
-          addNotification(normalizedNotification);
-        }
-      });
+      // Add to Zustand store for toast display
+      if (normalizedNotification.show_as_toast || normalizedNotification.showAsToast) {
+        addNotification(normalizedNotification);
+      }
     },
     [queryClient, addNotification]
   );

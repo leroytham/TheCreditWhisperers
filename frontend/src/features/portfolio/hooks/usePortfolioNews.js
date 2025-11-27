@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiService from '../../../services/api';
 
 export const usePortfolioNews = (username, accountName) => {
   const [news, setNews] = useState([]);
@@ -15,9 +16,7 @@ export const usePortfolioNews = (username, accountName) => {
 
   const fetchPortfolioNews = useCallback(async (controller) => {
     try {
-      // Encode account name for URL
-      const encodedAccountName = encodeURIComponent(accountName);
-      const response = await fetch(`/api/portfolio/news/${username}/${encodedAccountName}`, {
+      const response = await apiService.getPortfolioNews(username, accountName, {
         signal: controller.signal
       });
 
@@ -26,16 +25,7 @@ export const usePortfolioNews = (username, accountName) => {
         return;
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Check again if request was aborted before updating state
-      if (controller.signal.aborted) {
-        return;
-      }
+      const data = response.data;
 
       // Store full feed data from Alpha Vantage (compatible with DetailedRelatedNews)
       setNews(data.feed || data.news || []);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import apiService from '../../../../services/api';
 
 /**
  * AccountList Component
@@ -39,11 +40,8 @@ const AccountList = ({ selectedUser, onAccountSelect }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/accounts/${username}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch accounts');
-      }
-      const data = await response.json();
+      const response = await apiService.getAccounts(username);
+      const data = response.data;
 
       // Enrich accounts with additional metadata
       const enrichedAccounts = (data.accounts || []).map(account => ({

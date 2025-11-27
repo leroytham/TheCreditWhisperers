@@ -9,16 +9,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { PRICE_POLL_INTERVAL } from '../../shared/utils/constants';
+import apiService from '../../../services/api';
 
 export const usePriceData = (ticker, timeframe = '1Y', options = {}) => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['price', ticker, timeframe],
     queryFn: async () => {
-      const response = await fetch(`/api/price?ticker=${ticker}&timeframe=${timeframe}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch price data: ${response.statusText}`);
-      }
-      return response.json();
+      const response = await apiService.getPrice(ticker, timeframe);
+      return response.data;
     },
     enabled: Boolean(ticker), // Only fetch if ticker is provided
     staleTime: timeframe === '1D' ? 30 * 1000 : 5 * 60 * 1000, // 30s for 1D, 5min for historical

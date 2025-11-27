@@ -7,16 +7,14 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import apiService from '../../../services/api';
 
 export const useDailySentiment = (ticker, timeframe = '1W', options = {}) => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['dailySentiment', ticker, timeframe],
     queryFn: async () => {
-      const response = await fetch(`/api/daily-sentiment?ticker=${ticker}&timeframe=${timeframe}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch daily sentiment: ${response.statusText}`);
-      }
-      return response.json();
+      const response = await apiService.getDailySentiment(ticker, timeframe);
+      return response.data;
     },
     enabled: Boolean(ticker), // Only fetch if ticker is provided
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes

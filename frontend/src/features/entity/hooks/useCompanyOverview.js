@@ -1,7 +1,7 @@
 // src/features/entity/hooks/useCompanyOverview.js
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import apiService from '../../../services/api';
 
 /**
  * Custom hook to fetch company overview data from Alpha Vantage API
@@ -25,10 +25,8 @@ export const useCompanyOverview = (ticker) => {
       setError(null);
       
       try {
-        const response = await axios.get(
-          `http://localhost:8000/stocks/${ticker}/company-overview`
-        );
-        
+        const response = await apiService.getCompanyOverview(ticker);
+
         if (response.data && response.data.data) {
           setOverview(response.data.data);
         } else {

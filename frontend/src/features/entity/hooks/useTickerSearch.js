@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { SEARCH_DEBOUNCE_DELAY, MIN_SEARCH_LENGTH } from '../../shared/utils/constants';
+import apiService from '../../../services/api';
 
 export const useTickerSearch = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,11 +27,10 @@ export const useTickerSearch = () => {
     // Debounced API call
     const timeoutId = setTimeout(async () => {
       try {
-        const url = `/api/search-ticker?q=${searchTerm}`;
-        console.log('[useTickerSearch] Fetching:', url);
+        console.log('[useTickerSearch] Fetching:', searchTerm);
 
-        const response = await fetch(url);
-        const data = await response.json();
+        const response = await apiService.searchTicker(searchTerm);
+        const data = response.data;
 
         console.log('[useTickerSearch] Response:', data);
         setSuggestions(data.quotes || []);

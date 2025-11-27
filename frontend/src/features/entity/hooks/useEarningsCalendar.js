@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiService from '../../../services/api';
 
 export const useEarningsCalendar = (ticker, horizon = '12month') => {
   const [earningsEvents, setEarningsEvents] = useState([]);
@@ -24,40 +25,8 @@ export const useEarningsCalendar = (ticker, horizon = '12month') => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `/api/stocks/${ticker}/earnings-calendar?horizon=${horizon}`
-      );
-
-      if (!response.ok) {
-        // Handle different error status codes
-        if (response.status === 404) {
-          setError(`No earnings calendar data available for ${ticker}`);
-        } else if (response.status === 403) {
-          // Premium endpoint
-          try {
-            const errorData = await response.json();
-            setError(errorData.detail || 'Earnings calendar requires premium subscription');
-          } catch {
-            setError('Earnings calendar requires premium subscription');
-          }
-        } else if (response.status === 429) {
-          setError('API rate limit reached. Please try again later.');
-        } else if (response.status === 500) {
-          try {
-            const errorData = await response.json();
-            setError(errorData.detail || 'Server error fetching earnings calendar');
-          } catch {
-            setError('Server error fetching earnings calendar');
-          }
-        } else {
-          setError(`Failed to fetch earnings calendar (${response.status})`);
-        }
-        setEarningsEvents([]);
-        setMetadata(null);
-        return;
-      }
-
-      const data = await response.json();
+      const response = await apiService.getEarningsCalendar(ticker, horizon);
+      const data = response.data;
 
       setEarningsEvents(data.earnings_events || []);
       setMetadata({

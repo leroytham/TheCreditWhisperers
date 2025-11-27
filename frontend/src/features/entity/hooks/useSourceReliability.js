@@ -1,10 +1,11 @@
 // src/features/entity/hooks/useSourceReliability.js
 
 import { useState, useEffect } from 'react';
+import apiService from '../../../services/api';
 
 /**
  * Custom hook to fetch news source reliability and sentiment breakdown
- * 
+ *
  * @param {string} ticker - Stock ticker symbol (e.g., 'AAPL')
  * @returns {Object} - { sources, loading, error, refetch }
  */
@@ -23,13 +24,8 @@ export const useSourceReliability = (ticker) => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/news/sources?ticker=${ticker}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const response = await apiService.getNewsSources(ticker);
+      const data = response.data;
       setSources(data.sources || []);
     } catch (err) {
       console.error('Error fetching source reliability:', err);

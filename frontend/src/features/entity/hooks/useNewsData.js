@@ -6,16 +6,14 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import apiService from '../../../services/api';
 
 export const useNewsData = (ticker, timeframe = '1Y', options = {}) => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['news', ticker, timeframe],
     queryFn: async () => {
-      const response = await fetch(`/api/news?ticker=${ticker}&timeframe=${timeframe}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch news: ${response.statusText}`);
-      }
-      return response.json();
+      const response = await apiService.getNews(ticker, timeframe);
+      return response.data;
     },
     enabled: Boolean(ticker), // Only fetch if ticker is provided
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes

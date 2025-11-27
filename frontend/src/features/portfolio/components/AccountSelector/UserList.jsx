@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import apiService from '../../../../services/api';
 
 /**
  * UserList Component
@@ -33,11 +34,8 @@ const UserList = ({ selectedUser, onUserSelect }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/users');
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
-      }
-      const data = await response.json();
+      const response = await apiService.getUsers();
+      const data = response.data;
 
       // Group users by type (individual vs institutional)
       const grouped = groupUsersByType(data.users || []);

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "../../index.css"; // make sure you style here
+import apiService from '../../services/api';
 
 export default function SignupCard() {
   const [username, setUsername] = useState("");
@@ -16,13 +17,8 @@ export default function SignupCard() {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
+      const res = await apiService.signup(username, password);
+      const data = res.data;
 
       if (data.success) {
         setMessage("Signup successful! You can now log in.");

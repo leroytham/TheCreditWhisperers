@@ -5,6 +5,7 @@ import AppHeader from '../components/layout/AppHeader';
 import NotificationList from '../features/notifications/components/NotificationList';
 import NotificationModal from '../features/notifications/components/NotificationModal';
 import useAppStore from '../store/useAppStore';
+import apiService from '../services/api';
 import {
   useNotifications,
   useUnreadCount,
@@ -194,9 +195,8 @@ const NotificationPageEnhanced = () => {
   const handleGenerateTestNotification = async () => {
     if (isServerEnabled) {
       try {
-        const { notificationApi } = await import('../services/notificationApi');
-        const newNotification = await notificationApi.createSampleNotification();
-        handleNewNotification(newNotification);
+        const response = await apiService.post('/notifications/test/create-sample');
+        handleNewNotification(response.data);
       } catch (error) {
         console.error('Failed to create test notification:', error);
       }

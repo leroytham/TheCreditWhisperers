@@ -209,17 +209,32 @@ interface ApiService {
   delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
   patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
 
+  // Auth endpoints
+  login: (username: string, password: string) => Promise<AxiosResponse>;
+  signup: (username: string, password: string) => Promise<AxiosResponse>;
+
   // Stock endpoints
   getStockPrice: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
   getStockHistorical: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
   getStockSentiment: (ticker: string) => Promise<AxiosResponse>;
-  getStockEvents: (ticker: string) => Promise<AxiosResponse>;
+  getStockEvents: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
+  getCompanyOverview: (ticker: string) => Promise<AxiosResponse>;
+
+  // Price endpoint (for usePriceData.js)
+  getPrice: (ticker: string, timeframe: string) => Promise<AxiosResponse>;
 
   // News endpoints
-  getNews: (ticker: string) => Promise<AxiosResponse>;
+  getNews: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
   getCategorizedNews: (ticker: string, startDate?: string, endDate?: string) => Promise<AxiosResponse>;
   getDailySentiment: (ticker: string, timeframe?: string | null) => Promise<AxiosResponse>;
   getNewsModels: (ticker: string) => Promise<AxiosResponse>;
+  getNewsSources: (ticker: string) => Promise<AxiosResponse>;
+  getRollingSentiment: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
+
+  // Earnings endpoints
+  getEarningsCalendar: (ticker: string, horizon?: string) => Promise<AxiosResponse>;
+  getEarningsQuarters: (ticker: string, yearsBack?: number) => Promise<AxiosResponse>;
+  getEarningsTranscript: (ticker: string, quarter: string) => Promise<AxiosResponse>;
 
   // Sector endpoints
   getSectorConstituents: (sectorTicker: string) => Promise<AxiosResponse>;
@@ -228,6 +243,10 @@ interface ApiService {
 
   // Search
   searchTicker: (query: string) => Promise<AxiosResponse>;
+
+  // User endpoints
+  getUsers: () => Promise<AxiosResponse>;
+  getAccounts: (username: string) => Promise<AxiosResponse>;
 
   // Portfolio endpoints
   getPortfolioAccounts: (username: string, config?: AxiosRequestConfig) => Promise<AxiosResponse>;
@@ -240,6 +259,36 @@ interface ApiService {
   addPortfolio: (portfolioData: unknown) => Promise<AxiosResponse>;
   updatePortfolio: (portfolioData: unknown) => Promise<AxiosResponse>;
   deletePortfolio: (username: string, accountName: string) => Promise<AxiosResponse>;
+
+  // Notification endpoints
+  notifications: {
+    getAll: (params?: { is_archived?: boolean; is_read?: boolean; category?: string; portfolio_id?: string; include_global?: boolean; limit?: number; offset?: number }) => Promise<AxiosResponse>;
+    getPortfolio: (portfolioId: string, params?: Record<string, unknown>) => Promise<AxiosResponse>;
+    getPortfolioUnreadCount: (portfolioId: string, includeGlobal?: boolean) => Promise<AxiosResponse>;
+    getMultiPortfolio: (portfolioIds: string[], params?: Record<string, unknown>) => Promise<AxiosResponse>;
+    create: (notification: unknown) => Promise<AxiosResponse>;
+    getUnreadCount: () => Promise<AxiosResponse>;
+    markAsRead: (notificationId: string) => Promise<AxiosResponse>;
+    markAllAsRead: () => Promise<AxiosResponse>;
+    archive: (notificationId: string) => Promise<AxiosResponse>;
+    delete: (notificationId: string) => Promise<AxiosResponse>;
+    clear: (isArchived?: boolean | null) => Promise<AxiosResponse>;
+  };
+
+  // Notification preferences
+  preferences: {
+    get: () => Promise<AxiosResponse>;
+    update: (preferences: unknown) => Promise<AxiosResponse>;
+  };
+
+  // Price alerts
+  priceAlerts: {
+    getAll: (params?: { is_active?: boolean; ticker?: string; portfolio_id?: string; include_global?: boolean }) => Promise<AxiosResponse>;
+    create: (alert: unknown) => Promise<AxiosResponse>;
+    update: (alertId: string, updates: unknown) => Promise<AxiosResponse>;
+    delete: (alertId: string) => Promise<AxiosResponse>;
+    getForTicker: (ticker: string) => Promise<AxiosResponse>;
+  };
 }
 
 const apiService: ApiService = {
@@ -334,6 +383,110 @@ const apiService: ApiService = {
 
   deletePortfolio: (username, accountName) =>
     api.delete(`/portfolio/delete/${username}/${encodeURIComponent(accountName)}`),
+
+  // Auth endpoints
+  login: (username, password) =>
+    api.post('/LoginAdmin', { username, password }),
+
+  signup: (username, password) =>
+    api.post('/signup', { username, password }),
+
+  // Company overview
+  getCompanyOverview: (ticker) =>
+    api.get(`/stocks/${ticker}/company-overview`),
+
+  // Price endpoint (for usePriceData.js)
+  getPrice: (ticker, timeframe) =>
+    api.get('/price', { params: { ticker, timeframe } }),
+
+  // News sources (for useSourceReliability.js)
+  getNewsSources: (ticker) =>
+    api.get('/news/sources', { params: { ticker } }),
+
+  // Rolling sentiment (for useRollingSentiment.js)
+  getRollingSentiment: (ticker, timeframe = '1W') =>
+    api.get('/rolling-sentiment', { params: { ticker, timeframe } }),
+
+  // Earnings endpoints
+  getEarningsCalendar: (ticker, horizon = '3month') =>
+    api.get(`/stocks/${ticker}/earnings-calendar`, { params: { horizon } }),
+
+  getEarningsQuarters: (ticker, yearsBack = 2) =>
+    api.get(`/stocks/${ticker}/earnings-quarters`, { params: { years_back: yearsBack } }),
+
+  getEarningsTranscript: (ticker, quarter) =>
+    api.get(`/stocks/${ticker}/earnings-transcript`, { params: { quarter } }),
+
+  // User endpoints
+  getUsers: () => api.get('/users'),
+
+  getAccounts: (username) => api.get(`/accounts/${username}`),
+
+  // Notification endpoints
+  notifications: {
+    getAll: (params = {}) =>
+      api.get('/notifications/', { params }),
+
+    getPortfolio: (portfolioId, params = {}) =>
+      api.get(`/notifications/portfolio/${portfolioId}`, { params }),
+
+    getPortfolioUnreadCount: (portfolioId, includeGlobal = true) =>
+      api.get(`/notifications/portfolio/${portfolioId}/unread-count`, {
+        params: { include_global: includeGlobal }
+      }),
+
+    getMultiPortfolio: (portfolioIds, params = {}) =>
+      api.post('/notifications/multi-portfolio', portfolioIds, { params }),
+
+    create: (notification) =>
+      api.post('/notifications/', notification),
+
+    getUnreadCount: () =>
+      api.get('/notifications/unread-count'),
+
+    markAsRead: (notificationId) =>
+      api.patch(`/notifications/${notificationId}/read`),
+
+    markAllAsRead: () =>
+      api.post('/notifications/mark-all-read'),
+
+    archive: (notificationId) =>
+      api.patch(`/notifications/${notificationId}/archive`),
+
+    delete: (notificationId) =>
+      api.delete(`/notifications/${notificationId}`),
+
+    clear: (isArchived = null) =>
+      api.post('/notifications/clear', null, {
+        params: isArchived !== null ? { is_archived: isArchived } : {}
+      }),
+  },
+
+  // Notification preferences
+  preferences: {
+    get: () => api.get('/notifications/preferences'),
+
+    update: (preferences) =>
+      api.put('/notifications/preferences', preferences),
+  },
+
+  // Price alerts
+  priceAlerts: {
+    getAll: (params = {}) =>
+      api.get('/notifications/alerts', { params }),
+
+    create: (alert) =>
+      api.post('/notifications/alerts', alert),
+
+    update: (alertId, updates) =>
+      api.patch(`/notifications/alerts/${alertId}`, updates),
+
+    delete: (alertId) =>
+      api.delete(`/notifications/alerts/${alertId}`),
+
+    getForTicker: (ticker) =>
+      api.get(`/notifications/alerts/ticker/${ticker}`),
+  },
 };
 
 export default apiService;

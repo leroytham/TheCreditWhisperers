@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import apiService from '../../../services/api';
 
 export const useEarningsTranscript = (ticker, quarter) => {
   const [transcript, setTranscript] = useState([]);
@@ -18,10 +19,8 @@ export const useEarningsTranscript = (ticker, quarter) => {
     if (!ticker) return;
 
     try {
-      const response = await fetch(
-        `/api/stocks/${ticker}/earnings-quarters?years_back=5`
-      );
-      const data = await response.json();
+      const response = await apiService.getEarningsQuarters(ticker, 5);
+      const data = response.data;
       setAvailableQuarters(data.quarters || []);
     } catch (err) {
       console.error('Error fetching available quarters:', err);
@@ -41,32 +40,8 @@ export const useEarningsTranscript = (ticker, quarter) => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `/api/stocks/${ticker}/earnings-transcript?quarter=${quarter}`
-      );
-
-      if (!response.ok) {
-        // Handle different error status codes
-        if (response.status === 404) {
-          // No data available - this is expected for some quarters
-          setError(`No earnings transcript available for ${ticker} in ${quarter}`);
-        } else if (response.status === 500) {
-          // Server error - try to get detail from response
-          try {
-            const errorData = await response.json();
-            setError(errorData.detail || 'Server error fetching transcript');
-          } catch {
-            setError('Server error fetching transcript');
-          }
-        } else {
-          setError(`Failed to fetch earnings transcript (${response.status})`);
-        }
-        setTranscript([]);
-        setTranscriptData(null);
-        return;
-      }
-
-      const data = await response.json();
+      const response = await apiService.getEarningsTranscript(ticker, quarter);
+      const data = response.data;
 
       setTranscript(data.transcript || []);
       setTranscriptData({
