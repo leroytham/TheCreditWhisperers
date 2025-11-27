@@ -404,12 +404,43 @@ jobs:
           echo "healthy=false" >> $GITHUB_OUTPUT
           exit 1
 
+  # =============================================================================
+  # LOAD TESTING
+  # Runs k6 smoke tests against staging before production swap
+  # =============================================================================
+  load-test-staging:
+    name: Load Test (Staging)
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, health-check]
+    if: needs.health-check.outputs.healthy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run k6 smoke tests
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/load/smoke-test.js
+        env:
+          BASE_URL: https://credit-staging.azurewebsites.net
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: |
+            results.json
+            summary.json
+          if-no-files-found: ignore
+
   # Step 3: Swap STAGING ↔ PRODUCTION (zero-downtime)
   swap-to-production:
     name: Swap to Production
     runs-on: ubuntu-latest
-    needs: [deploy-staging, health-check]
-    if: needs.health-check.outputs.healthy == 'true'
+    needs: [deploy-staging, health-check, load-test-staging]
+    if: needs.health-check.outputs.healthy == 'true' && needs.load-test-staging.result == 'success'
     permissions:
       id-token: write
       contents: read
@@ -464,7 +495,7 @@ jobs:
   deployment-summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [deploy-staging, health-check, swap-to-production]
+    needs: [deploy-staging, health-check, load-test-staging, swap-to-production]
     if: always()
 
     steps:
@@ -487,10 +518,18 @@ jobs:
             echo "| Health Check | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
 
+          if [ "${{ needs.load-test-staging.result }}" = "success" ]; then
+            echo "| Load Test (Staging) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.load-test-staging.result }}" = "skipped" ]; then
+            echo "| Load Test (Staging) | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Load Test (Staging) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
           if [ "${{ needs.swap-to-production.result }}" = "success" ]; then
             echo "| Swap to Production | ✅ Complete |" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.swap-to-production.result }}" = "skipped" ]; then
-            echo "| Swap to Production | ⏭️ Skipped (health check failed) |" >> $GITHUB_STEP_SUMMARY
+            echo "| Swap to Production | ⏭️ Skipped (health/load test failed) |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| Swap to Production | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
