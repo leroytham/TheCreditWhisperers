@@ -3,6 +3,13 @@ import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
 import apiService from '../../../../services/api';
 import { useUser } from '../../../../hooks/useUser';
+import useAppStore from '../../../../store/useAppStore';
+import {
+  accountDetailsSchema,
+  portfolioCreateSchema,
+  validateForm as zodValidate,
+  getFirstError,
+} from '../../../../schemas/portfolio';
 
 /**
  * AddPortfolioModal Component
@@ -11,6 +18,9 @@ import { useUser } from '../../../../hooks/useUser';
  */
 const AddPortfolioModal = ({ isOpen, onClose }) => {
   const { username } = useUser();
+  const notifyWarning = useAppStore((state) => state.notifyWarning);
+  const notifySuccess = useAppStore((state) => state.notifySuccess);
+  const notifyError = useAppStore((state) => state.notifyError);
   const [currentStep, setCurrentStep] = useState(1);
   const [accountDetails, setAccountDetails] = useState({
     accountName: '',
@@ -54,39 +64,26 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
     setHoldings(updated);
   };
 
+  /**
+   * Validate step 1 (account details) using Zod schema.
+   */
+  const validateAccountDetails = () => {
+    const result = zodValidate(accountDetailsSchema, accountDetails);
+    if (!result.success) {
+      notifyWarning(getFirstError(result.errors));
+      return false;
+    }
+    return true;
+  };
+
+  /**
+   * Validate the full form (account + holdings) using Zod schema.
+   */
   const validateForm = () => {
-    if (!accountDetails.accountName.trim()) {
-      alert('Please enter an account name.');
+    const result = zodValidate(portfolioCreateSchema, { accountDetails, holdings });
+    if (!result.success) {
+      notifyWarning(getFirstError(result.errors));
       return false;
-    }
-    if (!accountDetails.accountNumber.trim()) {
-      alert('Please enter an account number.');
-      return false;
-    }
-    if (!accountDetails.openDate) {
-      alert('Please select an open date.');
-      return false;
-    }
-    if (holdings.length === 0) {
-      alert('Please add at least one holding.');
-      return false;
-    }
-    
-    // Validate each holding
-    for (let i = 0; i < holdings.length; i++) {
-      const holding = holdings[i];
-      if (!holding.symbol.trim()) {
-        alert(`Please enter a symbol for holding ${i + 1}.`);
-        return false;
-      }
-      if (!holding.quantity || holding.quantity <= 0) {
-        alert(`Please enter a valid quantity for holding ${i + 1}.`);
-        return false;
-      }
-      if (!holding.purchasePrice || holding.purchasePrice <= 0) {
-        alert(`Please enter a valid purchase price for holding ${i + 1}.`);
-        return false;
-      }
     }
     return true;
   };
@@ -97,7 +94,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
     }
 
     if (!username) {
-      alert('User not logged in. Please log in again.');
+      notifyWarning('User not logged in. Please log in again.');
       return;
     }
 
@@ -107,20 +104,20 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       const payload = {
         username,
         accountDetails,
-        holdings: holdings.map(holding => ({
+        holdings: holdings.map((holding) => ({
           ...holding,
           quantity: parseFloat(holding.quantity),
-          purchasePrice: parseFloat(holding.purchasePrice)
+          purchasePrice: parseFloat(holding.purchasePrice),
         })),
       };
 
-      const result = await apiService.addPortfolio(payload);
-      alert('Portfolio saved successfully!');
+      await apiService.addPortfolio(payload);
+      notifySuccess('Portfolio saved successfully!');
       handleClose();
     } catch (error) {
       // Error handled by apiService interceptor
       if (error.name !== 'AbortError' && !apiService.api?.isCancel?.(error)) {
-        alert('Error saving portfolio: ' + error.message);
+        notifyError('Error saving portfolio: ' + error.message);
       }
     } finally {
       setIsSaving(false);
@@ -213,8 +210,7 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
               </button>
               <button
                 onClick={() => {
-                  if (!accountDetails.accountName.trim() || !accountDetails.accountNumber.trim() || !accountDetails.openDate) {
-                    alert('Please fill in all account details before proceeding.');
+                  if (!validateAccountDetails()) {
                     return;
                   }
                   setCurrentStep(2);
