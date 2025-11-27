@@ -9,6 +9,7 @@ import {
   shouldSuppressSuccess,
   shouldShowSuccessNotification,
 } from '../features/notifications/utils/notificationHelpers';
+import { ApiError } from './errors';
 
 // Extend axios config to include custom metadata
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
@@ -128,7 +129,11 @@ api.interceptors.response.use(
         priority: 'critical',
       });
 
-      throw new Error(ERROR_MESSAGES.NETWORK_ERROR);
+      throw new ApiError({
+        message: ERROR_MESSAGES.NETWORK_ERROR,
+        code: 'NETWORK_ERROR',
+        isRetryable: true,
+      });
     }
 
     const { status, data } = error.response;
@@ -176,26 +181,50 @@ api.interceptors.response.use(
       case HTTP_STATUS.UNAUTHORIZED:
         // Redirect to login (cookie will be cleared by backend logout or expiry)
         window.location.href = '/login';
-        throw new Error('Session expired. Please login again.');
+        throw new ApiError({
+          message: 'Session expired. Please login again.',
+          status: HTTP_STATUS.UNAUTHORIZED,
+          code: 'UNAUTHORIZED',
+        });
 
       case HTTP_STATUS.FORBIDDEN:
-        throw new Error('You do not have permission to access this resource.');
+        throw new ApiError({
+          message: 'You do not have permission to access this resource.',
+          status: HTTP_STATUS.FORBIDDEN,
+          code: 'FORBIDDEN',
+        });
 
       case HTTP_STATUS.NOT_FOUND:
-        throw new Error(ERROR_MESSAGES.NOT_FOUND);
+        throw new ApiError({
+          message: ERROR_MESSAGES.NOT_FOUND,
+          status: HTTP_STATUS.NOT_FOUND,
+          code: 'NOT_FOUND',
+        });
 
       case HTTP_STATUS.TIMEOUT:
-        throw new Error(ERROR_MESSAGES.TIMEOUT);
+        throw new ApiError({
+          message: ERROR_MESSAGES.TIMEOUT,
+          status: HTTP_STATUS.TIMEOUT,
+          code: 'TIMEOUT',
+          isRetryable: true,
+        });
 
       case HTTP_STATUS.SERVER_ERROR:
       case HTTP_STATUS.BAD_GATEWAY:
-      case HTTP_STATUS.SERVICE_UNAVAILABLE:
+      case HTTP_STATUS.SERVICE_UNAVAILABLE: {
         // Use generic message but include error_id for support reference if available
         const errorId = data?.error_id;
         const serverErrorMsg = errorId
           ? `${ERROR_MESSAGES.SERVER_ERROR} Reference: ${errorId}`
           : ERROR_MESSAGES.SERVER_ERROR;
-        throw new Error(serverErrorMsg);
+        throw new ApiError({
+          message: serverErrorMsg,
+          status,
+          code: 'SERVER_ERROR',
+          errorId,
+          isRetryable: true,
+        });
+      }
 
       default:
         // For 4xx errors, detail is safe to show; for 5xx, use generic message
@@ -204,10 +233,20 @@ api.interceptors.response.use(
           const genericMsg = genericErrorId
             ? `An error occurred. Reference: ${genericErrorId}`
             : ERROR_MESSAGES.GENERIC;
-          throw new Error(genericMsg);
+          throw new ApiError({
+            message: genericMsg,
+            status,
+            code: 'SERVER_ERROR',
+            errorId: genericErrorId,
+            isRetryable: true,
+          });
         }
         // 4xx errors - detail is safe to expose
-        throw new Error(data?.detail || ERROR_MESSAGES.GENERIC);
+        throw new ApiError({
+          message: data?.detail || ERROR_MESSAGES.GENERIC,
+          status,
+          code: status === 400 ? 'VALIDATION_ERROR' : 'UNKNOWN',
+        });
     }
   }
 );
@@ -505,3 +544,7 @@ const apiService: ApiService = {
 
 export default apiService;
 export { api };
+
+// Re-export error utilities for convenience
+export { ApiError, isApiError, isAuthError, isNetworkError, isServerError } from './errors';
+export type { ApiErrorCode, ApiErrorOptions } from './errors';
