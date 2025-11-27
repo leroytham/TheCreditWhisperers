@@ -1,0 +1,288 @@
+# =============================================================================
+# TheCreditWhisperers - Scheduled Load Tests
+# =============================================================================
+# Runs comprehensive load tests (spike, soak, ramp) on a schedule.
+# These tests are too long for every deployment but catch issues over time.
+#
+# Schedule:
+#   - Soak Test: Nightly at 2 AM UTC
+#   - Spike Test: Weekly on Saturday at 3 AM UTC
+#   - Load/Ramp Test: Weekly on Wednesday at 3 AM UTC
+#
+# Manual triggers are also supported via workflow_dispatch.
+
+name: Scheduled Load Tests
+
+on:
+  schedule:
+    # Soak test: Nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+    # Spike test: Weekly on Saturday at 3 AM UTC
+    - cron: '0 3 * * 6'
+    # Load/Ramp test: Weekly on Wednesday at 3 AM UTC
+    - cron: '0 3 * * 3'
+
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Test type to run'
+        required: true
+        type: choice
+        options:
+          - spike
+          - soak
+          - load
+          - all
+      soak_duration:
+        description: 'Soak test duration (e.g., 15m, 30m, 1h, 2h)'
+        required: false
+        default: '30m'
+      target_url:
+        description: 'Target URL (default: staging)'
+        required: false
+        default: 'https://credit-staging.azurewebsites.net'
+
+env:
+  DEFAULT_BASE_URL: https://credit-staging.azurewebsites.net
+
+jobs:
+  # ===========================================================================
+  # Determine which tests to run based on trigger
+  # ===========================================================================
+  determine-tests:
+    name: Determine Tests
+    runs-on: ubuntu-latest
+    outputs:
+      run_spike: ${{ steps.check.outputs.run_spike }}
+      run_soak: ${{ steps.check.outputs.run_soak }}
+      run_load: ${{ steps.check.outputs.run_load }}
+      base_url: ${{ steps.check.outputs.base_url }}
+      soak_duration: ${{ steps.check.outputs.soak_duration }}
+    steps:
+      - name: Determine which tests to run
+        id: check
+        run: |
+          # Default values
+          run_spike="false"
+          run_soak="false"
+          run_load="false"
+          base_url="${{ github.event.inputs.target_url || env.DEFAULT_BASE_URL }}"
+          soak_duration="${{ github.event.inputs.soak_duration || '30m' }}"
+
+          # Check trigger type
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            # Scheduled runs
+            cron="${{ github.event.schedule }}"
+            case "$cron" in
+              "0 2 * * *")
+                run_soak="true"
+                echo "Scheduled: Nightly soak test"
+                ;;
+              "0 3 * * 6")
+                run_spike="true"
+                echo "Scheduled: Weekly spike test (Saturday)"
+                ;;
+              "0 3 * * 3")
+                run_load="true"
+                echo "Scheduled: Weekly load test (Wednesday)"
+                ;;
+            esac
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual triggers
+            test_type="${{ github.event.inputs.test_type }}"
+            case "$test_type" in
+              "spike")
+                run_spike="true"
+                ;;
+              "soak")
+                run_soak="true"
+                ;;
+              "load")
+                run_load="true"
+                ;;
+              "all")
+                run_spike="true"
+                run_soak="true"
+                run_load="true"
+                ;;
+            esac
+          fi
+
+          # Output results
+          echo "run_spike=$run_spike" >> $GITHUB_OUTPUT
+          echo "run_soak=$run_soak" >> $GITHUB_OUTPUT
+          echo "run_load=$run_load" >> $GITHUB_OUTPUT
+          echo "base_url=$base_url" >> $GITHUB_OUTPUT
+          echo "soak_duration=$soak_duration" >> $GITHUB_OUTPUT
+
+          echo "Tests to run:"
+          echo "  - Spike: $run_spike"
+          echo "  - Soak: $run_soak"
+          echo "  - Load: $run_load"
+          echo "  - Base URL: $base_url"
+          echo "  - Soak Duration: $soak_duration"
+
+  # ===========================================================================
+  # SPIKE TEST
+  # Tests system resilience to sudden traffic bursts
+  # ===========================================================================
+  spike-test:
+    name: Spike Test
+    runs-on: ubuntu-latest
+    needs: determine-tests
+    if: needs.determine-tests.outputs.run_spike == 'true'
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run k6 spike test
+        uses: grafana/k6-action@v0.3.1
+        continue-on-error: true
+        with:
+          filename: tests/load/spike-test.js
+        env:
+          BASE_URL: ${{ needs.determine-tests.outputs.base_url }}
+
+      - name: Upload spike test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spike-test-results
+          path: |
+            results.json
+            summary.json
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # SOAK TEST
+  # Tests system stability over extended period
+  # ===========================================================================
+  soak-test:
+    name: Soak Test
+    runs-on: ubuntu-latest
+    needs: determine-tests
+    if: needs.determine-tests.outputs.run_soak == 'true'
+    timeout-minutes: 180  # 3 hours max for extended soak tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run k6 soak test
+        uses: grafana/k6-action@v0.3.1
+        continue-on-error: true
+        with:
+          filename: tests/load/soak-test.js
+        env:
+          BASE_URL: ${{ needs.determine-tests.outputs.base_url }}
+          SOAK_DURATION: ${{ needs.determine-tests.outputs.soak_duration }}
+
+      - name: Upload soak test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-test-results
+          path: |
+            results.json
+            summary.json
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # LOAD TEST (Ramp Test)
+  # Tests system performance under gradual load increase
+  # ===========================================================================
+  load-test:
+    name: Load Test (Ramp)
+    runs-on: ubuntu-latest
+    needs: determine-tests
+    if: needs.determine-tests.outputs.run_load == 'true'
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run k6 load test
+        uses: grafana/k6-action@v0.3.1
+        continue-on-error: true
+        with:
+          filename: tests/load/load-test.js
+        env:
+          BASE_URL: ${{ needs.determine-tests.outputs.base_url }}
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-results
+          path: |
+            results.json
+            summary.json
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # SUMMARY
+  # Generate summary report of all tests
+  # ===========================================================================
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [determine-tests, spike-test, soak-test, load-test]
+    if: always()
+
+    steps:
+      - name: Generate summary report
+        run: |
+          echo "# Load Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target URL:** ${{ needs.determine-tests.outputs.base_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Spike test status
+          if [ "${{ needs.determine-tests.outputs.run_spike }}" = "true" ]; then
+            if [ "${{ needs.spike-test.result }}" = "success" ]; then
+              echo "| Spike Test | :white_check_mark: Passed |" >> $GITHUB_STEP_SUMMARY
+            elif [ "${{ needs.spike-test.result }}" = "failure" ]; then
+              echo "| Spike Test | :warning: Thresholds Breached |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Spike Test | :x: Error |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Spike Test | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Soak test status
+          if [ "${{ needs.determine-tests.outputs.run_soak }}" = "true" ]; then
+            if [ "${{ needs.soak-test.result }}" = "success" ]; then
+              echo "| Soak Test | :white_check_mark: Passed |" >> $GITHUB_STEP_SUMMARY
+            elif [ "${{ needs.soak-test.result }}" = "failure" ]; then
+              echo "| Soak Test | :warning: Thresholds Breached |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Soak Test | :x: Error |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Soak Test | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Load test status
+          if [ "${{ needs.determine-tests.outputs.run_load }}" = "true" ]; then
+            if [ "${{ needs.load-test.result }}" = "success" ]; then
+              echo "| Load Test | :white_check_mark: Passed |" >> $GITHUB_STEP_SUMMARY
+            elif [ "${{ needs.load-test.result }}" = "failure" ]; then
+              echo "| Load Test | :warning: Thresholds Breached |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Load Test | :x: Error |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| Load Test | :black_square_button: Skipped |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Schedule" >> $GITHUB_STEP_SUMMARY
+          echo "- **Soak Test:** Nightly at 2 AM UTC" >> $GITHUB_STEP_SUMMARY
+          echo "- **Spike Test:** Weekly on Saturday at 3 AM UTC" >> $GITHUB_STEP_SUMMARY
+          echo "- **Load Test:** Weekly on Wednesday at 3 AM UTC" >> $GITHUB_STEP_SUMMARY
