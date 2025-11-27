@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     AZURE_AUTHORITY: str = "https://login.microsoftonline.com/common"
     AZURE_REDIRECT_URI: Optional[str] = None  # Auto-generated if not provided
 
+    # JWT Authentication
+    JWT_SECRET_KEY: str = "CHANGE-ME-IN-PRODUCTION-use-openssl-rand-hex-32"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_HOURS: int = 24
+
     # Error Tracking (Sentry)
     SENTRY_DSN: Optional[str] = None  # Set to enable Sentry error tracking
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 10% of transactions for performance monitoring

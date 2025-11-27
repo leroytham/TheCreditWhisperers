@@ -75,12 +75,23 @@ const PortfolioPage = () => {
   const [isAddPortfolioModalOpen, setIsAddPortfolioModalOpen] = useState(false);
   const [isEditPortfolioModalOpen, setIsEditPortfolioModalOpen] = useState(false);
 
-  // Session management
+  // Session and token management
   useEffect(() => {
+    const token = searchParams.get('token');
     const user = searchParams.get('user');
-    if (user) {
-      sessionStorage.setItem('user', user);
-    } else if (!sessionStorage.getItem('user')) {
+
+    if (token) {
+      // Store JWT token for API authentication
+      localStorage.setItem('auth_token', token);
+
+      if (user) {
+        sessionStorage.setItem('user', user);
+      }
+
+      // Remove sensitive data from URL for security
+      window.history.replaceState({}, '', '/portfolio');
+    } else if (!localStorage.getItem('auth_token')) {
+      // No token in URL and no stored token - redirect to login
       navigate('/login');
     }
   }, [navigate, searchParams]);
@@ -94,6 +105,7 @@ const PortfolioPage = () => {
   const handleLogout = () => {
     const confirmLogout = window.confirm('Are you sure you want to log out?');
     if (confirmLogout) {
+      localStorage.removeItem('auth_token');
       sessionStorage.removeItem('user');
       clearAccount();
       navigate('/login');

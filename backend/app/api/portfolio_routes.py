@@ -31,30 +31,11 @@ from app.schemas.portfolio import (
     PortfolioHoldingResponse,
     SetPrimaryRequest
 )
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])
-
-
-# Authentication dependency (placeholder - replace with real auth)
-async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
-    """
-    Extract user ID from authorization header.
-    TODO: Replace with proper JWT validation.
-    """
-    if not authorization:
-        # For development, use a default user ID
-        return "default_user_id"
-
-    # Parse Bearer token
-    if authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
-        # TODO: Validate JWT token and extract user ID
-        # For now, just return the token as user ID (NOT SECURE!)
-        return token
-
-    return "default_user_id"
 
 
 # Portfolio Management Endpoints

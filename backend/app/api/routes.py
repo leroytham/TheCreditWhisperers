@@ -1645,13 +1645,20 @@ async def azure_auth_callback(request: Request):
             print(f"Error description: {error_desc}")
             return RedirectResponse(f"{FRONTEND_URL}/login?error=azure_token_failed&msg={error_msg}")
 
+        # Extract user info from Azure ID token claims
         account = result.get("id_token_claims", {})
         username = account.get("preferred_username", "unknown")
+        user_id = account.get("oid", username)  # Azure Object ID (stable unique identifier)
 
-        print(f"✓ Azure Login Success: {username}")
+        print(f"✓ Azure Login Success: {username} (oid: {user_id})")
 
+        # Create JWT token for API authentication
+        from app.core.auth import create_access_token
+        access_token = create_access_token(user_id=user_id, email=username)
+
+        # Redirect to frontend with token (frontend will store it and clear from URL)
         return RedirectResponse(
-            f"{FRONTEND_URL}/portfolio?user={username}"
+            f"{FRONTEND_URL}/portfolio?token={access_token}&user={username}"
         )
 
     except Exception as e:
