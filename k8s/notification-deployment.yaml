@@ -39,6 +39,28 @@ spec:
       # Graceful shutdown
       terminationGracePeriodSeconds: 30
 
+      # =================================================================
+      # Topology Spread Constraints - High Availability
+      # =================================================================
+      # Distribute pods across failure domains for resilience
+      topologySpreadConstraints:
+        # Spread across availability zones
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: creditwhisperers
+              component: notification
+        # Spread across nodes within zones
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: creditwhisperers
+              component: notification
+
       containers:
         - name: notification
           image: ghcr.io/nmducc/thecreditwhisperers-notification:latest

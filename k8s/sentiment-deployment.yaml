@@ -38,6 +38,28 @@ spec:
     spec:
       terminationGracePeriodSeconds: 30
 
+      # =================================================================
+      # Topology Spread Constraints - High Availability
+      # =================================================================
+      # Distribute pods across failure domains for resilience
+      topologySpreadConstraints:
+        # Spread across availability zones
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: creditwhisperers
+              component: sentiment
+        # Spread across nodes within zones
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: creditwhisperers
+              component: sentiment
+
       containers:
         - name: sentiment
           image: ghcr.io/nmducc/thecreditwhisperers-sentiment:latest
