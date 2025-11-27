@@ -1,0 +1,110 @@
+# =============================================================================
+# TheCreditWhisperers - Sentiment Service Kubernetes Deployment
+# =============================================================================
+# Defines the sentiment microservice deployment with:
+# - Multiple replicas for high availability
+# - Resource limits for proper scheduling
+# - Health probes for self-healing
+# - Environment variables from ConfigMap and Secret
+#
+# Usage: kubectl apply -f k8s/sentiment-deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: creditwhisperers-sentiment
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: sentiment
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: creditwhisperers
+      component: sentiment
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: creditwhisperers
+        component: sentiment
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: sentiment
+          image: creditwhisperers/sentiment-service:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8003
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: creditwhisperers-config
+            - secretRef:
+                name: creditwhisperers-secrets
+
+          env:
+            - name: REDIS_HOST
+              value: "creditwhisperers-redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: MARKET_DATA_URL
+              value: "http://creditwhisperers-market-data:80"
+
+          # Sentiment analysis can be memory-intensive
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8003
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
+            successThreshold: 1
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst

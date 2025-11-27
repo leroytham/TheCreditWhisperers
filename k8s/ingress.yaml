@@ -4,11 +4,14 @@
 # Provides external HTTP/HTTPS access to the microservices architecture.
 # Routes traffic between frontend and backend services.
 #
-# Architecture:
+# Architecture (6-service microservices):
 #   / (default)           → Frontend Service (nginx + React SPA)
 #   /api/notifications/*  → Notification Service (Notifications API)
 #   /api/price-alerts/*   → Notification Service (Price Alerts API)
-#   /api/*                → Backend Service (FastAPI)
+#   /api/market/*         → Market Data Service (Stock prices, company info)
+#   /api/sentiment/*      → Sentiment Service (News, sentiment analysis)
+#   /api/portfolio/*      → Portfolio Service (Portfolio aggregation, timeseries)
+#   /api/*                → Backend Service (FastAPI - fallback)
 #   /ws/notifications/*   → Notification Service (WebSocket notifications)
 #   /ws/*                 → Backend Service (WebSocket)
 #   /metrics              → Backend Service (Prometheus metrics)
@@ -97,7 +100,46 @@ spec:
                   number: 80
 
           # =================================================================
-          # Backend API Routes (general)
+          # Market Data Service Routes
+          # =================================================================
+
+          # Market Data API → Market Data Service
+          - path: /api/market(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-market-data
+                port:
+                  number: 80
+
+          # =================================================================
+          # Sentiment Service Routes
+          # =================================================================
+
+          # Sentiment API → Sentiment Service
+          - path: /api/sentiment(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-sentiment
+                port:
+                  number: 80
+
+          # =================================================================
+          # Portfolio Service Routes
+          # =================================================================
+
+          # Portfolio API → Portfolio Service
+          - path: /api/portfolio(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: creditwhisperers-portfolio
+                port:
+                  number: 80
+
+          # =================================================================
+          # Backend API Routes (general - fallback)
           # =================================================================
 
           # API routes → Backend Service

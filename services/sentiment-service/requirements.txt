@@ -1,0 +1,37 @@
+# =============================================================================
+# TheCreditWhisperers - Sentiment & News Service Dependencies
+# =============================================================================
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+gunicorn==21.2.0
+
+# HTTP Client
+aiohttp==3.9.1
+httpx==0.26.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.3
+
+# Redis Cache
+redis==5.0.1
+
+# Configuration
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# HTML Parsing (for news scraping fallback)
+beautifulsoup4==4.12.3
+lxml==5.1.0
+
+# Logging
+structlog==24.1.0
+
+# Date/Time
+python-dateutil==2.8.2
+
+# Yahoo Finance (for fallback news)
+yfinance==0.2.36

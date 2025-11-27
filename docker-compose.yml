@@ -125,6 +125,132 @@ services:
       - creditwhisperers-network
 
   # ---------------------------------------------------------------------------
+  # Market Data Service (Stock Prices, Company Info, Sector Data)
+  # ---------------------------------------------------------------------------
+  # Dedicated microservice for all market data from external APIs
+  market-data:
+    build:
+      context: ./services/market-data-service
+      dockerfile: Dockerfile
+    container_name: creditwhisperers-market-data
+    ports:
+      - "8002:8002"
+    environment:
+      # API Keys (add your keys)
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      # Redis Cache
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Cache TTLs
+      - PRICE_CACHE_TTL=300
+      - COMPANY_INFO_CACHE_TTL=86400
+      - SECTOR_CACHE_TTL=3600
+      # Development settings
+      - DEBUG=True
+      - ENVIRONMENT=development
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # Sentiment & News Service (News Aggregation, Sentiment Analysis)
+  # ---------------------------------------------------------------------------
+  # Dedicated microservice for news fetching and sentiment analysis
+  sentiment-service:
+    build:
+      context: ./services/sentiment-service
+      dockerfile: Dockerfile
+    container_name: creditwhisperers-sentiment
+    ports:
+      - "8003:8003"
+    environment:
+      # API Keys (add your keys)
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      - FINNHUB_API_TOKEN=${FINNHUB_API_TOKEN:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+      - MARKETAUX_API_KEY=${MARKETAUX_API_KEY:-}
+      # Redis Cache
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Cache TTLs
+      - NEWS_CACHE_TTL=600
+      - SENTIMENT_CACHE_TTL=900
+      # Service URLs
+      - MARKET_DATA_URL=http://market-data:8002
+      # Development settings
+      - DEBUG=True
+      - ENVIRONMENT=development
+    depends_on:
+      redis:
+        condition: service_healthy
+      market-data:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
+  # Portfolio Service (Portfolio Aggregation, Timeseries, Analytics)
+  # ---------------------------------------------------------------------------
+  # Dedicated microservice for portfolio-level calculations
+  portfolio-service:
+    build:
+      context: ./services/portfolio-service
+      dockerfile: Dockerfile
+    container_name: creditwhisperers-portfolio
+    ports:
+      - "8004:8004"
+    environment:
+      # Database
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DATABASE=creditwhisperers
+      # Redis Cache
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Service URLs
+      - MARKET_DATA_SERVICE_URL=http://market-data:8002
+      - SENTIMENT_SERVICE_URL=http://sentiment-service:8003
+      # Development settings
+      - DEBUG=True
+      - ENVIRONMENT=development
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      market-data:
+        condition: service_healthy
+      sentiment-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - creditwhisperers-network
+
+  # ---------------------------------------------------------------------------
   # MongoDB Database
   # ---------------------------------------------------------------------------
   mongodb:

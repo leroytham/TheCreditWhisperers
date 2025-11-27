@@ -1,0 +1,25 @@
+# =============================================================================
+# TheCreditWhisperers - Sentiment Service Kubernetes Service
+# =============================================================================
+# Exposes the sentiment microservice as a network service.
+#
+# Usage: kubectl apply -f k8s/sentiment-service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: creditwhisperers-sentiment
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: sentiment
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8003
+      protocol: TCP
+  selector:
+    app: creditwhisperers
+    component: sentiment

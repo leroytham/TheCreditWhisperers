@@ -1,0 +1,63 @@
+# =============================================================================
+# TheCreditWhisperers - Portfolio Service Horizontal Pod Autoscaler
+# =============================================================================
+# Automatically scales the portfolio service based on resource utilization.
+#
+# Features:
+# - Scales between 2-6 replicas
+# - CPU target: 70% utilization
+# - Memory target: 75% utilization
+#
+# Usage: kubectl apply -f k8s/portfolio-hpa.yaml
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: creditwhisperers-portfolio-hpa
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: portfolio-autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: creditwhisperers-portfolio
+
+  minReplicas: 2
+  maxReplicas: 6
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+      selectPolicy: Min

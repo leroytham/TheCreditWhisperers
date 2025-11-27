@@ -1,0 +1,25 @@
+# =============================================================================
+# TheCreditWhisperers - Market Data Service Kubernetes Service
+# =============================================================================
+# Exposes the market data microservice as a network service.
+#
+# Usage: kubectl apply -f k8s/market-data-service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: creditwhisperers-market-data
+  namespace: creditwhisperers
+  labels:
+    app: creditwhisperers
+    component: market-data
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8002
+      protocol: TCP
+  selector:
+    app: creditwhisperers
+    component: market-data
