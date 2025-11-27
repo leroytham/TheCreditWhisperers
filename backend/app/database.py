@@ -1,16 +1,23 @@
 # app/database.py
 """
 MongoDB database connection and utility functions.
+
+Provides both sync (PyMongo) and async (Motor) clients for different use cases:
+- Sync client: Used by notification services and background tasks
+- Async client: Used by FastAPI route handlers for non-blocking I/O
 """
 
 from pymongo import MongoClient
 from pymongo.database import Database
 from pymongo.collection import Collection
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase, AsyncIOMotorCollection
 from typing import Optional
 import certifi
 from app.core.config import settings
 
-# Global MongoDB client instance
+# =============================================================================
+# SYNC CLIENT (PyMongo) - For background tasks and services
+# =============================================================================
 _client: Optional[MongoClient] = None
 _database: Optional[Database] = None
 
@@ -77,6 +84,93 @@ def close_database_connection():
         print("🔌 Closed MongoDB connection")
 
 
+# =============================================================================
+# ASYNC CLIENT (Motor) - For FastAPI route handlers
+# =============================================================================
+_motor_client: Optional[AsyncIOMotorClient] = None
+_motor_database: Optional[AsyncIOMotorDatabase] = None
+
+
+def get_motor_client() -> AsyncIOMotorClient:
+    """
+    Get or create async Motor client singleton with optimized connection pooling.
+
+    This client is used by FastAPI route handlers for non-blocking database operations.
+    Connection settings are optimized for Azure Cosmos DB / MongoDB Atlas.
+    """
+    global _motor_client
+    if _motor_client is None:
+        _motor_client = AsyncIOMotorClient(
+            settings.MONGO_URI,
+            tls=True,
+            tlsCAFile=certifi.where(),
+            # Connection pool settings
+            maxPoolSize=50,              # Maximum connections in the pool
+            minPoolSize=10,              # Minimum connections to maintain
+            maxIdleTimeMS=45000,         # Close idle connections after 45 seconds
+            # Timeout settings
+            serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
+            connectTimeoutMS=10000,         # 10 second timeout for initial connection
+            socketTimeoutMS=30000,          # 30 second timeout for socket operations
+            # Retry and keep-alive settings
+            retryWrites=True,            # Automatically retry write operations
+            retryReads=True,             # Automatically retry read operations
+            heartbeatFrequencyMS=10000,  # Send heartbeat every 10 seconds
+            appname="FYP-Backend"        # Application name for MongoDB logs
+        )
+    return _motor_client
+
+
+def get_motor_database(database_name: str = "FYP") -> AsyncIOMotorDatabase:
+    """Get async Motor database instance."""
+    global _motor_database
+    if _motor_database is None:
+        client = get_motor_client()
+        _motor_database = client[database_name]
+    return _motor_database
+
+
+# Alias for simpler access
+def get_motor_db(database_name: str = "FYP") -> AsyncIOMotorDatabase:
+    """Alias for get_motor_database() - returns async Motor database instance."""
+    return get_motor_database(database_name)
+
+
+def get_motor_collection(collection_name: str, database_name: str = "FYP") -> AsyncIOMotorCollection:
+    """Get async Motor collection."""
+    database = get_motor_database(database_name)
+    return database[collection_name]
+
+
+# Async collection helpers for routes
+def get_accounts_collection_async() -> AsyncIOMotorCollection:
+    """Get Account_Details collection (async)."""
+    return get_motor_collection("Account_Details")
+
+
+def get_holdings_collection_async() -> AsyncIOMotorCollection:
+    """Get Stock_Holding collection (async)."""
+    return get_motor_collection("Stock_Holding")
+
+
+def get_transactions_collection_async() -> AsyncIOMotorCollection:
+    """Get Transactions collection (async)."""
+    return get_motor_collection("Transactions")
+
+
+async def close_motor_connection():
+    """Close async Motor connection (for cleanup)."""
+    global _motor_client, _motor_database
+    if _motor_client:
+        _motor_client.close()
+        _motor_client = None
+        _motor_database = None
+        print("🔌 Closed Motor (async) MongoDB connection")
+
+
+# =============================================================================
+# DATABASE INDEXES
+# =============================================================================
 # Create indexes for better performance
 def create_indexes():
     """Create database indexes for notifications and portfolios."""

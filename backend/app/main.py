@@ -7,6 +7,13 @@ from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
 from .api.health_routes import router as health_router
 from .api.metrics_routes import router as metrics_router
+# New modular route imports
+from .api.auth_routes import router as auth_router
+from .api.stock_routes import router as stock_router
+from .api.sector_routes import router as sector_router
+from .api.news_routes import router as news_router
+from .api.transaction_routes import router as transaction_router
+from .api.utility_routes import router as utility_router
 from .api.websocket import websocket_endpoint, manager as ws_manager
 from .database import create_indexes
 from .core.config import settings
@@ -142,6 +149,13 @@ app.include_router(notification_router)
 app.include_router(portfolio_router)
 app.include_router(health_router)
 app.include_router(metrics_router)  # Prometheus metrics endpoint
+# New modular routers (without /api prefix)
+app.include_router(auth_router)  # /login, /auth/*
+app.include_router(stock_router)  # /stocks/{ticker}/*
+app.include_router(sector_router)  # /sectors/{sector}/*
+app.include_router(news_router)  # /news, /price, /daily-sentiment, /rolling-sentiment
+app.include_router(transaction_router)  # /transactions/*, /accounts/*/performance-twr
+app.include_router(utility_router)  # /circuit-breakers, /search-ticker
 
 # Routes WITH /api prefix (for production deployment)
 app.include_router(api_routes.router, prefix="/api")
@@ -149,6 +163,13 @@ app.include_router(notification_router, prefix="/api")
 app.include_router(portfolio_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(metrics_router, prefix="/api")  # Prometheus metrics endpoint
+# New modular routers (with /api prefix)
+app.include_router(auth_router, prefix="/api")
+app.include_router(stock_router, prefix="/api")
+app.include_router(sector_router, prefix="/api")
+app.include_router(news_router, prefix="/api")
+app.include_router(transaction_router, prefix="/api")
+app.include_router(utility_router, prefix="/api")
 
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")
@@ -198,7 +219,8 @@ async def startup_event():
 
     # Test MongoDB connection
     try:
-        from .api.routes import client as motor_client
+        from .database import get_motor_client
+        motor_client = get_motor_client()
         # Ping MongoDB to verify connection
         await motor_client.admin.command('ping')
         logger.info("✅ MongoDB connection verified successfully")
