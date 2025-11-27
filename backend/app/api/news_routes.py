@@ -14,14 +14,21 @@ Endpoints:
 import copy
 import logging
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 import yfinance as yf
 
-from app.services.news_service import news_service_instance
-from app.services.stock_data_service import stock_data_service
-from app.services.sentiment_service import sentiment_service
-from app.services.sector_service import sector_service_instance
-from app.services.sector_sentiment_service import sector_sentiment_service
+from app.services.news_service import NewsService
+from app.services.stock_data_service import StockDataService
+from app.services.sentiment_service import SentimentService
+from app.services.sector_service import SectorService
+from app.services.sector_sentiment_service import SectorSentimentService
+from app.core.dependencies import (
+    get_news_service,
+    get_sentiment_service,
+    get_sector_service,
+    get_sector_sentiment_service,
+    get_stock_data_service,
+)
 from app.core.cache import redis_cache, async_cache_result
 from app.core.config import settings
 from app.config.scoring import get_score_definitions
@@ -32,7 +39,12 @@ router = APIRouter(tags=["News & Sentiment"])
 
 
 @router.get("/news")
-async def get_news_data(ticker: str, timeframe: str = "1Y"):
+async def get_news_data(
+    ticker: str,
+    timeframe: str = "1Y",
+    news_service: NewsService = Depends(get_news_service),
+    sentiment_service: SentimentService = Depends(get_sentiment_service),
+):
     """
     Get recent news and sentiment for a ticker with momentum analysis.
 
@@ -55,7 +67,7 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
     """
     try:
         # Fetch news articles using the timeframe-aware news service
-        news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+        news_articles = await news_service.get_ticker_news_for_timeframe(
             ticker,
             timeframe=timeframe,
             trigger_progressive=True,
@@ -170,7 +182,11 @@ async def get_news_data(ticker: str, timeframe: str = "1Y"):
 
 
 @router.get("/news/sources")
-async def get_news_sources(ticker: str):
+async def get_news_sources(
+    ticker: str,
+    news_service: NewsService = Depends(get_news_service),
+    sentiment_service: SentimentService = Depends(get_sentiment_service),
+):
     """
     Get news source reliability and sentiment breakdown.
 
@@ -182,7 +198,7 @@ async def get_news_sources(ticker: str):
     Example: /news/sources?ticker=AAPL
     """
     try:
-        news_articles = await news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service.get_ticker_news(ticker)
 
         if not news_articles:
             return {"ticker": ticker, "sources": []}
@@ -249,7 +265,13 @@ async def get_news_sources(ticker: str):
 
 @router.get("/daily-sentiment")
 @async_cache_result(ttl=600, key_prefix="daily_sentiment")
-async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = None):
+async def get_daily_sentiment(
+    ticker: str,
+    days: int = None,
+    timeframe: str = None,
+    news_service: NewsService = Depends(get_news_service),
+    sentiment_service: SentimentService = Depends(get_sentiment_service),
+):
     """
     Get daily sentiment data for a ticker.
 
@@ -286,11 +308,11 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
 
         # Fetch news articles
         if timeframe:
-            news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+            news_articles = await news_service.get_ticker_news_for_timeframe(
                 ticker, timeframe=timeframe, trigger_progressive=True
             )
         else:
-            news_articles = await news_service_instance.get_ticker_news(ticker)
+            news_articles = await news_service.get_ticker_news(ticker)
 
         # Initialize all requested days with empty data
         today = datetime.now(timezone.utc).date()
@@ -371,7 +393,14 @@ async def get_daily_sentiment(ticker: str, days: int = None, timeframe: str = No
 
 
 @router.get("/rolling-sentiment")
-async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
+async def get_rolling_sentiment(
+    ticker: str,
+    timeframe: str = "1W",
+    news_service: NewsService = Depends(get_news_service),
+    sentiment_service: SentimentService = Depends(get_sentiment_service),
+    sector_service: SectorService = Depends(get_sector_service),
+    sector_sentiment_service: SectorSentimentService = Depends(get_sector_sentiment_service),
+):
     """
     Get rolling-window sentiment data for different timeframes.
 
@@ -392,7 +421,7 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
         sector_key = None
 
         try:
-            sector_key = sector_service_instance.resolve_sector_key(ticker)
+            sector_key = sector_service.resolve_sector_key(ticker)
             is_sector = True
             logger.debug(f"Resolved '{ticker}' as sector: {sector_key}")
         except ValueError:
@@ -423,9 +452,9 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
         if is_sector:
             # SECTOR PATH
-            tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
+            tickers, _ = sector_service.get_sector_tickers(sector_key)
 
-            news_result = await news_service_instance.get_sector_news(
+            news_result = await news_service.get_sector_news(
                 sector_key=sector_key,
                 limit=5000,
                 timeframe=effective_timeframe
@@ -457,7 +486,7 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
         else:
             # STOCK PATH
-            news_articles = await news_service_instance.get_ticker_news_for_timeframe(
+            news_articles = await news_service.get_ticker_news_for_timeframe(
                 ticker, timeframe=timeframe, trigger_progressive=True
             )
 
@@ -572,14 +601,18 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
 
 @router.get("/news-models")
-async def get_news_models(ticker: str):
+async def get_news_models(
+    ticker: str,
+    news_service: NewsService = Depends(get_news_service),
+    sentiment_service: SentimentService = Depends(get_sentiment_service),
+):
     """
     Get news using the proper model structure (News, SentimentScore, RelevanceScore).
 
     Example: /news-models?ticker=AAPL
     """
     try:
-        news_articles = await news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service.get_ticker_news(ticker)
 
         score_defs = get_score_definitions()
 
@@ -631,7 +664,11 @@ async def get_news_models(ticker: str):
 
 
 @router.get("/price")
-def get_price_data(ticker: str, timeframe: str = "1Y"):
+def get_price_data(
+    ticker: str,
+    timeframe: str = "1Y",
+    stock_data_service: StockDataService = Depends(get_stock_data_service),
+):
     """
     Get historical price data for a ticker with company metadata.
 

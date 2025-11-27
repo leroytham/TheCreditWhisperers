@@ -14,13 +14,20 @@ Endpoints:
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 
-from app.services.stock_data_service import stock_data_service
-from app.services.news_service import news_service_instance
-from app.services.sentiment_service import sentiment_service
-from app.services.market_analysis_service import market_analysis_service
-from app.services.earnings_service import earnings_service
+from app.services.stock_data_service import StockDataService
+from app.services.news_service import NewsService
+from app.services.sentiment_service import SentimentService
+from app.services.market_analysis_service import MarketAnalysisService
+from app.services.earnings_service import EarningsService
+from app.core.dependencies import (
+    get_stock_data_service,
+    get_news_service,
+    get_sentiment_service,
+    get_market_analysis_service,
+    get_earnings_service,
+)
 from app.config.scoring import get_score_definitions
 
 logger = logging.getLogger(__name__)
@@ -29,7 +36,11 @@ router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
 
 @router.get("/{ticker}/historical-data")
-def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
+def get_historical_stock_data(
+    ticker: str,
+    timeframe: str = "1M",
+    stock_data_service: StockDataService = Depends(get_stock_data_service),
+):
     """
     Get historical stock data for a given ticker and timeframe.
 
@@ -66,7 +77,11 @@ def get_historical_stock_data(ticker: str, timeframe: str = "1M"):
 
 
 @router.get("/{ticker}/sentiment")
-async def get_stock_news_and_sentiment(ticker: str):
+async def get_stock_news_and_sentiment(
+    ticker: str,
+    news_service: NewsService = Depends(get_news_service),
+    sentiment_service: SentimentService = Depends(get_sentiment_service),
+):
     """
     Get recent news and advanced sentiment analysis with momentum.
 
@@ -82,7 +97,7 @@ async def get_stock_news_and_sentiment(ticker: str):
     """
     try:
         # 1. Fetch recent news using the service
-        news_articles = await news_service_instance.get_ticker_news(ticker)
+        news_articles = await news_service.get_ticker_news(ticker)
         if not news_articles:
             return {"ticker": ticker, "message": "No recent news found."}
 
@@ -105,7 +120,11 @@ async def get_stock_news_and_sentiment(ticker: str):
 
 
 @router.get("/{ticker}/earnings-transcript")
-async def get_earnings_transcript(ticker: str, quarter: str):
+async def get_earnings_transcript(
+    ticker: str,
+    quarter: str,
+    earnings_service: EarningsService = Depends(get_earnings_service),
+):
     """
     Get earnings call transcript for a given ticker and quarter.
 
@@ -138,7 +157,11 @@ async def get_earnings_transcript(ticker: str, quarter: str):
 
 
 @router.get("/{ticker}/earnings-quarters")
-async def get_available_earnings_quarters(ticker: str, years_back: int = 5):
+async def get_available_earnings_quarters(
+    ticker: str,
+    years_back: int = 5,
+    earnings_service: EarningsService = Depends(get_earnings_service),
+):
     """
     Get a list of potential earnings quarters to query.
 
@@ -169,7 +192,11 @@ async def get_available_earnings_quarters(ticker: str, years_back: int = 5):
 
 
 @router.get("/{ticker}/earnings-calendar")
-async def get_earnings_calendar(ticker: str, horizon: str = "12month"):
+async def get_earnings_calendar(
+    ticker: str,
+    horizon: str = "12month",
+    earnings_service: EarningsService = Depends(get_earnings_service),
+):
     """
     Get upcoming earnings calendar events for a given ticker.
 
@@ -205,7 +232,10 @@ async def get_earnings_calendar(ticker: str, horizon: str = "12month"):
 
 
 @router.get("/{ticker}/company-overview")
-async def get_company_overview(ticker: str):
+async def get_company_overview(
+    ticker: str,
+    stock_data_service: StockDataService = Depends(get_stock_data_service),
+):
     """
     Get comprehensive company overview data from Alpha Vantage.
 
@@ -239,7 +269,12 @@ async def get_company_overview(ticker: str):
 
 
 @router.get("/{ticker}/significant-events")
-async def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
+async def get_significant_events_for_ticker(
+    ticker: str,
+    timeframe: str = "1Y",
+    news_service: NewsService = Depends(get_news_service),
+    market_analysis_service: MarketAnalysisService = Depends(get_market_analysis_service),
+):
     """
     Analyze historical data for a stock, identify the top 5 most significant
     price moves, and find correlated news for those events.
@@ -255,7 +290,7 @@ async def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
     try:
         # Fetch cached news for the timeframe to reuse in significant events analysis
         try:
-            cached_news = await news_service_instance.get_ticker_news_for_timeframe(
+            cached_news = await news_service.get_ticker_news_for_timeframe(
                 ticker,
                 timeframe=timeframe,
                 trigger_progressive=False  # Don't trigger progressive fetch
@@ -282,7 +317,11 @@ async def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
 
 
 @router.post("/{ticker}/prefetch-events")
-async def prefetch_significant_events(ticker: str, background_tasks: BackgroundTasks):
+async def prefetch_significant_events(
+    ticker: str,
+    background_tasks: BackgroundTasks,
+    market_analysis_service: MarketAnalysisService = Depends(get_market_analysis_service),
+):
     """
     Trigger background prefetching of significant events for all timeframes.
     This allows instant display when users switch between timeframes.

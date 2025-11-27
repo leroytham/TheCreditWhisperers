@@ -12,9 +12,11 @@ Endpoints:
 
 import logging
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from app.database import get_motor_db, get_accounts_collection_async
+from app.services.twr_calculator_service import TWRCalculatorService
+from app.core.dependencies import get_twr_calculator_service
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +224,8 @@ async def delete_transaction_endpoint(username: str, transaction_id: str):
 async def get_portfolio_performance_twr(
     username: str,
     account_name: str,
-    timeframe: str = "1Y"
+    timeframe: str = "1Y",
+    twr_calculator_service: TWRCalculatorService = Depends(get_twr_calculator_service),
 ):
     """
     Calculate portfolio performance using Time-Weighted Returns (TWR).
@@ -256,7 +259,6 @@ async def get_portfolio_performance_twr(
     - data_quality: Confidence indicators
     """
     try:
-        from app.services.twr_calculator_service import twr_calculator_service
         db = get_motor_db()
         accounts_col = get_accounts_collection_async()
 

@@ -9,12 +9,18 @@ Endpoints:
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
-from app.services.stock_data_service import stock_data_service
-from app.services.news_service import news_service_instance
-from app.services.sector_service import sector_service_instance
-from app.services.sector_sentiment_service import sector_sentiment_service
+from app.services.stock_data_service import StockDataService
+from app.services.news_service import NewsService
+from app.services.sector_service import SectorService
+from app.services.sector_sentiment_service import SectorSentimentService
+from app.core.dependencies import (
+    get_stock_data_service,
+    get_news_service,
+    get_sector_service,
+    get_sector_sentiment_service,
+)
 from app.core.cache import redis_cache, generate_cache_key
 from app.core.config import settings
 
@@ -24,7 +30,10 @@ router = APIRouter(prefix="/sectors", tags=["Sectors"])
 
 
 @router.get("/{sector_ticker}/top-constituents")
-def get_top_constituents_for_sector(sector_ticker: str):
+def get_top_constituents_for_sector(
+    sector_ticker: str,
+    stock_data_service: StockDataService = Depends(get_stock_data_service),
+):
     """
     Get the top 10 constituents for a given sector.
 
@@ -64,7 +73,9 @@ def get_top_constituents_for_sector(sector_ticker: str):
 async def get_sector_aggregated_news(
     sector_identifier: str,
     limit: int = 100,
-    timeframe: str = "1W"
+    timeframe: str = "1W",
+    sector_service: SectorService = Depends(get_sector_service),
+    news_service: NewsService = Depends(get_news_service),
 ):
     """
     Get aggregated news for all companies in a sector.
@@ -105,10 +116,10 @@ async def get_sector_aggregated_news(
     """
     try:
         # Resolve sector identifier to yfinance key
-        sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
+        sector_key = sector_service.resolve_sector_key(sector_identifier)
 
         # Fetch aggregated news
-        result = await news_service_instance.get_sector_news(
+        result = await news_service.get_sector_news(
             sector_key=sector_key,
             limit=limit,
             timeframe=timeframe
@@ -129,7 +140,10 @@ async def get_sector_aggregated_news(
 @router.get("/{sector_identifier}/daily-sentiment")
 async def get_sector_daily_sentiment(
     sector_identifier: str,
-    days: int = 30
+    days: int = 30,
+    sector_service: SectorService = Depends(get_sector_service),
+    news_service: NewsService = Depends(get_news_service),
+    sector_sentiment_service: SectorSentimentService = Depends(get_sector_sentiment_service),
 ):
     """
     Get daily sector-wide sentiment scores for charting.
@@ -179,20 +193,20 @@ async def get_sector_daily_sentiment(
         logger.debug(f"Cache miss for daily sentiment: {sector_identifier}")
 
         # Resolve sector identifier to yfinance key
-        sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
+        sector_key = sector_service.resolve_sector_key(sector_identifier)
 
         # Get sector metadata
-        sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
+        sector_metadata = sector_service.get_sector_metadata(sector_key)
 
         # Get sector tickers
-        tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
+        tickers, _ = sector_service.get_sector_tickers(sector_key)
 
         # Map days to timeframe for news fetch
         timeframe_map = {7: "1W", 14: "2W", 30: "1M", 60: "2M", 90: "3M"}
         timeframe = timeframe_map.get(days, "1M")
 
         # Fetch aggregated news with higher limit for full coverage
-        news_result = await news_service_instance.get_sector_news(
+        news_result = await news_service.get_sector_news(
             sector_key=sector_key,
             limit=5000,
             timeframe=timeframe
