@@ -6,7 +6,7 @@ This comprehensive notification system provides real-time toast notifications, p
 
 ## Features
 
-### ✅ Implemented Features
+### Implemented Features
 
 1. **Toast Notifications** - Temporary pop-ups for user actions and events
 2. **Real-time Notifications** - WebSocket-based push notifications

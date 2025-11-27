@@ -2,7 +2,7 @@
 
 This directory contains shared components, utilities, and hooks used across multiple features (Entity and Sector).
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```
 frontend/src/features/shared/
@@ -20,7 +20,7 @@ frontend/src/features/shared/
 └── README.md           # This file
 ```
 
-## 🧩 Shared Components
+## Shared Components
 
 ### PriceChart
 
@@ -158,7 +158,7 @@ import { SignificantEvents } from '../shared/components';
 - `maxEvents` - Maximum events to display (default: 5)
 - `className` - Additional CSS classes
 
-## 🛠️ Shared Utilities
+## Shared Utilities
 
 ### chartHelpers.js
 
@@ -215,7 +215,7 @@ Shared configuration constants used across features.
 - `MIN_SEARCH_LENGTH` - Minimum search term length (2 - entity specific)
 - `DEFAULT_TICKER` - Default ticker ('AAPL' - entity specific)
 
-## 📊 Import Examples
+## Import Examples
 
 ### Named Imports
 ```jsx
@@ -231,7 +231,7 @@ import PriceChart from '../shared/components/PriceChart';
 import SentimentChart from '../shared/components/SentimentChart';
 ```
 
-## 🎯 Design Principles
+## Design Principles
 
 ### 1. **Flexible Props**
 Components accept both entity and sector prop patterns for backward compatibility.
@@ -260,7 +260,7 @@ All components accept `className` prop for custom styling while maintaining sens
 ### 5. **Backward Compatible**
 Existing entity and sector features work without changes. Components intelligently handle different prop patterns.
 
-## 🔄 Migration Guide
+## Migration Guide
 
 ### Before (Duplicate Components)
 ```jsx
@@ -279,16 +279,16 @@ import SentimentChart from './SentimentChart';
 import { PriceChart, SentimentChart } from '../../../shared/components';
 ```
 
-## 📈 Benefits
+## Benefits
 
-✅ **Code Reuse**: ~70% of UI components now shared
-✅ **Consistency**: Bug fixes and features apply to both entity and sector
-✅ **Maintainability**: Single location for component logic
-✅ **Bundle Size**: Reduced by ~3.3 KB (from 89.54 kB to 87.46 kB)
-✅ **Testing**: Test components once, use everywhere
-✅ **Documentation**: Centralized component documentation
+- **Code Reuse**: ~70% of UI components now shared
+- **Consistency**: Bug fixes and features apply to both entity and sector
+- **Maintainability**: Single location for component logic
+- **Bundle Size**: Reduced by ~3.3 KB (from 89.54 kB to 87.46 kB)
+- **Testing**: Test components once, use everywhere
+- **Documentation**: Centralized component documentation
 
-## 🚀 Future Enhancements
+## Future Enhancements
 
 - Add TypeScript type definitions
 - Create Storybook documentation
@@ -296,26 +296,26 @@ import { PriceChart, SentimentChart } from '../../../shared/components';
 - Extract more common patterns (headers, loaders, etc.)
 - Consider adding shared hooks (useChartData, useSentiment, etc.)
 
-## 📝 Version History
+## Version History
 
 ### v3.0 (Phase 3 - Current)
-- ✅ Unified PriceChart component (supports both entity/sector modes)
-- ✅ Auto-detection of rendering mode
-- ✅ Responsive chart sizing for sector mode
-- ✅ Consolidated event marker logic
+- Unified PriceChart component (supports both entity/sector modes)
+- Auto-detection of rendering mode
+- Responsive chart sizing for sector mode
+- Consolidated event marker logic
 
 ### v2.0 (Phase 2)
-- ✅ Shared SentimentChart component
-- ✅ Shared OverallSentiment component
-- ✅ Shared RelatedNews component
-- ✅ Shared SignificantEvents component
+- Shared SentimentChart component
+- Shared OverallSentiment component
+- Shared RelatedNews component
+- Shared SignificantEvents component
 
 ### v1.0 (Phase 1)
-- ✅ Shared chartHelpers utilities
-- ✅ Shared formatters utilities
-- ✅ Shared constants
+- Shared chartHelpers utilities
+- Shared formatters utilities
+- Shared constants
 
-## 📞 Support
+## Support
 
 For questions or issues with shared components:
 1. Check this README for usage examples
