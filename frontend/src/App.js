@@ -1,7 +1,5 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import LoginCard from "./components/auth/LoginPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import EntityPage from "./pages/EntityPage";
@@ -11,19 +9,6 @@ import ToastContainer from "./features/notifications/components/ToastContainer";
 import { usePriceAlerts } from "./features/notifications/hooks/usePriceAlerts";
 import { useNewsNotifications } from "./features/notifications/hooks/useNewsNotifications";
 import { useNotificationSocket } from "./features/notifications/hooks/useNotificationSocket";
-
-// Create a client with optimized defaults for performance
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh
-      cacheTime: 10 * 60 * 1000, // 10 minutes - cache retention
-      refetchOnWindowFocus: false, // Don't refetch on window focus
-      refetchOnReconnect: false, // Don't refetch on reconnect
-      retry: 1, // Only retry once on failure
-    },
-  },
-});
 
 function App() {
   // Activate price alert monitoring (polls every 60 seconds)
@@ -71,22 +56,18 @@ function App() {
   }, [isConnected, hasError]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<LoginCard />} />
-          <Route path="/portfolio" element={<PortfolioPage />} />
-          <Route path="/entity" element={<EntityPage />} />
-          <Route path="/sector_page" element={<SectorPage />} />
-          <Route path="/notifications" element={<NotificationPageEnhanced />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
-        </Routes>
-        {/* Global Toast Notification Container */}
-        <ToastContainer />
-      </Router>
-      {/* React Query DevTools - only in development */}
-      {process.env.NODE_ENV === 'development' && <ReactQueryDevtools initialIsOpen={false} />}
-    </QueryClientProvider>
+    <Router>
+      <Routes>
+        <Route path="/login" element={<LoginCard />} />
+        <Route path="/portfolio" element={<PortfolioPage />} />
+        <Route path="/entity" element={<EntityPage />} />
+        <Route path="/sector_page" element={<SectorPage />} />
+        <Route path="/notifications" element={<NotificationPageEnhanced />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+      </Routes>
+      {/* Global Toast Notification Container */}
+      <ToastContainer />
+    </Router>
   );
 }
 
