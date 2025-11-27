@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Search, User } from 'lucide-react';
-import { usePortfolio } from '../../../context/PortfolioContext';
+import { useUser } from '../../../hooks/useUser';
+import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import apiService from '../../../services/api';
 
 /**
@@ -8,7 +9,7 @@ import apiService from '../../../services/api';
  *
  * Top navigation bar for portfolio page that displays and manages account selection.
  * Features a dropdown menu with searchable account list, showing account name and number.
- * Integrates with PortfolioContext for centralized account state management.
+ * Integrates with Zustand store via useSelectedAccount hook.
  *
  * Key Features:
  * - Searchable account dropdown
@@ -23,15 +24,15 @@ import apiService from '../../../services/api';
  * <ClientInfoBar />
  */
 const ClientInfoBar = () => {
+  const { username } = useUser();
+  const { selectedAccount, selectAccount } = useSelectedAccount();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { selectedAccount, actions } = usePortfolio();
 
   // Fetch accounts for current logged-in user
   useEffect(() => {
-    const username = sessionStorage.getItem('user');
     if (!username) {
       setLoading(false);
       return;
@@ -49,7 +50,7 @@ const ClientInfoBar = () => {
     };
 
     fetchAccounts();
-  }, []);
+  }, [username]);
 
   // Filter accounts by search
   const filteredAccounts = accounts.filter(
@@ -59,10 +60,8 @@ const ClientInfoBar = () => {
   );
 
   const handleAccountSelect = (account) => {
-    const username = sessionStorage.getItem('user');
-
-    // Update context with selected account
-    actions.selectAccount(
+    // Update Zustand store with selected account
+    selectAccount(
       username,
       account.client_account_name,
       account.account_no

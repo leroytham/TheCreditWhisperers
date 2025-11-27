@@ -8,11 +8,11 @@ import { render, screen, within, waitFor, fireEvent } from '@testing-library/rea
 import { act } from 'react';
 import '@testing-library/jest-dom';
 import PerformanceCard from './PerformanceCard';
-import { useAccountContext } from '../../../hooks/usePortfolioData';
+import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 
 // Mock the hooks
-jest.mock('../../../hooks/usePortfolioData');
+jest.mock('../../../hooks/useSelectedAccount');
 jest.mock('../hooks/usePortfolioOverview');
 
 describe('PerformanceCard', () => {
@@ -21,9 +21,9 @@ describe('PerformanceCard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Default mock for useAccountContext
-    useAccountContext.mockReturnValue({
-      selectedAccount: { account_name: 'Test Account' }
+    // Default mock for useSelectedAccount
+    useSelectedAccount.mockReturnValue({
+      selectedAccount: { accountName: 'Test Account', accountNumber: '123' }
     });
   });
 

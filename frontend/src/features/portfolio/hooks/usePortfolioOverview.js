@@ -1,5 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
-import { usePortfolio } from "../../../context/PortfolioContext";
+import { useUser } from "../../../hooks/useUser";
+import { useSelectedAccount } from "../../../hooks/useSelectedAccount";
 import apiService from "../../../services/api";
 
 /**
@@ -19,11 +20,14 @@ import apiService from "../../../services/api";
  *   - accounts: List of user accounts
  */
 export function usePortfolioOverview() {
-  const { selectedAccount } = usePortfolio();
-  const username = selectedAccount?.username || sessionStorage.getItem('user') || 'TestUser';
+  const { username: userFromHook } = useUser();
+  const { selectedAccount } = useSelectedAccount();
+
+  // Get username from selected account or fall back to logged-in user
+  const username = selectedAccount?.username || userFromHook || 'TestUser';
 
   // Extract account name from selectedAccount object
-  const accountName = selectedAccount?.accountName || selectedAccount;
+  const accountName = selectedAccount?.accountName;
 
   // Define all queries - React Query will fetch them in parallel
   const results = useQueries({

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
 import apiService from '../../../../services/api';
+import { useUser } from '../../../../hooks/useUser';
 
 /**
  * AddPortfolioModal Component
@@ -9,6 +10,7 @@ import apiService from '../../../../services/api';
  * Multi-step modal for creating a new portfolio (1 account + multiple holdings)
  */
 const AddPortfolioModal = ({ isOpen, onClose }) => {
+  const { username } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
   const [accountDetails, setAccountDetails] = useState({
     accountName: '',
@@ -94,15 +96,13 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       return;
     }
 
+    if (!username) {
+      alert('User not logged in. Please log in again.');
+      return;
+    }
+
     try {
       setIsSaving(true);
-
-      // Get username from session
-      const username = sessionStorage.getItem('user');
-      if (!username) {
-        alert('User not logged in. Please log in again.');
-        return;
-      }
 
       const payload = {
         username,

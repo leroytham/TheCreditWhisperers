@@ -13,7 +13,8 @@ import TimeRangeSelector from '../../../shared/components/TimeRangeSelector';
 import ViewModeToggle from '../../../shared/components/ViewModeToggle';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 import { InlineError } from '../../../../components/ErrorDisplay';
-import { useAccountContext, useHoldings } from '../../../../hooks/usePortfolioData';
+import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
+import { usePortfolioOverview } from '../../hooks/usePortfolioOverview';
 import { usePortfolioSentiment } from '../../hooks/usePortfolioSentiment';
 import { usePortfolioRollingSentiment } from '../../hooks/usePortfolioRollingSentiment';
 import { usePortfolioSectorSentiment } from '../../hooks/usePortfolioSectorSentiment';
@@ -62,9 +63,9 @@ const PortfolioSentimentView = ({ isActive = true }) => {
   // Caching handled by backend Redis layer
   const dataTimeframe = timeframe; // Use actual user selection
 
-  // Use hooks for context and data
-  const { selectedAccount } = useAccountContext();
-  const { holdings: portfolioHoldings, loading: holdingsLoading, error: holdingsError } = useHoldings();
+  // Use hooks for account selection and data
+  const { selectedAccount } = useSelectedAccount();
+  const { holdings: portfolioHoldings, holdingsLoading, holdingsError } = usePortfolioOverview();
 
   // Transform holdings data to extract market values and weights
   const holdings = useMemo(() => {

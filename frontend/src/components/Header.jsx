@@ -1,36 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Bell, User, LogOut, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '../hooks/useUser';
 
 export default function Header() {
   const navigate = useNavigate();
+  const { user, logout } = useUser();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  
-  const [userData, setUserData] = useState({
-    name: "Loading...",
-    email: "",
-    accountType: "Microsoft Account",
-    avatar: "?"
-  });
 
-  useEffect(() => {
-    const userEmail = sessionStorage.getItem("user");
-    if (userEmail) {
-      const name = userEmail.split('@')[0].split('.').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ');
-      
-      const initials = name.split(' ').map(n => n[0]).join('').toUpperCase();
-      
-      setUserData({
-        name: name,
-        email: userEmail,
+  const userData = useMemo(() => {
+    const userEmail = typeof user === 'string' ? user : user?.email || '';
+    if (!userEmail) {
+      return {
+        name: "Guest",
+        email: "",
         accountType: "Microsoft Account",
-        avatar: initials
-      });
+        avatar: "?"
+      };
     }
-  }, []);
+
+    const name = userEmail.split('@')[0].split('.').map(word =>
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+
+    const initials = name.split(' ').map(n => n[0]).join('').toUpperCase();
+
+    return {
+      name: name,
+      email: userEmail,
+      accountType: "Microsoft Account",
+      avatar: initials
+    };
+  }, [user]);
 
   const handleSettings = () => {
     alert('Settings functionality coming soon!');
@@ -39,7 +41,7 @@ export default function Header() {
   const handleLogout = () => {
     const confirmLogout = window.confirm("Are you sure you want to log out?");
     if (confirmLogout) {
-      sessionStorage.removeItem("user");
+      logout();
       navigate("/login");
     }
   };

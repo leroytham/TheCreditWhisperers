@@ -15,7 +15,7 @@ import PortfolioSentimentView from '../features/portfolio/components/SentimentVi
 import PortfolioHoldingsDetail from '../features/portfolio/components/HoldingsDetail/PortfolioHoldingsDetail';
 import { DetailedRelatedNews } from '../features/shared/components';
 import { usePortfolioNews } from '../features/portfolio/hooks/usePortfolioNews';
-import { useAccountContext } from '../hooks/usePortfolioData';
+import { useSelectedAccount } from '../hooks/useSelectedAccount';
 
 /**
  * PortfolioPage Component
@@ -53,8 +53,8 @@ const PortfolioPage = () => {
   const [searchParams] = useSearchParams();
   const [activeSubTab, setActiveSubTab] = useState('overview');
 
-  // Use PortfolioContext for centralized account state
-  const { selectedAccount, selectAccount, clearAccount } = useAccountContext();
+  // Use Zustand store for centralized account state
+  const { selectedAccount, selectAccount, clearSelectedAccount } = useSelectedAccount();
 
   // View state: 'select' for account selection or 'detail' for portfolio details
   const [view, setView] = useState(selectedAccount ? 'detail' : 'select');
@@ -120,7 +120,7 @@ const PortfolioPage = () => {
         console.error('Logout API error:', error);
       }
       sessionStorage.removeItem('user');
-      clearAccount();
+      clearSelectedAccount();
       navigate('/login');
     }
   };

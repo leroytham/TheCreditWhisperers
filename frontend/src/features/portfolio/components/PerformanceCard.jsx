@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import { InlineError } from '../../../components/ErrorDisplay';
-import { useAccountContext } from '../../../hooks/usePortfolioData';
+import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 
 // Chart display constants
@@ -76,8 +76,8 @@ const PerformanceCard = ({ onViewPerformance }) => {
   const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'list'
   const [showSP500, setShowSP500] = useState(true); // Toggle S&P 500 visibility
 
-  // Use hooks for context and data fetching
-  const { selectedAccount } = useAccountContext();
+  // Use hooks for account selection and data fetching
+  const { selectedAccount } = useSelectedAccount();
   const { performance, performanceLoading, performanceError, refetchPerformance } = usePortfolioOverview();
 
   const loading = performanceLoading;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import apiService from "../../../services/api";
-import { usePortfolio } from "../../../context/PortfolioContext";
+import { useSelectedAccount } from "../../../hooks/useSelectedAccount";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import { formatDate } from "../../../utils/formatters";
 
@@ -15,7 +15,7 @@ import { formatDate } from "../../../utils/formatters";
  * - Ticker-based filtering (show all or specific holding news)
  * - Date range selector (24h, 7d, 30d, all time)
  * - Request cancellation via AbortController
- * - Cached data from PortfolioContext
+ * - Zustand store integration via useSelectedAccount
  *
  * @returns {React.ReactElement} Rendered news feed card component
  *
@@ -31,7 +31,7 @@ const NewsFeedCard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const abortControllerRef = useRef(null);
-  const { selectedAccount } = usePortfolio();
+  const { selectedAccount } = useSelectedAccount();
 
   // Fetch portfolio news using optimized endpoint
   const fetchPortfolioNews = async () => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { usePortfolio } from '../../../../context/PortfolioContext';
+import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
 import apiService from '../../../../services/api';
 import useAppStore from '../../../../store/useAppStore';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
@@ -12,6 +12,8 @@ import LoadingSpinner from '../../../../components/LoadingSpinner';
  * Dynamically loads and edits an existing portfolio (account + holdings)
  */
 const EditPortfolioModal = ({ isOpen, onClose }) => {
+  const { selectedAccount } = useSelectedAccount();
+  const { notifyError, notifyWarning } = useAppStore();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [accountDetails, setAccountDetails] = useState({
@@ -21,8 +23,6 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
   });
   const [holdings, setHoldings] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
-  const { selectedAccount } = usePortfolio();
-  const { notifyError, notifyWarning } = useAppStore();
 
   const updateAccountDetails = (field, value) => {
     setAccountDetails(prev => ({

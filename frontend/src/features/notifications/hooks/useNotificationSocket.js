@@ -28,6 +28,7 @@ export const useNotificationSocket = (clientId, options = {}) => {
   const reconnectTimerRef = useRef(null);
   const mountedRef = useRef(true); // Track if component is mounted
   const connectionAttemptRef = useRef(0); // Track connection attempts
+  const keepaliveCleanupRef = useRef(null); // Store keepalive interval cleanup
   const { addNotification } = useAppStore();
 
   // Get WebSocket URL based on environment
@@ -80,8 +81,8 @@ export const useNotificationSocket = (clientId, options = {}) => {
         setHasError(false);
         if (onConnect) onConnect();
 
-        // Start ping/pong keepalive
-        startKeepalive(ws);
+        // Start ping/pong keepalive and store cleanup function
+        keepaliveCleanupRef.current = startKeepalive(ws);
       };
 
       ws.onmessage = (event) => {
@@ -184,6 +185,12 @@ export const useNotificationSocket = (clientId, options = {}) => {
   const disconnect = () => {
     mountedRef.current = false; // Mark as unmounted
 
+    // Clear keepalive interval first
+    if (keepaliveCleanupRef.current) {
+      keepaliveCleanupRef.current();
+      keepaliveCleanupRef.current = null;
+    }
+
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -240,15 +247,12 @@ export const useNotificationSocket = (clientId, options = {}) => {
     mountedRef.current = true; // Mark as mounted
 
     if (autoConnect && clientId) {
-      // Small delay to avoid StrictMode double-mount issues
-      const connectTimer = setTimeout(() => {
-        if (mountedRef.current) {
-          connect();
-        }
-      }, 100);
+      // Connect immediately - proper cleanup handles StrictMode double-mount
+      if (mountedRef.current && !websocketRef.current) {
+        connect();
+      }
 
       return () => {
-        clearTimeout(connectTimer);
         disconnect();
       };
     }

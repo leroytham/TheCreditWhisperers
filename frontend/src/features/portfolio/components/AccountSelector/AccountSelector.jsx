@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../../../services/api';
-import { usePortfolio } from '../../../../context/PortfolioContext';
+import { useUser } from '../../../../hooks/useUser';
+import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 
 /**
@@ -9,7 +10,7 @@ import LoadingSpinner from '../../../../components/LoadingSpinner';
  *
  * Displays a selectable list of accounts for the logged-in user.
  * Fetches accounts from API and manages account selection state.
- * Integrates with PortfolioContext for global account selection.
+ * Integrates with Zustand store via useSelectedAccount hook.
  *
  * @param {Object} props - Component props
  * @param {Function} props.onAccountSelect - Callback function when an account is selected
@@ -25,22 +26,20 @@ import LoadingSpinner from '../../../../components/LoadingSpinner';
  */
 const AccountSelector = ({ onAccountSelect, onAddPortfolio }) => {
   const navigate = useNavigate();
+  const { username } = useUser();
+  const { selectedAccount } = useSelectedAccount();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [username, setUsername] = useState(null);
-  const { selectedAccount } = usePortfolio();
 
   useEffect(() => {
-    const user = sessionStorage.getItem('user');
-    if (user) {
-      setUsername(user);
-      fetchAccounts(user);
+    if (username) {
+      fetchAccounts(username);
     } else {
       setError('No user logged in');
       setLoading(false);
     }
-  }, []);
+  }, [username]);
 
   const fetchAccounts = async (user) => {
     setLoading(true);

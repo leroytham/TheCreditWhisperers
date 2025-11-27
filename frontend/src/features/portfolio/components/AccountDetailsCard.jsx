@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useAccountContext } from '../../../hooks/usePortfolioData';
+import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import { InlineError } from '../../../components/ErrorDisplay';
@@ -12,12 +12,12 @@ import { formatCurrency, parseNumericString } from '../../../utils/formatters';
  *
  * Now uses:
  * - usePortfolioOverview hook (React Query) for data fetching with caching
- * - useAccountContext for account info
+ * - useSelectedAccount (Zustand) for account info
  * - Shared LoadingSpinner and ErrorDisplay components
  * - Centralized formatters
  */
 const AccountDetailsCard = () => {
-  const { selectedAccount } = useAccountContext();
+  const { selectedAccount } = useSelectedAccount();
   const { holdings, holdingsLoading, holdingsError, refetchHoldings } = usePortfolioOverview();
 
   const loading = holdingsLoading;

@@ -3,7 +3,7 @@ import PriceChart from '../../../shared/components/PriceChart';
 import TimeRangeSelector from '../../../shared/components/TimeRangeSelector';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 import { InlineError } from '../../../../components/ErrorDisplay';
-import { useAccountContext } from '../../../../hooks/usePortfolioData';
+import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
 import { formatCurrency, formatPercentage, normalizeToPercentageReturn, normalizeToPercentageReturnWithCapitalFlows, normalizeToTWR, normalizeToHybridReturn } from '../../../../utils/formatters';
 import { parseExchangeDate } from '../../../shared/utils/formatters';
 import apiService from '../../../../services/api';
@@ -51,8 +51,8 @@ const PortfolioPerformanceDetail = () => {
       : false
   );
 
-  // Use hooks for context
-  const { selectedAccount } = useAccountContext();
+  // Use hooks for account selection
+  const { selectedAccount } = useSelectedAccount();
   const abortControllerRef = useRef(null);
 
   // Persist display preferences to localStorage

@@ -20,7 +20,22 @@ const useAppStore = create(
         isAuthenticated: false,
 
         setUser: (user) => set({ user, isAuthenticated: !!user }),
-        logout: () => set({ user: null, isAuthenticated: false }),
+        logout: () => set({
+          user: null,
+          isAuthenticated: false,
+          selectedAccount: null, // Clear account on logout
+        }),
+
+        // ===== SELECTED ACCOUNT STATE =====
+        // Replaces PortfolioContext's selectedAccount
+        // Shape: { username, accountName, accountNumber } or null
+        selectedAccount: null,
+
+        selectAccount: (username, accountName, accountNumber) => set({
+          selectedAccount: { username, accountName, accountNumber },
+        }),
+
+        clearSelectedAccount: () => set({ selectedAccount: null }),
 
         // ===== SELECTED TICKER =====
         selectedTicker: null,
@@ -316,118 +331,6 @@ const useAppStore = create(
           },
         }),
 
-        // ===== PORTFOLIOS =====
-        selectedPortfolio: null, // Currently selected portfolio { id, name, ... }
-        userPortfolios: [], // All user's portfolios
-        portfoliosLoading: false,
-        portfoliosError: null,
-
-        setSelectedPortfolio: (portfolio) => set({
-          selectedPortfolio: portfolio,
-        }),
-
-        setUserPortfolios: (portfolios) => set({
-          userPortfolios: portfolios,
-          portfoliosLoading: false,
-          portfoliosError: null,
-        }),
-
-        setPortfoliosLoading: (loading) => set({ portfoliosLoading: loading }),
-
-        setPortfoliosError: (error) => set({
-          portfoliosError: error,
-          portfoliosLoading: false,
-        }),
-
-        // Load user's portfolios from API
-        loadUserPortfolios: async () => {
-          const { setPortfoliosLoading, setUserPortfolios, setPortfoliosError, setSelectedPortfolio, selectedPortfolio } = get();
-
-          setPortfoliosLoading(true);
-
-          try {
-            const response = await fetch('/api/portfolios/', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-            });
-
-            if (!response.ok) {
-              throw new Error('Failed to fetch portfolios');
-            }
-
-            const data = await response.json();
-            const portfolios = data.portfolios || [];
-
-            setUserPortfolios(portfolios);
-
-            // Auto-select primary portfolio if no portfolio is selected
-            if (!selectedPortfolio && portfolios.length > 0) {
-              const primary = portfolios.find(p => p.is_primary) || portfolios[0];
-              setSelectedPortfolio(primary);
-            }
-
-            return portfolios;
-          } catch (error) {
-            console.error('Error loading portfolios:', error);
-            setPortfoliosError(error.message);
-            return [];
-          }
-        },
-
-        // Get portfolio by ID
-        getPortfolioById: (portfolioId) => {
-          const { userPortfolios } = get();
-          return userPortfolios.find(p => p.id === portfolioId);
-        },
-
-        // Update a portfolio in the list
-        updatePortfolioInList: (portfolioId, updates) => set((state) => ({
-          userPortfolios: state.userPortfolios.map(p =>
-            p.id === portfolioId ? { ...p, ...updates } : p
-          ),
-          selectedPortfolio: state.selectedPortfolio?.id === portfolioId
-            ? { ...state.selectedPortfolio, ...updates }
-            : state.selectedPortfolio,
-        })),
-
-        // Set portfolio as primary
-        setPrimaryPortfolio: async (portfolioId) => {
-          const { updatePortfolioInList, setSelectedPortfolio, getPortfolioById } = get();
-
-          try {
-            const response = await fetch(`/api/portfolios/${portfolioId}/set-primary`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-            });
-
-            if (!response.ok) {
-              throw new Error('Failed to set primary portfolio');
-            }
-
-            // Update all portfolios to reflect new primary
-            set((state) => ({
-              userPortfolios: state.userPortfolios.map(p => ({
-                ...p,
-                is_primary: p.id === portfolioId,
-              })),
-            }));
-
-            const portfolio = getPortfolioById(portfolioId);
-            if (portfolio) {
-              setSelectedPortfolio({ ...portfolio, is_primary: true });
-            }
-
-            return true;
-          } catch (error) {
-            console.error('Error setting primary portfolio:', error);
-            return false;
-          }
-        },
-
         // ===== CACHE INVALIDATION =====
         lastRefresh: {},
 
@@ -445,6 +348,11 @@ const useAppStore = create(
         name: 'app-storage', // localStorage key
         partialize: (state) => ({
           // Only persist these fields
+          // User & Account state
+          user: state.user,
+          isAuthenticated: state.isAuthenticated,
+          selectedAccount: state.selectedAccount,
+          // UI preferences
           theme: state.theme,
           watchlist: state.watchlist,
           recentSearches: state.recentSearches,
@@ -452,8 +360,6 @@ const useAppStore = create(
           selectedTimeframe: state.selectedTimeframe,
           priceAlerts: state.priceAlerts,
           notifications: state.notifications,
-          selectedPortfolio: state.selectedPortfolio,
-          userPortfolios: state.userPortfolios,
         }),
       }
     ),
