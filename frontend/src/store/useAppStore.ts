@@ -1,7 +1,17 @@
-// frontend/src/store/useAppStore.js
-
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
+import type { AppStoreState, NotificationOptions, NotificationConfig } from '../types/store';
+import type { Notification, PriceAlert } from '../types';
+
+/**
+ * Subcategory map for notification categories
+ */
+const subcategoryMap: Record<string, string> = {
+  'Market': 'Market Signals',
+  'Portfolio': 'Portfolio Updates',
+  'News': 'News & Insights',
+  'System': 'Operational Alerts',
+};
 
 /**
  * Global application store using Zustand
@@ -11,7 +21,7 @@ import { devtools, persist } from 'zustand/middleware';
  * - Redux DevTools integration
  * - Type-safe state management
  */
-const useAppStore = create(
+const useAppStore = create<AppStoreState>()(
   devtools(
     persist(
       (set, get) => ({
@@ -107,12 +117,12 @@ const useAppStore = create(
           priceAlerts: [
             ...state.priceAlerts,
             {
-              id: Date.now() + Math.random(),
+              id: String(Date.now() + Math.random()),
               createdAt: new Date().toISOString(),
               isActive: true,
               triggered: false,
               ...alert,
-            },
+            } as PriceAlert,
           ],
         })),
 
@@ -145,20 +155,15 @@ const useAppStore = create(
         addNotification: (notification) => set((state) => {
           // Generate subcategory if not provided
           const category = notification.category || 'System';
-          const subcategoryMap = {
-            'Market': 'Market Signals',
-            'Portfolio': 'Portfolio Updates',
-            'News': 'News & Insights',
-            'System': 'Operational Alerts',
-          };
 
-          const newNotification = {
+          const newNotification: Notification = {
             id: Date.now() + Math.random(), // Ensure unique ID
             timestamp: new Date().toISOString(),
             type: 'info', // 'success' | 'error' | 'warning' | 'info' | 'critical'
             category: 'System', // 'Portfolio' | 'Market' | 'News' | 'System'
             subcategory: subcategoryMap[category] || 'General',
             priority: 'medium', // 'low' | 'medium' | 'high' | 'critical'
+            message: '',
             isRead: false,
             isArchived: false,
             showAsToast: true, // Show in toast container
@@ -275,7 +280,7 @@ const useAppStore = create(
         },
 
         // Helper for creating enriched notifications with full metadata
-        notifyWithMetadata: (config = {}) => {
+        notifyWithMetadata: (config) => {
           const { addNotification } = get();
           addNotification({
             type: config.type || 'info',
@@ -285,18 +290,20 @@ const useAppStore = create(
             subcategory: config.subcategory,
             priority: config.priority || 'medium',
             preview: config.preview,
-            // Optional rich data fields
-            modalTitle: config.modalTitle,
-            subject: config.subject,
-            body: config.body,
-            signalAnalysis: config.signalAnalysis,
-            portfolioImpact: config.portfolioImpact,
-            accountServicing: config.accountServicing,
             // Standard fields
             duration: config.duration !== undefined ? config.duration : 5000,
             actionUrl: config.actionUrl,
             showAsToast: config.showAsToast !== undefined ? config.showAsToast : true,
-            metadata: config.metadata || {},
+            metadata: {
+              ...(config.metadata || {}),
+              // Optional rich data fields stored in metadata
+              ...(config.modalTitle && { modalTitle: config.modalTitle }),
+              ...(config.subject && { subject: config.subject }),
+              ...(config.body && { body: config.body }),
+              ...(config.signalAnalysis && { signalAnalysis: config.signalAnalysis }),
+              ...(config.portfolioImpact && { portfolioImpact: config.portfolioImpact }),
+              ...(config.accountServicing && { accountServicing: config.accountServicing }),
+            },
           });
         },
 

@@ -1,11 +1,9 @@
-// frontend/src/config/constants.js
-
 /**
  * Application-wide constants and configuration
  */
 
 // API Configuration
-export const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+export const API_BASE_URL: string = process.env.REACT_APP_API_URL || '/api';
 
 export const API_ENDPOINTS = {
   // Stock endpoints
@@ -25,7 +23,7 @@ export const API_ENDPOINTS = {
 
   // Search
   SEARCH_TICKER: '/search-ticker',
-};
+} as const;
 
 // Query keys for React Query
 export const QUERY_KEYS = {
@@ -38,7 +36,7 @@ export const QUERY_KEYS = {
   DAILY_SENTIMENT: 'dailySentiment',
   SECTOR_CONSTITUENTS: 'sectorConstituents',
   SEARCH_TICKER: 'searchTicker',
-};
+} as const;
 
 // Cache/stale times (in milliseconds)
 export const CACHE_TIMES = {
@@ -47,10 +45,15 @@ export const CACHE_TIMES = {
   SENTIMENT: 15 * 60 * 1000,        // 15 minutes
   SECTOR: 60 * 60 * 1000,           // 1 hour
   COMPANY_INFO: 24 * 60 * 60 * 1000, // 24 hours
-};
+} as const;
 
 // Timeframe options
-export const TIMEFRAMES = [
+export interface TimeframeOption {
+  value: string;
+  label: string;
+}
+
+export const TIMEFRAMES: TimeframeOption[] = [
   { value: '1D', label: '1 Day' },
   { value: '1M', label: '1 Month' },
   { value: '3M', label: '3 Months' },
@@ -66,17 +69,17 @@ export const SENTIMENT_LABELS = {
   NEUTRAL: 'Neutral',
   SOMEWHAT_BEARISH: 'Somewhat-Bearish',
   BEARISH: 'Bearish',
-};
+} as const;
 
 // Legacy sentiment labels (for backward compatibility)
 export const LEGACY_SENTIMENT_LABELS = {
   POSITIVE: 'positive',
   NEUTRAL: 'neutral',
   NEGATIVE: 'negative',
-};
+} as const;
 
 // Sentiment colors (mapped to new labels)
-export const SENTIMENT_COLORS = {
+export const SENTIMENT_COLORS: Record<string, string> = {
   [SENTIMENT_LABELS.BULLISH]: '#22c55e',         // green (stronger)
   [SENTIMENT_LABELS.SOMEWHAT_BULLISH]: '#10b981', // green (moderate)
   [SENTIMENT_LABELS.NEUTRAL]: '#6b7280',          // gray
@@ -85,7 +88,7 @@ export const SENTIMENT_COLORS = {
 };
 
 // Legacy sentiment colors (for backward compatibility)
-export const LEGACY_SENTIMENT_COLORS = {
+export const LEGACY_SENTIMENT_COLORS: Record<string, string> = {
   [LEGACY_SENTIMENT_LABELS.POSITIVE]: '#10b981', // green
   [LEGACY_SENTIMENT_LABELS.NEUTRAL]: '#6b7280',  // gray
   [LEGACY_SENTIMENT_LABELS.NEGATIVE]: '#ef4444', // red
@@ -95,7 +98,7 @@ export const LEGACY_SENTIMENT_COLORS = {
 export const SCORE_DEFINITIONS = {
   SENTIMENT: 'x <= -0.35: Bearish; -0.35 < x <= -0.15: Somewhat-Bearish; -0.15 < x < 0.15: Neutral; 0.15 <= x < 0.35: Somewhat-Bullish; x >= 0.35: Bullish',
   RELEVANCE: '0 < x <= 1, with a higher score indicating higher relevance.'
-};
+} as const;
 
 // Sentiment thresholds
 export const SENTIMENT_THRESHOLDS = {
@@ -105,13 +108,13 @@ export const SENTIMENT_THRESHOLDS = {
   NEUTRAL_LOWER: -0.15,
   SOMEWHAT_BEARISH: -0.15,
   BEARISH: -0.35,
-};
+} as const;
 
 // Relevance score range
 export const RELEVANCE_SCORE_RANGE = {
   MIN: 0,    // Exclusive (0 < x)
   MAX: 1.0,  // Inclusive (x <= 1)
-};
+} as const;
 
 // Error messages
 export const ERROR_MESSAGES = {
@@ -121,7 +124,7 @@ export const ERROR_MESSAGES = {
   VALIDATION_ERROR: 'Invalid input. Please check your data.',
   TIMEOUT: 'Request timeout. Please try again.',
   GENERIC: 'An unexpected error occurred. Please try again.',
-};
+} as const;
 
 // HTTP status codes
 export const HTTP_STATUS = {
@@ -135,24 +138,24 @@ export const HTTP_STATUS = {
   SERVER_ERROR: 500,
   BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
-};
+} as const;
 
 // Retry configuration
 export const RETRY_CONFIG = {
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000, // 1 second
-  RETRY_STATUS_CODES: [408, 429, 500, 502, 503, 504],
-};
+  RETRY_STATUS_CODES: [408, 429, 500, 502, 503, 504] as readonly number[],
+} as const;
 
 // Debounce delays
 export const DEBOUNCE_DELAYS = {
   SEARCH: 300,
   INPUT: 500,
   SCROLL: 150,
-};
+} as const;
 
 // Pagination
 export const PAGINATION = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
-};
+} as const;

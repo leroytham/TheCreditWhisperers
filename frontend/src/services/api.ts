@@ -1,6 +1,4 @@
-// frontend/src/services/api.js
-
-import axios from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, HTTP_STATUS, ERROR_MESSAGES, RETRY_CONFIG } from '../config/constants';
 import useAppStore from '../store/useAppStore';
 import {
@@ -12,10 +10,18 @@ import {
   shouldShowSuccessNotification,
 } from '../features/notifications/utils/notificationHelpers';
 
+// Extend axios config to include custom metadata
+interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
+  metadata?: {
+    startTime: Date;
+  };
+  _retryCount?: number;
+}
+
 /**
  * Helper to read CSRF token from cookie
  */
-function getCsrfToken() {
+function getCsrfToken(): string | null {
   const match = document.cookie.match(/csrf_token=([^;]+)/);
   return match ? match[1] : null;
 }
@@ -24,7 +30,7 @@ function getCsrfToken() {
  * Create axios instance with base configuration
  * withCredentials: true is required to send/receive httpOnly cookies
  */
-const api = axios.create({
+const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // 60 seconds (increased for sector news aggregation)
   headers: {
@@ -38,9 +44,9 @@ const api = axios.create({
  * Note: Auth token is now in httpOnly cookie (sent automatically by browser)
  */
 api.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
     // Add timestamp for debugging
-    config.metadata = { startTime: new Date() };
+    (config as CustomAxiosRequestConfig).metadata = { startTime: new Date() };
 
     // Add CSRF token for state-changing requests (POST, PUT, DELETE, PATCH)
     const method = config.method?.toLowerCase();
@@ -54,7 +60,7 @@ api.interceptors.request.use(
     // Log request in development
     if (process.env.NODE_ENV === 'development') {
       console.log('=> API Request:', {
-        method: config.method.toUpperCase(),
+        method: config.method?.toUpperCase(),
         url: config.url,
         params: config.params,
         data: config.data,
@@ -73,13 +79,14 @@ api.interceptors.request.use(
  * Response interceptor - Handle errors, retries, logging
  */
 api.interceptors.response.use(
-  (response) => {
+  (response: AxiosResponse) => {
     // Calculate request duration
-    const duration = new Date() - response.config.metadata.startTime;
+    const config = response.config as CustomAxiosRequestConfig;
+    const duration = config.metadata ? new Date().getTime() - config.metadata.startTime.getTime() : 0;
 
     // Log response in development
     if (process.env.NODE_ENV === 'development') {
-      console.log(' API Response:', {
+      console.log(' API Response:', {
         url: response.config.url,
         status: response.status,
         duration: `${duration}ms`,
@@ -91,7 +98,7 @@ api.interceptors.response.use(
     if (shouldShowSuccessNotification(response.config) && !shouldSuppressSuccess(response.config)) {
       const { notifySuccess } = useAppStore.getState();
       const message = getSuccessMessage(response.config, response);
-      const category = getCategoryFromUrl(response.config.url);
+      const category = getCategoryFromUrl(response.config.url || '');
 
       notifySuccess(message, {
         category,
@@ -102,7 +109,7 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as CustomAxiosRequestConfig;
 
     // IMPORTANT: Preserve cancel errors - don't transform them
     // This allows components to properly detect and ignore canceled requests
@@ -146,7 +153,7 @@ api.interceptors.response.use(
       // Exponential backoff
       const delay = RETRY_CONFIG.RETRY_DELAY * Math.pow(2, originalRequest._retryCount - 1);
 
-      console.log(`= Retrying request (${originalRequest._retryCount}/${RETRY_CONFIG.MAX_RETRIES}) after ${delay}ms...`);
+      console.log(`= Retrying request (${originalRequest._retryCount}/${RETRY_CONFIG.MAX_RETRIES}) after ${delay}ms...`);
 
       await new Promise(resolve => setTimeout(resolve, delay));
       return api(originalRequest);
@@ -156,7 +163,7 @@ api.interceptors.response.use(
     if (!shouldSuppressError(error)) {
       const { notifyError } = useAppStore.getState();
       const message = getErrorMessage(error);
-      const category = getCategoryFromUrl(originalRequest.url);
+      const category = getCategoryFromUrl(originalRequest.url || '');
 
       notifyError(message, {
         category,
@@ -194,7 +201,48 @@ api.interceptors.response.use(
 /**
  * API Service Methods
  */
-const apiService = {
+interface ApiService {
+  // Generic HTTP methods
+  get: <T = unknown>(url: string, params?: Record<string, unknown>, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
+  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
+  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
+  delete: <T = unknown>(url: string, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
+  patch: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) => Promise<AxiosResponse<T>>;
+
+  // Stock endpoints
+  getStockPrice: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
+  getStockHistorical: (ticker: string, timeframe?: string) => Promise<AxiosResponse>;
+  getStockSentiment: (ticker: string) => Promise<AxiosResponse>;
+  getStockEvents: (ticker: string) => Promise<AxiosResponse>;
+
+  // News endpoints
+  getNews: (ticker: string) => Promise<AxiosResponse>;
+  getCategorizedNews: (ticker: string, startDate?: string, endDate?: string) => Promise<AxiosResponse>;
+  getDailySentiment: (ticker: string, timeframe?: string | null) => Promise<AxiosResponse>;
+  getNewsModels: (ticker: string) => Promise<AxiosResponse>;
+
+  // Sector endpoints
+  getSectorConstituents: (sectorTicker: string) => Promise<AxiosResponse>;
+  getSectorAggregatedNews: (sectorIdentifier: string, params?: Record<string, unknown>) => Promise<AxiosResponse>;
+  getSectorDailySentiment: (sectorIdentifier: string, days?: number) => Promise<AxiosResponse>;
+
+  // Search
+  searchTicker: (query: string) => Promise<AxiosResponse>;
+
+  // Portfolio endpoints
+  getPortfolioAccounts: (username: string, config?: AxiosRequestConfig) => Promise<AxiosResponse>;
+  getPortfolioHoldings: (username: string, accountName: string, config?: AxiosRequestConfig) => Promise<AxiosResponse>;
+  getPortfolioPerformance: (username: string, accountName: string, timeframe?: string, config?: AxiosRequestConfig) => Promise<AxiosResponse>;
+  getPortfolioNews: (username: string, accountName: string, config?: AxiosRequestConfig) => Promise<AxiosResponse>;
+  getPortfolioSentiment: (username: string, accountName: string) => Promise<AxiosResponse>;
+  getPortfolioDailySentiment: (username: string, accountName: string, timeframe?: string | null, days?: number | null) => Promise<AxiosResponse>;
+  getPortfolioRollingSentiment: (username: string, accountName: string, timeframe?: string) => Promise<AxiosResponse>;
+  addPortfolio: (portfolioData: unknown) => Promise<AxiosResponse>;
+  updatePortfolio: (portfolioData: unknown) => Promise<AxiosResponse>;
+  deletePortfolio: (username: string, accountName: string) => Promise<AxiosResponse>;
+}
+
+const apiService: ApiService = {
   // Generic HTTP methods
   get: (url, params = {}, config = {}) => api.get(url, { params, ...config }),
   post: (url, data = {}, config = {}) => api.post(url, data, config),
