@@ -178,7 +178,7 @@ The platform integrates with the following external APIs:
 
 ## Environment Variables
 
-Key environment variables (see individual service READMEs for complete lists):
+Key environment variables (see [backend/README.md](backend/README.md#environment-variables) for complete list):
 
 | Variable | Description |
 |----------|-------------|

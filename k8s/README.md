@@ -169,6 +169,8 @@ All deployments include:
 | Readiness | `/health/ready` | 10s | 5s |
 | Startup | `/health/startup` | 10s | 5s |
 
+> Health probe endpoints are documented in [services/README.md](../services/README.md#health-checks).
+
 ## Network Policies
 
 Network policies in `network-policy.yaml` restrict traffic:

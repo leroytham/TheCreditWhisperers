@@ -62,18 +62,11 @@ Each service uses similar patterns and shared configurations:
 
 ### Circuit Breaker
 
-All external API calls are protected by circuit breakers to prevent cascade failures.
+All external API calls are protected by circuit breakers to prevent cascade failures. See [backend/README.md](../backend/README.md#circuit-breakers) for configuration details.
 
 ### Redis Caching
 
-Services cache responses in Redis with configurable TTLs:
-
-| Data Type | TTL | Description |
-|-----------|-----|-------------|
-| Stock quotes | 5 min | Current market prices |
-| Historical data | 1 hour | Price history |
-| News articles | 10 min | News feed |
-| Sentiment scores | 15 min | Sentiment analysis |
+Services cache responses in Redis with configurable TTLs. See [backend/README.md](../backend/README.md#cache-ttl-settings) for TTL configuration.
 
 ### Health Checks
 

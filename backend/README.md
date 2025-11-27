@@ -147,6 +147,8 @@ gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 | `/health/live` | GET | Liveness probe |
 | `/metrics` | GET | Prometheus metrics |
 
+> All services use the same health check endpoints. See [services/README.md](../services/README.md#health-checks) for details.
+
 ### Stock Data
 
 | Endpoint | Method | Description |
