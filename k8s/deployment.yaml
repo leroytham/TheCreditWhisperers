@@ -41,7 +41,7 @@ spec:
 
       containers:
         - name: backend
-          image: creditwhisperers/backend:latest
+          image: ghcr.io/nmducc/thecreditwhisperers:latest
           imagePullPolicy: Always
 
           ports:

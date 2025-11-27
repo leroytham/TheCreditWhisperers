@@ -40,7 +40,7 @@ spec:
 
       containers:
         - name: portfolio
-          image: creditwhisperers/portfolio-service:latest
+          image: ghcr.io/nmducc/thecreditwhisperers-portfolio:latest
           imagePullPolicy: Always
 
           ports:

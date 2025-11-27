@@ -40,7 +40,7 @@ spec:
 
       containers:
         - name: sentiment
-          image: creditwhisperers/sentiment-service:latest
+          image: ghcr.io/nmducc/thecreditwhisperers-sentiment:latest
           imagePullPolicy: Always
 
           ports:

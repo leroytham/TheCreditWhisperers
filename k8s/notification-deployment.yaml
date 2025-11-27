@@ -41,7 +41,7 @@ spec:
 
       containers:
         - name: notification
-          image: creditwhisperers/notification:latest
+          image: ghcr.io/nmducc/thecreditwhisperers-notification:latest
           imagePullPolicy: Always
 
           ports:

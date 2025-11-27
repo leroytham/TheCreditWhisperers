@@ -1,0 +1,93 @@
+# =============================================================================
+# TheCreditWhisperers - ArgoCD Application
+# =============================================================================
+# GitOps configuration for declarative Kubernetes deployments.
+# ArgoCD automatically syncs cluster state with Git repository.
+#
+# Features:
+# - Automated sync on Git changes
+# - Self-healing (drift detection and correction)
+# - Prune orphaned resources
+# - Retry on sync failures
+#
+# Prerequisites:
+# - ArgoCD installed in cluster (argocd namespace)
+# - Repository connected to ArgoCD
+#
+# Usage:
+#   kubectl apply -f argocd/application.yaml
+#
+# Or via ArgoCD CLI:
+#   argocd app create -f argocd/application.yaml
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: creditwhisperers
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: creditwhisperers
+    app.kubernetes.io/part-of: argocd
+  # Finalizer ensures resources are cleaned up when Application is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # ArgoCD project (default allows all)
+  project: default
+
+  # Source repository configuration
+  source:
+    repoURL: https://github.com/nmducc/TheCreditWhisperers.git
+    targetRevision: main
+    path: k8s  # Sync entire k8s/ directory
+
+    # Directory configuration (for flat manifest directories)
+    directory:
+      recurse: false  # Don't recurse into subdirectories
+      exclude: ''     # No exclusions
+
+  # Destination cluster and namespace
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: creditwhisperers
+
+  # Sync policy configuration
+  syncPolicy:
+    # Automated sync - ArgoCD will automatically sync when Git changes
+    automated:
+      prune: true       # Delete resources not in Git
+      selfHeal: true    # Fix drift (manual changes to cluster)
+      allowEmpty: false # Don't sync if no resources found
+
+    # Sync options
+    syncOptions:
+      - Validate=true                    # Validate manifests before apply
+      - CreateNamespace=true             # Create namespace if not exists
+      - PrunePropagationPolicy=foreground # Wait for pruned resources to be deleted
+      - PruneLast=true                   # Prune after successful sync
+      - ApplyOutOfSyncOnly=true          # Only apply out-of-sync resources
+      - ServerSideApply=false            # Use client-side apply
+
+    # Retry configuration for failed syncs
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences for resources managed by controllers
+  ignoreDifferences:
+    # Ignore HPA-managed replica changes
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    # Ignore HPA status changes
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jsonPointers:
+        - /status
+
+  # Revision history limit (for rollback)
+  revisionHistoryLimit: 10

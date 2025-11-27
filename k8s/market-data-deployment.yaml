@@ -40,7 +40,7 @@ spec:
 
       containers:
         - name: market-data
-          image: creditwhisperers/market-data:latest
+          image: ghcr.io/nmducc/thecreditwhisperers-market-data:latest
           imagePullPolicy: Always
 
           ports:
