@@ -214,39 +214,20 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-# Include the API router from routes.py
-# IMPORTANT: We include routers TWICE to support both localhost and production:
-# - Localhost: setupProxy.js strips /api prefix, so backend needs routes without prefix
-# - Production: Frontend calls /api/* directly, so backend needs routes with /api prefix
-# This dual setup ensures both environments work without code changes
-
-# Routes WITHOUT /api prefix (for localhost development)
+# Include the API routers
+# NOTE: The frontend proxy (setupProxy.js in dev, nginx in prod) strips the /api prefix,
+# so backend routes are registered without /api prefix.
 app.include_router(api_routes.router)
 app.include_router(notification_router)
 app.include_router(portfolio_router)
 app.include_router(health_router)
 app.include_router(metrics_router)  # Prometheus metrics endpoint
-# New modular routers (without /api prefix)
 app.include_router(auth_router)  # /login, /auth/*
 app.include_router(stock_router)  # /stocks/{ticker}/*
 app.include_router(sector_router)  # /sectors/{sector}/*
 app.include_router(news_router)  # /news, /price, /daily-sentiment, /rolling-sentiment
 app.include_router(transaction_router)  # /transactions/*, /accounts/*/performance-twr
 app.include_router(utility_router)  # /circuit-breakers, /search-ticker
-
-# Routes WITH /api prefix (for production deployment)
-app.include_router(api_routes.router, prefix="/api")
-app.include_router(notification_router, prefix="/api")
-app.include_router(portfolio_router, prefix="/api")
-app.include_router(health_router, prefix="/api")
-app.include_router(metrics_router, prefix="/api")  # Prometheus metrics endpoint
-# New modular routers (with /api prefix)
-app.include_router(auth_router, prefix="/api")
-app.include_router(stock_router, prefix="/api")
-app.include_router(sector_router, prefix="/api")
-app.include_router(news_router, prefix="/api")
-app.include_router(transaction_router, prefix="/api")
-app.include_router(utility_router, prefix="/api")
 
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")
