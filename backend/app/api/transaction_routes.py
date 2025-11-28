@@ -2,6 +2,8 @@
 """
 Transaction tracking routes for portfolio management.
 
+Uses Repository Pattern for data access via dependency injection.
+
 Endpoints:
 - POST /transactions/{username} - Create a new transaction
 - GET /transactions/{username}/{account_name} - Get transaction history
@@ -12,11 +14,19 @@ Endpoints:
 
 import logging
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import Optional
 
-from app.database import get_motor_db, get_accounts_collection_async
+from app.models.transaction import (
+    CreateTransactionRequest,
+    TransactionType,
+    TransactionSummary,
+)
+from app.database import get_accounts_collection_async
 from app.services.twr_calculator_service import TWRCalculatorService
 from app.core.dependencies import get_twr_calculator_service
+from app.repositories.factory import get_transaction_repository
+from app.repositories.transaction_repository import TransactionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +34,11 @@ router = APIRouter(tags=["Transactions"])
 
 
 @router.post("/transactions/{username}")
-async def create_transaction_endpoint(username: str, transaction_data: dict):
+async def create_transaction_endpoint(
+    username: str,
+    transaction_data: dict,
+    repo: TransactionRepository = Depends(get_transaction_repository),
+):
     """
     Create a new portfolio transaction.
 
@@ -45,10 +59,6 @@ async def create_transaction_endpoint(username: str, transaction_data: dict):
     }
     """
     try:
-        from app.models.transaction import CreateTransactionRequest, create_transaction
-
-        db = get_motor_db()
-
         # Parse and validate request
         transaction_request = CreateTransactionRequest(
             account_name=transaction_data.get("account_name"),
@@ -60,21 +70,21 @@ async def create_transaction_endpoint(username: str, transaction_data: dict):
             price=transaction_data.get("price"),
             cash_flow=float(transaction_data.get("cash_flow")),
             fees=float(transaction_data.get("fees", 0.0)),
-            notes=transaction_data.get("notes")
+            notes=transaction_data.get("notes"),
         )
 
-        # Create transaction
-        transaction_id = await create_transaction(db, username, transaction_request)
+        # Create transaction via repository
+        transaction_id = await repo.create_transaction(username, transaction_request)
 
         return {
             "message": "Transaction created successfully",
-            "transaction_id": transaction_id
+            "transaction_id": transaction_id,
         }
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
     except Exception as e:
-        logger.error(f"Error creating transaction for {username}: {e}")
+        logger.error("Error creating transaction for %s: %s", username, e)
         raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
 
 
@@ -82,12 +92,13 @@ async def create_transaction_endpoint(username: str, transaction_data: dict):
 async def get_transactions_endpoint(
     username: str,
     account_name: str,
-    start_date: str = None,
-    end_date: str = None,
-    transaction_type: str = None,
-    symbol: str = None,
-    limit: int = 100,
-    skip: int = 0
+    start_date: Optional[str] = Query(None, description="Filter start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Filter end date (YYYY-MM-DD)"),
+    transaction_type: Optional[str] = Query(None, description="Filter by type"),
+    symbol: Optional[str] = Query(None, description="Filter by stock symbol"),
+    limit: int = Query(100, le=500, description="Maximum results"),
+    skip: int = Query(0, ge=0, alias="offset", description="Results to skip"),
+    repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
     Get transaction history for a portfolio.
@@ -103,10 +114,6 @@ async def get_transactions_endpoint(
     Returns transactions sorted by date (most recent first)
     """
     try:
-        from app.models.transaction import get_transactions, TransactionType, TransactionSummary
-
-        db = get_motor_db()
-
         # Parse optional date filters
         start_date_obj = date.fromisoformat(start_date) if start_date else None
         end_date_obj = date.fromisoformat(end_date) if end_date else None
@@ -119,20 +126,19 @@ async def get_transactions_endpoint(
             except ValueError:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid transaction_type. Must be one of: {', '.join([t.value for t in TransactionType])}"
+                    detail=f"Invalid transaction_type. Must be one of: {', '.join([t.value for t in TransactionType])}",
                 )
 
-        # Fetch transactions
-        transactions = await get_transactions(
-            db,
-            username,
-            account_name,
+        # Fetch transactions via repository
+        transactions = await repo.get_transactions(
+            username=username,
+            account_name=account_name,
             start_date=start_date_obj,
             end_date=end_date_obj,
             transaction_type=type_filter,
             symbol=symbol.upper() if symbol else None,
             limit=limit,
-            skip=skip
+            offset=skip,
         )
 
         # Convert to summaries for response
@@ -144,13 +150,15 @@ async def get_transactions_endpoint(
         return {
             "transactions": transaction_summaries,
             "count": len(transaction_summaries),
-            "has_more": len(transaction_summaries) == limit
+            "has_more": len(transaction_summaries) == limit,
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error fetching transactions for {username}/{account_name}: {e}")
+        logger.error("Error fetching transactions for %s/%s: %s", username, account_name, e)
         raise HTTPException(status_code=500, detail=f"Failed to fetch transactions: {str(e)}")
 
 
@@ -158,8 +166,9 @@ async def get_transactions_endpoint(
 async def get_transaction_stats_endpoint(
     username: str,
     account_name: str,
-    start_date: str = None,
-    end_date: str = None
+    start_date: Optional[str] = Query(None, description="Filter start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Filter end date (YYYY-MM-DD)"),
+    repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
     Get transaction statistics for a portfolio.
@@ -169,46 +178,41 @@ async def get_transaction_stats_endpoint(
     - by_type: Breakdown by transaction type with counts and total cash flows
     """
     try:
-        from app.models.transaction import get_transaction_stats
-
-        db = get_motor_db()
-
         start_date_obj = date.fromisoformat(start_date) if start_date else None
         end_date_obj = date.fromisoformat(end_date) if end_date else None
 
-        stats = await get_transaction_stats(
-            db,
-            username,
-            account_name,
+        stats = await repo.get_transaction_stats(
+            username=username,
+            account_name=account_name,
             start_date=start_date_obj,
-            end_date=end_date_obj
+            end_date=end_date_obj,
         )
 
         return stats
 
     except Exception as e:
-        logger.error(f"Error fetching transaction stats for {username}/{account_name}: {e}")
+        logger.error("Error fetching transaction stats for %s/%s: %s", username, account_name, e)
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
 
 
 @router.delete("/transactions/{username}/{transaction_id}")
-async def delete_transaction_endpoint(username: str, transaction_id: str):
+async def delete_transaction_endpoint(
+    username: str,
+    transaction_id: str,
+    repo: TransactionRepository = Depends(get_transaction_repository),
+):
     """
     Delete a transaction.
 
     Only the transaction owner can delete it.
     """
     try:
-        from app.models.transaction import delete_transaction
-
-        db = get_motor_db()
-
-        success = await delete_transaction(db, transaction_id, username)
+        success = await repo.delete_transaction(transaction_id, username)
 
         if not success:
             raise HTTPException(
                 status_code=404,
-                detail="Transaction not found or you don't have permission"
+                detail="Transaction not found or you don't have permission",
             )
 
         return {"message": "Transaction deleted successfully"}
@@ -216,7 +220,7 @@ async def delete_transaction_endpoint(username: str, transaction_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting transaction {transaction_id}: {e}")
+        logger.error("Error deleting transaction %s: %s", transaction_id, e)
         raise HTTPException(status_code=500, detail=f"Failed to delete transaction: {str(e)}")
 
 
@@ -224,7 +228,7 @@ async def delete_transaction_endpoint(username: str, transaction_id: str):
 async def get_portfolio_performance_twr(
     username: str,
     account_name: str,
-    timeframe: str = "1Y",
+    timeframe: str = Query("1Y", description="Timeframe: MTD, QTD, YTD, 1Y, 5Y, ITD"),
     twr_calculator_service: TWRCalculatorService = Depends(get_twr_calculator_service),
 ):
     """
@@ -259,6 +263,8 @@ async def get_portfolio_performance_twr(
     - data_quality: Confidence indicators
     """
     try:
+        from app.database import get_motor_db
+
         db = get_motor_db()
         accounts_col = get_accounts_collection_async()
 
@@ -280,7 +286,7 @@ async def get_portfolio_performance_twr(
             # Get portfolio inception date
             account = await accounts_col.find_one({
                 "username": username,
-                "client_account_name": account_name
+                "client_account_name": account_name,
             })
             if account and "open_date" in account:
                 start_date = datetime.strptime(account["open_date"], "%Y-%m-%d").date()
@@ -302,7 +308,7 @@ async def get_portfolio_performance_twr(
                 "end_date": end_date.isoformat(),
                 "twr": twr_result,
                 "error": twr_result.get("error"),
-                "message": twr_result.get("message")
+                "message": twr_result.get("message"),
             }
 
         start_value = twr_result.get("start_value", 0)
@@ -329,12 +335,12 @@ async def get_portfolio_performance_twr(
             "twr": {
                 "return": twr_return,
                 "method": "Time-Weighted Return (Modified Dietz)",
-                "description": "Isolates investment performance from cash flow timing"
+                "description": "Isolates investment performance from cash flow timing",
             },
             "standard": {
                 "return": round(standard_return, 2) if standard_return is not None else None,
                 "method": "Simple Return",
-                "description": "Does not account for cash flows"
+                "description": "Does not account for cash flows",
             },
             "comparison": {
                 "difference": round(difference, 2) if difference is not None else None,
@@ -343,22 +349,22 @@ async def get_portfolio_performance_twr(
                     f"Cash flows caused a {abs(difference):.1f}% distortion in standard return calculation"
                     if difference and abs(difference) > 0.5
                     else "Minimal cash flow impact - both methods agree"
-                )
+                ),
             },
             "portfolio_values": {
                 "start": start_value,
                 "end": end_value,
                 "change": end_value - start_value,
-                "cash_flow_impact": total_cash_flow
+                "cash_flow_impact": total_cash_flow,
             },
             "sub_periods": twr_result.get("sub_periods", []),
             "data_quality": twr_result.get("data_quality", {}),
             "has_cash_flows": twr_result.get("has_cash_flows", False),
-            "cash_flow_count": twr_result.get("cash_flow_count", 0)
+            "cash_flow_count": twr_result.get("cash_flow_count", 0),
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error calculating TWR performance for {username}/{account_name}: {e}")
+        logger.error("Error calculating TWR performance for %s/%s: %s", username, account_name, e)
         raise HTTPException(status_code=500, detail=f"Failed to calculate TWR: {str(e)}")
