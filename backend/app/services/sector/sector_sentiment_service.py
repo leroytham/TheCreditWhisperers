@@ -7,12 +7,15 @@ data for each ticker mention within an article, filtering to only tickers in
 the sector basket, and aggregating to produce sector-level metrics.
 """
 
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from typing import Dict, List, Set
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 from .ticker_extraction import (
     extract_ticker_mentions,
@@ -49,7 +52,7 @@ class SectorSentimentService:
 
     def __new__(cls):
         if cls._instance is None:
-            print("Creating SectorSentimentService instance...")
+            logger.info("Creating SectorSentimentService instance...")
             cls._instance = super(SectorSentimentService, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
@@ -71,10 +74,8 @@ class SectorSentimentService:
         self.BEARISH_THRESHOLD = -0.35
         self.MIN_RELEVANCE_THRESHOLD = 0.1
 
-        print(f"SectorSentimentService initialized with:")
-        print(f"  Fast half-life: {self.half_life_fast}h (k={self.k_fast:.4f})")
-        print(f"  Slow half-life: {self.half_life_slow}h (k={self.k_slow:.4f})")
-        print(f"  Momentum thresholds: weak={self.threshold_weak}, strong={self.threshold_strong}")
+        logger.info("SectorSentimentService initialized: Fast half-life=%dh (k=%.4f), Slow half-life=%dh (k=%.4f), Momentum thresholds: weak=%s, strong=%s",
+                    self.half_life_fast, self.k_fast, self.half_life_slow, self.k_slow, self.threshold_weak, self.threshold_strong)
 
     def calculate_daily_sector_sentiment(
         self,

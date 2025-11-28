@@ -2,6 +2,7 @@
 
 import json
 import hashlib
+import logging
 import redis
 from functools import wraps
 from typing import Any, Callable, Optional
@@ -10,6 +11,8 @@ import pickle
 from datetime import timedelta
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RedisCache:
@@ -53,14 +56,14 @@ class RedisCache:
                 # Test connection
                 self._client.ping()
                 self._is_available = True
-                print("[OK] Redis connection established successfully")
+                logger.info("Redis connection established successfully")
             except redis.ConnectionError as e:
-                print("[WARNING] Redis not available - running without cache (this is OK for development)")
-                print("          To enable caching: Start Redis server or deploy to Azure with Azure Cache for Redis")
+                logger.warning("Redis not available - running without cache (this is OK for development)")
+                logger.warning("To enable caching: Start Redis server or deploy to Azure with Azure Cache for Redis")
                 self._client = None
                 self._is_available = False
             except Exception as e:
-                print(f"[WARNING] Redis configuration error: {e}")
+                logger.warning("Redis configuration error: %s", e)
                 self._client = None
                 self._is_available = False
         return self._client
@@ -88,7 +91,7 @@ class RedisCache:
                         socket_timeout=5
                     )
             except Exception as e:
-                print(f"[WARNING] Async Redis connection failed: {e}")
+                logger.warning("Async Redis connection failed: %s", e)
                 self._async_client = None
         return self._async_client
 
@@ -102,7 +105,7 @@ class RedisCache:
         try:
             return self.client is not None and self._is_available
         except Exception as e:
-            print(f"[WARNING] Redis availability check failed: {e}")
+            logger.warning("Redis availability check failed: %s", e)
             return False
 
     def get(self, key: str) -> Optional[Any]:
@@ -116,7 +119,7 @@ class RedisCache:
                 return None
             return pickle.loads(value)
         except Exception as e:
-            print(f"Cache get error for key {key}: {e}")
+            logger.error("Cache get error for key %s: %s", key, e)
             return None
 
     def set(self, key: str, value: Any, ttl: int = 300) -> bool:
@@ -129,7 +132,7 @@ class RedisCache:
             self.client.setex(key, ttl, serialized)
             return True
         except Exception as e:
-            print(f"Cache set error for key {key}: {e}")
+            logger.error("Cache set error for key %s: %s", key, e)
             return False
 
     def delete(self, key: str) -> bool:
@@ -141,7 +144,7 @@ class RedisCache:
             self.client.delete(key)
             return True
         except Exception as e:
-            print(f"Cache delete error for key {key}: {e}")
+            logger.error("Cache delete error for key %s: %s", key, e)
             return False
 
     def delete_pattern(self, pattern: str) -> int:
@@ -155,7 +158,7 @@ class RedisCache:
                 return self.client.delete(*keys)
             return 0
         except Exception as e:
-            print(f"Cache delete pattern error for pattern {pattern}: {e}")
+            logger.error("Cache delete pattern error for pattern %s: %s", pattern, e)
             return 0
 
     async def aget(self, key: str) -> Optional[Any]:
@@ -169,7 +172,7 @@ class RedisCache:
                 return None
             return pickle.loads(value)
         except Exception as e:
-            print(f"Async cache get error for key {key}: {e}")
+            logger.error("Async cache get error for key %s: %s", key, e)
             return None
 
     async def aset(self, key: str, value: Any, ttl: int = 300) -> bool:
@@ -182,7 +185,7 @@ class RedisCache:
             await self.async_client.setex(key, ttl, serialized)
             return True
         except Exception as e:
-            print(f"Async cache set error for key {key}: {e}")
+            logger.error("Async cache set error for key %s: %s", key, e)
             return False
 
     async def adelete(self, key: str) -> bool:
@@ -194,7 +197,7 @@ class RedisCache:
             await self.async_client.delete(key)
             return True
         except Exception as e:
-            print(f"Async cache delete error for key {key}: {e}")
+            logger.error("Async cache delete error for key %s: %s", key, e)
             return False
 
     def close(self):
@@ -251,11 +254,11 @@ def cache_result(ttl: int = 300, key_prefix: Optional[str] = None):
             # Try to get from cache
             cached = redis_cache.get(cache_key)
             if cached is not None:
-                print(f"[CACHE HIT] {cache_key}")
+                logger.debug("Cache hit: %s", cache_key)
                 return cached
 
             # Execute function
-            print(f"[CACHE MISS] {cache_key}")
+            logger.debug("Cache miss: %s", cache_key)
             result = func(*args, **kwargs)
 
             # Store in cache
@@ -289,11 +292,11 @@ def async_cache_result(ttl: int = 300, key_prefix: Optional[str] = None):
             # Try to get from cache
             cached = await redis_cache.aget(cache_key)
             if cached is not None:
-                print(f"[CACHE HIT] {cache_key}")
+                logger.debug("Cache hit: %s", cache_key)
                 return cached
 
             # Execute function
-            print(f"[CACHE MISS] {cache_key}")
+            logger.debug("Cache miss: %s", cache_key)
             result = await func(*args, **kwargs)
 
             # Store in cache
@@ -316,7 +319,7 @@ def invalidate_cache(pattern: str):
     """
     deleted = redis_cache.delete_pattern(pattern)
     if deleted > 0:
-        print(f"[CACHE] Invalidated {deleted} cache entries matching pattern: {pattern}")
+        logger.info("Cache invalidated %d entries matching pattern: %s", deleted, pattern)
     return deleted
 
 
@@ -360,7 +363,7 @@ def cache_with_tags(ttl: int = 300, tags: list[str] = None):
                         redis_cache.client.sadd(tag_key, cache_key)
                         redis_cache.client.expire(tag_key, ttl)
                     except Exception as e:
-                        print(f"[WARNING] Failed to set cache tag '{tag}' for key '{cache_key}': {e}")
+                        logger.warning("Failed to set cache tag '%s' for key '%s': %s", tag, cache_key, e)
 
             return result
         return wrapper
@@ -381,9 +384,9 @@ def invalidate_by_tag(tag: str):
             deleted = redis_cache.client.delete(*cache_keys)
             # Delete the tag set itself
             redis_cache.client.delete(tag_key)
-            print(f"[CACHE] Invalidated {deleted} cache entries with tag: {tag}")
+            logger.info("Cache invalidated %d entries with tag: %s", deleted, tag)
             return deleted
         return 0
     except Exception as e:
-        print(f"Error invalidating tag {tag}: {e}")
+        logger.error("Error invalidating tag %s: %s", tag, e)
         return 0

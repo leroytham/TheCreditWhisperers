@@ -107,7 +107,7 @@ class PortfolioSentimentService:
             results = []
             for (symbol, weight, _), result in zip(tasks, task_results):
                 if isinstance(result, Exception):
-                    print(f"Error fetching sentiment for {symbol}: {result}")
+                    logger.error("Error fetching sentiment for %s: %s", symbol, result)
                     results.append((symbol, weight, None))
                 else:
                     results.append((symbol, weight, result))
@@ -250,9 +250,7 @@ class PortfolioSentimentService:
             }
 
         except Exception as e:
-            print(f"Error in portfolio daily sentiment aggregation: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error in portfolio daily sentiment aggregation: %s", e, exc_info=True)
             raise
 
     async def get_portfolio_rolling_sentiment(
@@ -309,7 +307,7 @@ class PortfolioSentimentService:
             results = []
             for (symbol, weight, _), result in zip(tasks, task_results):
                 if isinstance(result, Exception):
-                    print(f"Error fetching rolling sentiment for {symbol}: {result}")
+                    logger.error("Error fetching rolling sentiment for %s: %s", symbol, result)
                     results.append((symbol, weight, None))
                 else:
                     results.append((symbol, weight, result))
@@ -402,9 +400,7 @@ class PortfolioSentimentService:
             }
 
         except Exception as e:
-            print(f"Error in portfolio rolling sentiment aggregation: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error in portfolio rolling sentiment aggregation: %s", e, exc_info=True)
             raise
 
     def _get_days_from_timeframe(self, timeframe: str) -> int:

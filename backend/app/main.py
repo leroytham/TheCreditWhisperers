@@ -1,5 +1,7 @@
 # app/main.py
 
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -79,9 +81,159 @@ warnings.filterwarnings("ignore", category=UserWarning, module="multiprocessing.
 # Configure loky to use fewer resources (reduces semaphore usage)
 os.environ.setdefault("LOKY_MAX_CPU_COUNT", "2")
 
+
+# =============================================================================
+# APPLICATION LIFESPAN
+# =============================================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    Application lifespan handler for startup/shutdown.
+
+    This replaces the deprecated @app.on_event("startup") and
+    @app.on_event("shutdown") decorators. Cleanup after yield is
+    GUARANTEED to run, even on exceptions.
+    """
+    # =========================================================================
+    # STARTUP
+    # =========================================================================
+    logger.info("Starting up application...")
+
+    # Initialize OpenTelemetry distributed tracing
+    if settings.OTEL_ENABLED and settings.OTEL_EXPORTER_OTLP_ENDPOINT:
+        try:
+            from .core.telemetry import init_telemetry
+            if init_telemetry(
+                app=app,
+                service_name=settings.OTEL_SERVICE_NAME,
+                otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+            ):
+                logger.info("OpenTelemetry tracing initialized")
+            else:
+                logger.info("OpenTelemetry tracing not configured")
+        except ImportError:
+            logger.warning("OpenTelemetry packages not installed. Tracing disabled.")
+        except Exception as e:
+            logger.warning("Failed to initialize OpenTelemetry: %s", e)
+
+    # Test MongoDB connection
+    try:
+        from .database import get_motor_client
+        motor_client = get_motor_client()
+        # Ping MongoDB to verify connection
+        await motor_client.admin.command('ping')
+        logger.info("MongoDB connection verified successfully")
+    except Exception as e:
+        logger.error("MongoDB connection failed: %s", e)
+        logger.error("Please check your MONGO_URI environment variable and network connectivity")
+
+    # Create MongoDB indexes for notifications
+    try:
+        create_indexes()
+        logger.info("Database indexes created successfully")
+    except Exception as e:
+        logger.error("Failed to create database indexes: %s", e)
+        # Continue startup even if index creation fails
+
+    # Initialize shared HTTP session with connection pooling
+    try:
+        await http_client.get_session()
+        logger.info("HTTP connection pool initialized")
+    except Exception as e:
+        logger.warning("Failed to initialize HTTP connection pool: %s", e)
+
+    # Initialize circuit breaker Prometheus metrics
+    try:
+        from .core.circuit_breaker_metrics import initialize_circuit_breaker_metrics
+        initialize_circuit_breaker_metrics([
+            "alpha_vantage",
+            "finnhub",
+            "newsapi",
+            "marketaux",
+            "yahoo_finance",
+        ])
+        logger.info("Circuit breaker metrics initialized")
+    except ImportError:
+        logger.warning("prometheus-client not installed. CB metrics disabled.")
+    except Exception as e:
+        logger.warning("Failed to initialize circuit breaker metrics: %s", e)
+
+    # Initialize Redis Pub/Sub for distributed WebSocket notifications
+    if settings.PUBSUB_ENABLED:
+        try:
+            await ws_manager.initialize_pubsub()
+            logger.info("WebSocket Pub/Sub initialized")
+        except Exception as e:
+            logger.warning("Failed to initialize WebSocket Pub/Sub: %s", e)
+            logger.warning("WebSocket notifications will be local-only (single instance)")
+
+    logger.info("Application startup complete")
+
+    # =========================================================================
+    # YIELD - Application runs and handles requests
+    # =========================================================================
+    yield
+
+    # =========================================================================
+    # SHUTDOWN (guaranteed to run, even on exceptions)
+    # =========================================================================
+    logger.info("Shutting down application and cleaning up resources...")
+
+    # Close shared HTTP session
+    try:
+        await http_client.close()
+        logger.info("HTTP connection pool closed")
+    except Exception as e:
+        logger.warning("Error closing HTTP connection pool: %s", e)
+
+    # Stop Redis Pub/Sub for WebSocket notifications
+    try:
+        await ws_manager.shutdown_pubsub()
+        logger.info("WebSocket Pub/Sub stopped")
+    except Exception as e:
+        logger.warning("Error stopping WebSocket Pub/Sub: %s", e)
+
+    # Close Motor (async) MongoDB connection
+    try:
+        from .database import close_motor_connection
+        await close_motor_connection()
+        logger.info("Motor MongoDB connection closed")
+    except Exception as e:
+        logger.warning("Error closing Motor connection: %s", e)
+
+    # Close sync MongoDB connection
+    try:
+        from .database import close_database_connection
+        close_database_connection()
+        logger.info("Sync MongoDB connection closed")
+    except Exception as e:
+        logger.warning("Error closing sync MongoDB connection: %s", e)
+
+    # Shutdown OpenTelemetry
+    try:
+        from .core.telemetry import shutdown_telemetry
+        shutdown_telemetry()
+    except Exception as e:
+        logger.warning("Error shutting down telemetry: %s", e)
+
+    # Force cleanup of any remaining loky executors
+    try:
+        from loky import get_reusable_executor
+        executor = get_reusable_executor(max_workers=None)
+        executor.shutdown(wait=True, kill_workers=True)
+        logger.info("Loky executor cleaned up")
+    except ImportError:
+        # loky not installed or not used
+        pass
+    except Exception as e:
+        logger.warning("Error during loky cleanup: %s", e)
+
+    logger.info("Shutdown complete")
+
+
 # VVV THIS IS THE LINE THE ERROR IS ABOUT VVV
 # Ensure this line exists and the variable is named 'app'.
-app = FastAPI(title="Financial Analysis API", version="1.0.0")
+app = FastAPI(title="Financial Analysis API", version="1.0.0", lifespan=lifespan)
 
 # Configure CORS (Cross-Origin Resource Sharing)
 # Note: WebSocket connections also need proper CORS configuration
@@ -251,118 +403,3 @@ async def websocket_route(websocket: WebSocket, client_id: str):
 # Architecture:
 #   Frontend (nginx:alpine) → /api/* proxy → Backend (FastAPI)
 #   Frontend (nginx:alpine) → /ws/*  proxy → Backend (FastAPI WebSocket)
-
-# Startup event handler
-@app.on_event("startup")
-async def startup_event():
-    """
-    Initialize database indexes and perform startup tasks.
-    """
-    logger.info("Starting up application...")
-
-    # Initialize OpenTelemetry distributed tracing
-    if settings.OTEL_ENABLED and settings.OTEL_EXPORTER_OTLP_ENDPOINT:
-        try:
-            from .core.telemetry import init_telemetry
-            if init_telemetry(
-                app=app,
-                service_name=settings.OTEL_SERVICE_NAME,
-                otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
-            ):
-                logger.info("✅ OpenTelemetry tracing initialized")
-            else:
-                logger.info("ℹ️ OpenTelemetry tracing not configured")
-        except ImportError:
-            logger.warning("⚠️ OpenTelemetry packages not installed. Tracing disabled.")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to initialize OpenTelemetry: {e}")
-
-    # Test MongoDB connection
-    try:
-        from .database import get_motor_client
-        motor_client = get_motor_client()
-        # Ping MongoDB to verify connection
-        await motor_client.admin.command('ping')
-        logger.info("✅ MongoDB connection verified successfully")
-    except Exception as e:
-        logger.error(f"❌ MongoDB connection failed: {e}")
-        logger.error("Please check your MONGO_URI environment variable and network connectivity")
-
-    # Create MongoDB indexes for notifications
-    try:
-        create_indexes()
-        logger.info("Database indexes created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create database indexes: {e}")
-        # Continue startup even if index creation fails
-
-    # Initialize shared HTTP session with connection pooling
-    try:
-        await http_client.get_session()
-        logger.info("✅ HTTP connection pool initialized")
-    except Exception as e:
-        logger.warning(f"⚠️ Failed to initialize HTTP connection pool: {e}")
-
-    # Initialize circuit breaker Prometheus metrics
-    try:
-        from .core.circuit_breaker_metrics import initialize_circuit_breaker_metrics
-        initialize_circuit_breaker_metrics([
-            "alpha_vantage",
-            "finnhub",
-            "newsapi",
-            "marketaux",
-            "yahoo_finance",
-        ])
-        logger.info("✅ Circuit breaker metrics initialized")
-    except ImportError:
-        logger.warning("⚠️ prometheus-client not installed. CB metrics disabled.")
-    except Exception as e:
-        logger.warning(f"⚠️ Failed to initialize circuit breaker metrics: {e}")
-
-    # Initialize Redis Pub/Sub for distributed WebSocket notifications
-    if settings.PUBSUB_ENABLED:
-        try:
-            await ws_manager.initialize_pubsub()
-            logger.info("✅ WebSocket Pub/Sub initialized")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to initialize WebSocket Pub/Sub: {e}")
-            logger.warning("WebSocket notifications will be local-only (single instance)")
-
-    logger.info("Application startup complete")
-
-# Cleanup handler for multiprocessing resources
-@app.on_event("shutdown")
-async def shutdown_event():
-    """
-    Clean up multiprocessing resources on application shutdown.
-    This helps prevent resource_tracker warnings from loky.
-    """
-    logger.info("Shutting down application and cleaning up resources...")
-
-    # Close shared HTTP session
-    try:
-        await http_client.close()
-        logger.info("✅ HTTP connection pool closed")
-    except Exception as e:
-        logger.warning(f"⚠️ Error closing HTTP connection pool: {e}")
-
-    # Stop Redis Pub/Sub for WebSocket notifications
-    try:
-        await ws_manager.shutdown_pubsub()
-        logger.info("✅ WebSocket Pub/Sub stopped")
-    except Exception as e:
-        logger.warning(f"⚠️ Error stopping WebSocket Pub/Sub: {e}")
-
-    # Force cleanup of any remaining loky executors
-    try:
-        from loky import get_reusable_executor
-        executor = get_reusable_executor(max_workers=None)
-        executor.shutdown(wait=True, kill_workers=True)
-        logger.info("Successfully cleaned up loky executor")
-    except ImportError:
-        # loky not installed or not used
-        pass
-    except Exception as e:
-        logger.warning(f"Error during loky cleanup: {e}")
-
-    logger.info("Shutdown complete")

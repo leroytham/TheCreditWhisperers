@@ -149,7 +149,7 @@ class PortfolioTimeseriesService:
                         hist.index = hist.index.tz_localize(None)
 
                     if candidate != ticker:
-                        print(f"🔁 Using ticker alias '{candidate}' for '{ticker}' historical data")
+                        logger.debug("Using ticker alias '%s' for '%s' historical data", candidate, ticker)
                         self._ticker_alias_cache[ticker.strip().upper()] = candidate
 
                     return hist[["Close"]]
@@ -158,13 +158,13 @@ class PortfolioTimeseriesService:
                     continue
 
             if last_error:
-                print(f"❌ Error fetching historical prices for {ticker}: {last_error}")
+                logger.error("Error fetching historical prices for %s: %s", ticker, last_error)
             else:
-                print(f"⚠️ No historical data for {ticker}")
+                logger.warning("No historical data for %s", ticker)
             return None
 
         except Exception as e:
-            print(f"❌ Error fetching historical prices for {ticker}: {e}")
+            logger.error("Error fetching historical prices for %s: %s", ticker, e)
             return None
 
     def calculate_position_value(
@@ -246,7 +246,7 @@ class PortfolioTimeseriesService:
             return total_quantity * price
 
         except Exception as e:
-            print(f"⚠️ Error calculating position value for {holding.get('symbol')}: {e}")
+            logger.warning("Error calculating position value for %s: %s", holding.get('symbol'), e)
             return 0.0
 
     def calculate_lot_breakdown(
@@ -382,7 +382,7 @@ class PortfolioTimeseriesService:
             return lot_breakdown
 
         except Exception as e:
-            print(f"⚠️ Error calculating lot breakdown for {holding.get('symbol')}: {e}")
+            logger.warning("Error calculating lot breakdown for %s: %s", holding.get('symbol'), e)
             return []
 
     async def generate_portfolio_timeseries(
@@ -413,10 +413,8 @@ class PortfolioTimeseriesService:
             delta = self.parse_timeframe_to_delta(timeframe)
             start_date = end_date - delta
 
-            print(f"\n=== PORTFOLIO TIMESERIES GENERATION ===")
-            print(f"Timeframe: {timeframe}")
-            print(f"Start: {start_date.date()}, End: {end_date.date()}")
-            print(f"Holdings: {len(holdings_list)}")
+            logger.info("Portfolio timeseries generation - Timeframe: %s, Start: %s, End: %s, Holdings: %d",
+                        timeframe, start_date.date(), end_date.date(), len(holdings_list))
 
             # Aggregate holdings by symbol (handle duplicates, preserve lots)
             aggregated_holdings = {}
@@ -460,7 +458,7 @@ class PortfolioTimeseriesService:
                     data["purchase_price"] = data["total_cost"] / data["quantity"]
 
             holdings = list(aggregated_holdings.values())
-            print(f"Aggregated to {len(holdings)} unique holdings")
+            logger.debug("Aggregated to %d unique holdings", len(holdings))
 
             # Fetch historical prices for all holdings in parallel
             tasks = [
@@ -486,9 +484,9 @@ class PortfolioTimeseriesService:
                 price_data_map[symbol] = price_df
 
             if missing_price_symbols:
-                print(f"⚠️ Missing historical data for symbols: {missing_price_symbols}")
+                logger.warning("Missing historical data for symbols: %s", missing_price_symbols)
 
-            print(f"Successfully fetched price data for {len(price_data_map)} holdings")
+            logger.info("Successfully fetched price data for %d holdings", len(price_data_map))
 
             # Generate date range (business days only)
             date_range = pd.date_range(start=start_date, end=end_date, freq='D')
@@ -559,7 +557,7 @@ class PortfolioTimeseriesService:
                 # Add cumulative return to last data point
                 data_points[-1]["cumulative_return"] = round(cumulative_return, 2)
 
-            print(f"Generated {len(data_points)} data points")
+            logger.debug("Generated %d data points", len(data_points))
 
             # Add capital flow tracking and TWR calculation if db connection provided
             twr_data = None
@@ -604,14 +602,12 @@ class PortfolioTimeseriesService:
 
                     twr_data = twr_result
 
-                    print(f"✅ Added capital flow tracking: {len(cash_flows)} flows")
+                    logger.info("Added capital flow tracking: %d flows", len(cash_flows))
                     if twr_result.get("twr_return") is not None:
-                        print(f"✅ Calculated TWR: {twr_result['twr_return']:.2f}%")
+                        logger.info("Calculated TWR: %.2f%%", twr_result['twr_return'])
 
                 except Exception as e:
-                    print(f"⚠️ Error adding capital flow/TWR data: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    logger.warning("Error adding capital flow/TWR data: %s", e, exc_info=True)
                     # Continue without capital flow data
 
             result = {
@@ -629,9 +625,7 @@ class PortfolioTimeseriesService:
             return result
 
         except Exception as e:
-            print(f"❌ Error generating portfolio timeseries: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error generating portfolio timeseries: %s", e, exc_info=True)
             return {
                 "timeframe": timeframe,
                 "data_points": [],
@@ -713,7 +707,7 @@ class PortfolioTimeseriesService:
                 }
 
             if hist.empty:
-                print(f"⚠️ No historical data for benchmark {benchmark_ticker}")
+                logger.warning("No historical data for benchmark %s", benchmark_ticker)
                 return {
                     "timeframe": timeframe,
                     "benchmark_ticker": benchmark_ticker,
@@ -760,9 +754,7 @@ class PortfolioTimeseriesService:
             }
 
         except Exception as e:
-            print(f"❌ Error fetching benchmark timeseries: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error fetching benchmark timeseries: %s", e, exc_info=True)
             return {
                 "timeframe": timeframe,
                 "benchmark_ticker": benchmark_ticker,

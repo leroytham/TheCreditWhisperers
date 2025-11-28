@@ -30,7 +30,7 @@ class StockDataService:
         # Load Alpha Vantage API key for company overview
         self.alpha_vantage_api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
         if not self.alpha_vantage_api_key:
-            print("WARNING: ALPHA_VANTAGE_API_KEY not found. Company overview service will be disabled.")
+            logger.warning("ALPHA_VANTAGE_API_KEY not found. Company overview service will be disabled.")
 
     @cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="stock_data")
     def get_stock_data(self, ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame | None:
@@ -55,7 +55,7 @@ class StockDataService:
             data.index = data.index.tz_localize(None)
             return data
         except Exception as e:
-            print(f"Error fetching stock data for {ticker}: {e}")
+            logger.error("Error fetching stock data for %s: %s", ticker, e)
             return None
 
     def filter_data_by_timeframe(self, df: pd.DataFrame, timeframe: str) -> pd.DataFrame | None:
@@ -82,13 +82,13 @@ class StockDataService:
         # Get today's date (normalize to remove time component and handle timezone)
         today = pd.Timestamp.now().normalize()
 
-        print(f"[DEBUG filter_data_by_timeframe] Timeframe: {timeframe}")
-        print(f"[DEBUG filter_data_by_timeframe] Today's date: {today}")
-        print(f"[DEBUG filter_data_by_timeframe] Input df length: {len(df)}")
-        print(f"[DEBUG filter_data_by_timeframe] DataFrame index timezone: {df.index.tz}")
+        logger.debug("filter_data_by_timeframe: Timeframe: %s", timeframe)
+        logger.debug("filter_data_by_timeframe: Today's date: %s", today)
+        logger.debug("filter_data_by_timeframe: Input df length: %d", len(df))
+        logger.debug("filter_data_by_timeframe: DataFrame index timezone: %s", df.index.tz)
 
         if len(df) >= 3:
-            print(f"[DEBUG filter_data_by_timeframe] Last 3 dates before filtering: {df.index[-3:].tolist()}")
+            logger.debug("filter_data_by_timeframe: Last 3 dates before filtering: %s", df.index[-3:].tolist())
 
         # Normalize the dataframe index to date only (remove time component)
         df_dates = df.index.normalize()
@@ -96,9 +96,9 @@ class StockDataService:
         # First, exclude any data from today or future (only keep data before today)
         df_without_today = df[df_dates < today]
 
-        print(f"[DEBUG filter_data_by_timeframe] After removing today: {len(df_without_today)} rows")
+        logger.debug("filter_data_by_timeframe: After removing today: %d rows", len(df_without_today))
         if len(df_without_today) > 0:
-            print(f"[DEBUG filter_data_by_timeframe] Last date after removing today: {df_without_today.index[-1]}")
+            logger.debug("filter_data_by_timeframe: Last date after removing today: %s", df_without_today.index[-1])
 
         time_deltas = {
             "1M": 29,
@@ -120,9 +120,9 @@ class StockDataService:
             # Return the dataframe without today if timeframe is not recognized
             result = df_without_today
 
-        print(f"[DEBUG filter_data_by_timeframe] Final result length: {len(result)}")
+        logger.debug("filter_data_by_timeframe: Final result length: %d", len(result))
         if len(result) > 0:
-            print(f"[DEBUG filter_data_by_timeframe] Final last date: {result.index[-1]}")
+            logger.debug("filter_data_by_timeframe: Final last date: %s", result.index[-1])
 
         return result
 
@@ -244,7 +244,7 @@ class StockDataService:
                 mapping: dict[str, list] = {}
                 for sym, result in zip(symbols, results):
                     if isinstance(result, Exception):
-                        print(f"Error fetching news for {sym}: {result}")
+                        logger.error("Error fetching news for %s: %s", sym, result)
                         mapping[sym] = []
                     else:
                         mapping[sym] = result or []
@@ -262,10 +262,10 @@ class StockDataService:
                         finally:
                             loop.close()
                     else:
-                        print(f"Error running asyncio loop for news fetch: {exc}")
+                        logger.error("Error running asyncio loop for news fetch: %s", exc)
                         news_by_symbol = {}
                 except Exception as exc:
-                    print(f"Error fetching sector news asynchronously: {exc}")
+                    logger.error("Error fetching sector news asynchronously: %s", exc)
                     news_by_symbol = {}
 
             enriched_constituents: list[dict] = []
@@ -299,7 +299,7 @@ class StockDataService:
                         sentiment_score = sentiment_analysis.get("slow_score")
                         sentiment_momentum = sentiment_analysis.get("sentiment_momentum")
                     except Exception as e:
-                        print(f"Error calculating sentiment for {symbol}: {e}")
+                        logger.error("Error calculating sentiment for %s: %s", symbol, e)
 
                 # Default to neutral if sentiment couldn't be derived
                 entry["sentimentScore"] = None
@@ -320,7 +320,7 @@ class StockDataService:
 
             return enriched_constituents
         except Exception as e:
-            print(f"Error fetching constituents for {etf_ticker}: {e}")
+            logger.error("Error fetching constituents for %s: %s", etf_ticker, e)
             return []
 
     @cache_result(ttl=settings.COMPANY_INFO_CACHE_TTL, key_prefix="company_info")
@@ -346,7 +346,7 @@ class StockDataService:
                 "industry": info.get("industry"),
             }
         except Exception as e:
-            print(f"Error fetching company info for {ticker}: {e}")
+            logger.error("Error fetching company info for %s: %s", ticker, e)
             return None
 
     @cache_result(ttl=86400, key_prefix="ticker_sector")  # Cache for 24 hours
@@ -370,7 +370,7 @@ class StockDataService:
                 "sector_key": info.get("sectorKey"),
             }
         except Exception as e:
-            print(f"Error fetching sector info for {ticker}: {e}")
+            logger.error("Error fetching sector info for %s: %s", ticker, e)
             return {"sector": "N/A", "industry": "N/A", "sector_key": None}
 
     @async_cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="market_price")  # Cache for 5 minutes
@@ -421,7 +421,7 @@ class StockDataService:
                     day_change_percent = None
                     previous_close = None
             except Exception as e:
-                print(f"⚠️ Info fetch failed for {ticker}: {e}")
+                logger.warning("Info fetch failed for %s: %s", ticker, e)
                 day_change_value = None
                 day_change_percent = None
                 previous_close = None
@@ -437,7 +437,7 @@ class StockDataService:
                 "fifty_two_week_low": fifty_two_week_low,
             }
         except Exception as e:
-            print(f"Error fetching market price for {ticker}: {e}")
+            logger.error("Error fetching market price for %s: %s", ticker, e)
             return None
 
     @async_cache_result(ttl=settings.PRICE_CACHE_TTL, key_prefix="historical_price")  # Cache for 5 minutes
@@ -468,7 +468,7 @@ class StockDataService:
                 "history": hist
             }
         except Exception as e:
-            print(f"Error fetching historical price for {ticker}: {e}")
+            logger.error("Error fetching historical price for %s: %s", ticker, e)
             return None
 
     @async_cache_result(ttl=86400, key_prefix="company_overview")  # Cache for 24 hours
@@ -485,7 +485,7 @@ class StockDataService:
             analyst ratings, and key metrics, or None if error
         """
         if not self.alpha_vantage_api_key:
-            print(f"Cannot fetch company overview for {ticker}: Alpha Vantage API key not configured")
+            logger.warning("Cannot fetch company overview for %s: Alpha Vantage API key not configured", ticker)
             return None
 
         cb = get_circuit_breaker("alpha_vantage")
@@ -510,16 +510,16 @@ class StockDataService:
 
             # Check if we got valid data (Alpha Vantage returns empty dict or error message for invalid tickers)
             if not data or "Symbol" not in data:
-                print(f"No company overview data available for {ticker}")
+                logger.debug("No company overview data available for %s", ticker)
                 return None
 
             return data
 
         except CircuitBreakerOpenError:
-            logger.warning(f"[ALPHA_VANTAGE] Circuit breaker open for company overview {ticker}")
+            logger.warning("Alpha Vantage circuit breaker open for company overview %s", ticker)
             return None
         except Exception as e:
-            print(f"Error fetching company overview for {ticker}: {e}")
+            logger.error("Error fetching company overview for %s: %s", ticker, e)
             return None
 
 

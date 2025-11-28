@@ -36,7 +36,7 @@ class NewsService:
     def __new__(cls):
         # The singleton pattern ensures we only ever have one instance of this class.
         if cls._instance is None:
-            print("Creating NewsService instance...")
+            logger.info("Creating NewsService instance...")
             cls._instance = super(NewsService, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
@@ -50,16 +50,16 @@ class NewsService:
         self.marketaux_api_key = os.getenv("MARKETAUX_API_KEY")
 
         if not self.alpha_vantage_api_key:
-            print("WARNING: ALPHA_VANTAGE_API_KEY not found. Alpha Vantage news will be disabled.")
+            logger.warning("ALPHA_VANTAGE_API_KEY not found. Alpha Vantage news will be disabled.")
         else:
-            print("Alpha Vantage API key loaded successfully.")
+            logger.info("Alpha Vantage API key loaded successfully.")
 
         if not self.finnhub_api_token:
-            print("WARNING: FINNHUB_API_TOKEN not found. Finnhub fallback will be disabled.")
+            logger.warning("FINNHUB_API_TOKEN not found. Finnhub fallback will be disabled.")
         if not self.news_api_key:
-            print("WARNING: NEWS_API_KEY not found. NewsAPI fallback will be disabled.")
+            logger.warning("NEWS_API_KEY not found. NewsAPI fallback will be disabled.")
         if not self.marketaux_api_key:
-            print("WARNING: MARKETAUX_API_KEY not found. MarketAux fallback will be disabled.")
+            logger.warning("MARKETAUX_API_KEY not found. MarketAux fallback will be disabled.")
 
         # User agents for web scraping
         self.user_agents = [
@@ -121,13 +121,13 @@ class NewsService:
 
             # Check for rate limit or API error messages
             if "Note" in data:
-                print(f"Alpha Vantage rate limit hit: {data['Note']}")
+                logger.warning("Alpha Vantage rate limit hit: %s", data['Note'])
                 return []
             if "Information" in data:
-                print(f"Alpha Vantage information message: {data['Information']}")
+                logger.info("Alpha Vantage information message: %s", data['Information'])
                 return []
             if "Error Message" in data:
-                print(f"Alpha Vantage error: {data['Error Message']}")
+                logger.error("Alpha Vantage error: %s", data['Error Message'])
                 return []
 
             raw_data = data.get("feed", [])
@@ -257,7 +257,7 @@ class NewsService:
             logger.warning(f"[ALPHA_VANTAGE] Circuit breaker open, skipping request for {ticker}")
             return []
         except Exception as e:
-            print(f"Error fetching news from Alpha Vantage for {ticker}: {e}")
+            logger.error("Error fetching news from Alpha Vantage for %s: %s", ticker, e)
             return []
 
     async def _check_rate_limit(self) -> bool:
@@ -285,7 +285,7 @@ class NewsService:
 
             calls_count = int(current_calls)
             if calls_count >= 300:
-                print(f"[RATE LIMIT] Alpha Vantage rate limit hit: {calls_count}/300 calls per minute")
+                logger.warning("Alpha Vantage rate limit hit: %d/300 calls per minute", calls_count)
                 return False
 
             # Increment counter
@@ -293,7 +293,7 @@ class NewsService:
             return True
 
         except Exception as e:
-            print(f"Error checking rate limit: {e}")
+            logger.error("Error checking rate limit: %s", e)
             return True  # Proceed if rate check fails
 
     async def _fetch_alpha_vantage_batch(
@@ -341,17 +341,17 @@ class NewsService:
             # Safety ceiling to prevent runaway requests
             max_batches = min(max_batches, 200)
 
-        print(f"[BATCH FETCH] Starting batch fetch for {ticker} from {target_start_date.date()} to {now.date()}")
+        logger.info("Batch fetch starting for %s from %s to %s", ticker, target_start_date.date(), now.date())
 
         while batch_count < max_batches:
             # Check rate limit before making API call
             if not await self._check_rate_limit():
-                print(f"[BATCH FETCH] Rate limit reached, waiting 60 seconds...")
+                logger.warning("Batch fetch rate limit reached, waiting 60 seconds...")
                 await asyncio.sleep(60)
                 continue
 
             batch_count += 1
-            print(f"[BATCH {batch_count}] Fetching from {time_from_str} to {time_to_str}")
+            logger.debug("Batch %d: Fetching from %s to %s", batch_count, time_from_str, time_to_str)
 
             # Add small delay between requests to be polite
             if batch_count > 1:
@@ -368,10 +368,10 @@ class NewsService:
             )
 
             if not batch_articles:
-                print(f"[BATCH {batch_count}] No more articles returned, stopping")
+                logger.debug("Batch %d: No more articles returned, stopping", batch_count)
                 break
 
-            print(f"[BATCH {batch_count}] Fetched {len(batch_articles)} articles")
+            logger.debug("Batch %d: Fetched %d articles", batch_count, len(batch_articles))
 
             # Find earliest date in this batch
             earliest_date = None
@@ -390,13 +390,13 @@ class NewsService:
 
             # Check if we've reached our target date
             if earliest_date and earliest_date <= target_start_date:
-                print(f"[BATCH FETCH] Reached target date: {earliest_date.date()} <= {target_start_date.date()}")
+                logger.debug("Batch fetch reached target date: %s <= %s", earliest_date.date(), target_start_date.date())
                 break
 
             # Only stop if we got ZERO articles (truly no more data)
             # Don't stop just because we got < 1000 - there may be more historical data
             if len(batch_articles) == 0:
-                print(f"[BATCH FETCH] No articles returned, stopping")
+                logger.debug("Batch fetch: No articles returned, stopping")
                 break
 
             # Update time_to for next batch
@@ -407,7 +407,7 @@ class NewsService:
                 # Can't continue without an earliest date
                 break
 
-        print(f"[BATCH FETCH] Completed! Total articles: {len(all_articles)} across {batch_count} batches")
+        logger.info("Batch fetch completed for %s: %d articles across %d batches", ticker, len(all_articles), batch_count)
         return all_articles
 
     async def _scrape_article_content(self, session: aiohttp.ClientSession, url: str) -> str:
@@ -426,7 +426,7 @@ class NewsService:
             }
             async with session.get(url, headers=headers, timeout=15) as response:
                 if response.status >= 400:
-                    print(f"Failed to scrape {url} with status {response.status}")
+                    logger.debug("Failed to scrape %s with status %d", url, response.status)
                     return ""
                 html = await response.text()
                 soup = BeautifulSoup(html, 'html.parser')
@@ -434,13 +434,13 @@ class NewsService:
                 article_text = ' '.join([p.get_text() for p in paragraphs])
                 return article_text.strip()
         except asyncio.TimeoutError:
-            print(f"Timeout error when scraping {url}")
+            logger.debug("Timeout error when scraping %s", url)
             return ""
         except aiohttp.ClientError as e:
-            print(f"Client error scraping {url}: {e}")
+            logger.debug("Client error scraping %s: %s", url, e)
             return ""
         except Exception as e:
-            print(f"Generic error scraping {url}: {e}")
+            logger.debug("Generic error scraping %s: %s", url, e)
             return ""
 
     def _get_yfinance_news_sync(self, ticker: str, count: int):
@@ -503,7 +503,7 @@ class NewsService:
                 })
             return news_list
         except Exception as e:
-            print(f"Error fetching news from yfinance for {ticker}: {e}")
+            logger.error("Error fetching news from yfinance for %s: %s", ticker, e)
             return []
 
     async def _fetch_finnhub_news(self, session: aiohttp.ClientSession, ticker: str, start_date_str: str, end_date_str: str) -> list[dict]:
@@ -542,10 +542,10 @@ class NewsService:
                 })
             return news_list
         except CircuitBreakerOpenError:
-            logger.warning(f"[FINNHUB] Circuit breaker open, skipping request for {ticker}")
+            logger.warning("Finnhub circuit breaker open, skipping request for %s", ticker)
             return []
         except Exception as e:
-            print(f"Error fetching news from Finnhub for {ticker}: {e}")
+            logger.error("Error fetching news from Finnhub for %s: %s", ticker, e)
             return []
 
     async def _fetch_newsapi_news(self, session: aiohttp.ClientSession, ticker: str, start_date_str: str, end_date_str: str) -> list[dict]:
@@ -589,10 +589,10 @@ class NewsService:
                 })
             return news_list
         except CircuitBreakerOpenError:
-            logger.warning(f"[NEWSAPI] Circuit breaker open, skipping request for {ticker}")
+            logger.warning("NewsAPI circuit breaker open, skipping request for %s", ticker)
             return []
         except Exception as e:
-            print(f"Error fetching news from NewsAPI for {ticker}: {e}")
+            logger.error("Error fetching news from NewsAPI for %s: %s", ticker, e)
             return []
 
     async def _fetch_marketaux_news(self, session: aiohttp.ClientSession, ticker: str, start_date_str: str) -> list[dict]:
@@ -636,10 +636,10 @@ class NewsService:
                 })
             return news_list
         except CircuitBreakerOpenError:
-            logger.warning(f"[MARKETAUX] Circuit breaker open, skipping request for {ticker}")
+            logger.warning("MarketAux circuit breaker open, skipping request for %s", ticker)
             return []
         except Exception as e:
-            print(f"Error fetching news from MarketAux for {ticker}: {e}")
+            logger.error("Error fetching news from MarketAux for %s: %s", ticker, e)
             return []
 
     def _get_max_batches_for_months(self, months: float) -> int:
@@ -727,7 +727,7 @@ class NewsService:
         task_key = f"{ticker}:{timeframe}"
 
         try:
-            print(f"[PROGRESSIVE FETCH] Starting background fetch for {ticker} - {timeframe}")
+            logger.info("Progressive fetch starting for %s - %s", ticker, timeframe)
 
             # Set progress status
             if redis_cache.async_client:
@@ -751,7 +751,7 @@ class NewsService:
 
                 if redis_cache.async_client:
                     await redis_cache.aset(cache_key, articles, ttl=ttl)
-                    print(f"[PROGRESSIVE FETCH] Cached {len(articles)} articles for {ticker} - {timeframe}")
+                    logger.info("Progressive fetch cached %d articles for %s - %s", len(articles), ticker, timeframe)
 
                     # Mark as complete
                     await redis_cache.aset(
@@ -766,11 +766,11 @@ class NewsService:
 
                 # Trigger next timeframe if specified
                 if next_timeframe:
-                    print(f"[PROGRESSIVE FETCH] Queueing next timeframe: {next_timeframe}")
+                    logger.debug("Progressive fetch queueing next timeframe: %s", next_timeframe)
                     await self.trigger_progressive_fetch(ticker, next_timeframe)
 
         except Exception as e:
-            print(f"[PROGRESSIVE FETCH] Error fetching {ticker} - {timeframe}: {e}")
+            logger.error("Progressive fetch error for %s - %s: %s", ticker, timeframe, e)
             if redis_cache.async_client:
                 await redis_cache.aset(
                     f"fetch_progress:{ticker}:{timeframe}",
@@ -818,7 +818,7 @@ class NewsService:
             cache_key = f"ticker_news:{ticker}:{timeframe}"
             cached = await redis_cache.aget(cache_key)
             if cached:
-                print(f"[PROGRESSIVE FETCH] {ticker} - {timeframe} already cached, skipping")
+                logger.debug("Progressive fetch: %s - %s already cached, skipping", ticker, timeframe)
 
                 # Still queue next timeframe if not in progress
                 next_tf = timeframe_progression.get(timeframe)
@@ -830,7 +830,7 @@ class NewsService:
         if task_key in self._active_fetch_tasks:
             task = self._active_fetch_tasks[task_key]
             if not task.done():
-                print(f"[PROGRESSIVE FETCH] {ticker} - {timeframe} already in progress, skipping")
+                logger.debug("Progressive fetch: %s - %s already in progress, skipping", ticker, timeframe)
                 return
 
         # Get next timeframe in progression
@@ -842,7 +842,7 @@ class NewsService:
         )
         self._active_fetch_tasks[task_key] = task
 
-        print(f"[PROGRESSIVE FETCH] Queued background fetch for {ticker} - {timeframe}")
+        logger.debug("Progressive fetch queued for %s - %s", ticker, timeframe)
 
     async def get_ticker_news_for_timeframe(
         self,
@@ -873,7 +873,7 @@ class NewsService:
         if redis_cache.async_client:
             cached = await redis_cache.aget(cache_key)
             if cached:
-                print(f"[CACHE HIT] {cache_key} - {len(cached)} articles")
+                logger.debug("Cache hit for %s: %d articles", cache_key, len(cached))
 
                 # Trigger progressive fetch in background
                 if trigger_progressive:
@@ -881,11 +881,11 @@ class NewsService:
 
                 return cached
 
-        print(f"[CACHE MISS] {cache_key}")
+        logger.debug("Cache miss for %s", cache_key)
 
         # Not in cache - fetch based on timeframe
         months = self._get_timeframe_months(timeframe, is_sector=is_sector)
-        print(f"[NEWS FETCH] Fetching {months} months of data for {ticker} (timeframe: {timeframe}, is_sector: {is_sector})")
+        logger.info("Fetching %d months of data for %s (timeframe: %s, is_sector: %s)", months, ticker, timeframe, is_sector)
 
         session = await http_client.get_session()
         # Always use batch fetch to get sufficient data (1Y for most timeframes, 5Y for 5Y)
@@ -897,13 +897,13 @@ class NewsService:
             preserve_all_tickers=preserve_all_tickers
         )
 
-        print(f"[NEWS FETCH] Retrieved {len(articles) if articles else 0} articles for {ticker}")
+        logger.info("Retrieved %d articles for %s", len(articles) if articles else 0, ticker)
 
         # Cache the result
         if redis_cache.async_client and articles:
             ttl = self._get_cache_ttl_for_timeframe(timeframe)
             await redis_cache.aset(cache_key, articles, ttl=ttl)
-            print(f"[CACHE SET] Cached {len(articles)} articles with TTL {ttl}s for {cache_key}")
+            logger.debug("Cached %d articles with TTL %ds for %s", len(articles), ttl, cache_key)
 
         # Trigger progressive fetch for next timeframe
         if trigger_progressive:
@@ -935,12 +935,12 @@ class NewsService:
         should_fallback = False
 
         if not news_articles:
-            print(f"Alpha Vantage returned no articles for {ticker}. Falling back to multi-source aggregation.")
+            logger.info("Alpha Vantage returned no articles for %s. Falling back to multi-source aggregation.", ticker)
             should_fallback = True
 
         # If Alpha Vantage failed or returned no results, use fallback sources
         if should_fallback:
-            print(f"Using fallback news sources for {ticker}...")
+            logger.info("Using fallback news sources for %s...", ticker)
             today = datetime.now(timezone.utc).date()
             # Extend to 90 days to fetch maximum amount of news
             ninety_days_ago = today - timedelta(days=89)
@@ -970,7 +970,7 @@ class NewsService:
                 if isinstance(res, list) and res:
                     source_news[source_names[idx]] = res
                 elif not isinstance(res, list):
-                    print(f"An error occurred in {source_names[idx]} fetch task: {res}")
+                    logger.error("An error occurred in %s fetch task: %s", source_names[idx], res)
 
             # Find the earliest date from each source
             earliest_dates_per_source = {}
@@ -987,7 +987,7 @@ class NewsService:
                     if dates:
                         earliest_date = min(dates)
                         earliest_dates_per_source[source_name] = earliest_date.strftime("%Y-%m-%d")
-                        print(f"{source_name}: {len(articles)} articles, earliest: {earliest_date}")
+                        logger.debug("%s: %d articles, earliest: %s", source_name, len(articles), earliest_date)
 
             # Combine and deduplicate news from all sources (no filtering)
             all_news = {}
@@ -1010,11 +1010,11 @@ class NewsService:
                 for article in news_articles:
                     article['_source_earliest_dates'] = earliest_dates_per_source
 
-            print(f"Fetched and combined {len(news_articles)} unique news articles for {ticker} from fallback sources.")
+            logger.info("Fetched and combined %d unique news articles for %s from fallback sources.", len(news_articles), ticker)
             if earliest_dates_per_source:
-                print(f"Source coverage earliest dates: {earliest_dates_per_source}")
+                logger.debug("Source coverage earliest dates: %s", earliest_dates_per_source)
         else:
-            print(f"Fetched {len(news_articles)} news articles for {ticker} from Alpha Vantage.")
+            logger.info("Fetched %d news articles for %s from Alpha Vantage.", len(news_articles), ticker)
 
         # Sort by date, newest first
         sorted_news = sorted(news_articles, key=lambda x: x['publish_date'], reverse=True)
@@ -1072,7 +1072,7 @@ class NewsService:
             return filtered_news[:count]
 
         except Exception as e:
-            print(f"Error fetching news around date for {ticker}: {e}")
+            logger.error("Error fetching news around date for %s: %s", ticker, e)
             return []
 
     def _deduplicate_articles(self, articles: List[dict]) -> Tuple[List[dict], Dict[str, int]]:
@@ -1147,8 +1147,8 @@ class NewsService:
         if not tickers:
             raise ValueError("No tickers available for sector aggregation.")
 
-        print(
-            f"Aggregating news for '{display_name}' (key: {response_sector_key}) with {len(tickers)} tickers"
+        logger.info(
+            "Aggregating news for '%s' (key: %s) with %d tickers", display_name, response_sector_key, len(tickers)
         )
 
         failed_tickers: List[str] = []
@@ -1160,7 +1160,7 @@ class NewsService:
 
         for index in range(0, len(tickers), batch_size):
             batch = tickers[index:index + batch_size]
-            print(f"Fetching batch {index // batch_size + 1}/{total_batches}: {batch}")
+            logger.debug("Fetching batch %d/%d: %s", index // batch_size + 1, total_batches, batch)
 
             tasks = [
                 self.get_ticker_news_for_timeframe(
@@ -1177,7 +1177,7 @@ class NewsService:
 
             for ticker, result in zip(batch, batch_results):
                 if isinstance(result, Exception):
-                    print(f"WARNING: Failed to fetch news for {ticker}: {result}")
+                    logger.warning("Failed to fetch news for %s: %s", ticker, result)
                     failed_tickers.append(ticker)
                     continue
 
@@ -1185,19 +1185,19 @@ class NewsService:
 
                 if result:
                     all_articles.extend(result)
-                    print(f"  {ticker}: {len(result)} articles")
+                    logger.debug("  %s: %d articles", ticker, len(result))
                 else:
-                    print(f"  {ticker}: 0 articles")
+                    logger.debug("  %s: 0 articles", ticker)
 
             if index + batch_size < len(tickers):
                 await asyncio.sleep(0.2)
 
-        print(f"Total articles fetched before deduplication: {len(all_articles)}")
+        logger.info("Total articles fetched before deduplication: %d", len(all_articles))
 
         unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
 
-        print(f"Unique articles after deduplication: {len(unique_articles)}")
-        print(f"Deduplication stats: {dedup_stats}")
+        logger.info("Unique articles after deduplication: %d", len(unique_articles))
+        logger.debug("Deduplication stats: %s", dedup_stats)
 
         # Filter articles by timeframe to ensure consistent datasets
         now_utc = datetime.now(timezone.utc)
@@ -1244,9 +1244,9 @@ class NewsService:
                     filtered_articles.append(article)
 
             unique_articles = filtered_articles
-            print(
-                f"Filtered to {len(unique_articles)} articles within {sector_timeframe} timeframe"
-                f" (cutoff: {cutoff_date.date()})"
+            logger.info(
+                "Filtered to %d articles within %s timeframe (cutoff: %s)",
+                len(unique_articles), sector_timeframe, cutoff_date.date()
             )
 
         unique_articles.sort(key=lambda x: x.get('publish_date', ''), reverse=True)
@@ -1259,17 +1259,18 @@ class NewsService:
         dedup_rate = (duplicates_removed / total_fetched * 100) if total_fetched > 0 else 0.0
         success_rate = (len(successful_tickers) / len(tickers) * 100) if tickers else 0.0
 
-        print(
-            f"Calculating sector sentiment metrics from {len(unique_articles)} unique articles..."
+        logger.info(
+            "Calculating sector sentiment metrics from %d unique articles...", len(unique_articles)
         )
         sentiment_metrics = sector_sentiment_service.analyze_sector_sentiment_with_momentum(
             articles=unique_articles,
             sector_tickers=tickers
         )
-        print(
-            f"Sentiment calculation complete: slow_score={sentiment_metrics.get('slow_score')}, "
-            f"momentum={sentiment_metrics.get('sentiment_momentum')}, "
-            f"quality={sentiment_metrics.get('data_quality')}"
+        logger.info(
+            "Sentiment calculation complete: slow_score=%s, momentum=%s, quality=%s",
+            sentiment_metrics.get('slow_score'),
+            sentiment_metrics.get('sentiment_momentum'),
+            sentiment_metrics.get('data_quality')
         )
 
         coverage_value = round(market_weight_coverage, 4) if market_weight_coverage is not None else None
@@ -1304,8 +1305,8 @@ class NewsService:
         """
         Aggregates market-wide news using the holdings of the provided "all sectors" ETF.
         """
-        print(
-            f"Fetching aggregated news for ALL SECTORS via {base_etf_ticker} (timeframe: {timeframe})"
+        logger.info(
+            "Fetching aggregated news for ALL SECTORS via %s (timeframe: %s)", base_etf_ticker, timeframe
         )
 
         try:
@@ -1314,9 +1315,9 @@ class NewsService:
             if not tickers:
                 raise ValueError("No tickers available for SPY sector aggregation")
 
-            print(f"Found {len(tickers)} tickers for {base_etf_ticker}: {tickers[:5]}...")
+            logger.info("Found %d tickers for %s: %s...", len(tickers), base_etf_ticker, tickers[:5])
             if market_weight_coverage is not None:
-                print(f"Holding weight coverage: {market_weight_coverage:.2%}")
+                logger.info("Holding weight coverage: %.2f%%", market_weight_coverage * 100)
 
             metadata = sector_service_instance.get_sector_metadata(base_etf_ticker)
             display_name = f"{metadata['display_name']} ({base_etf_ticker})"
@@ -1342,7 +1343,7 @@ class NewsService:
             return result
 
         except Exception as exc:
-            print(f"ERROR: Failed to fetch aggregated news for ALL SECTORS via {base_etf_ticker}: {exc}")
+            logger.error("Failed to fetch aggregated news for ALL SECTORS via %s: %s", base_etf_ticker, exc)
             raise
 
     async def get_sector_news(
@@ -1397,7 +1398,7 @@ class NewsService:
         # Try to get from cache
         cached_result = await redis_cache.aget(cache_key)
         if cached_result is not None:
-            print(f"[CACHE HIT] Returning cached sector news for {sector_key}")
+            logger.debug("Cache hit: Returning cached sector news for %s", sector_key)
             cached_result['cached'] = True
             return cached_result
 
@@ -1405,9 +1406,9 @@ class NewsService:
         # After 10 days (10 half-lives), news has <0.1% relevance
         sector_timeframe = timeframe if timeframe in ['1D', '1W', '1M'] else '1M'
         if sector_timeframe != timeframe:
-            print(f"[SECTOR OVERRIDE] Requested timeframe '{timeframe}' capped to '1M' for sector analysis")
+            logger.info("Sector override: Requested timeframe '%s' capped to '1M' for sector analysis", timeframe)
 
-        print(f"[CACHE MISS] Fetching aggregated news for sector: {sector_key} (timeframe: {sector_timeframe})")
+        logger.debug("Cache miss: Fetching aggregated news for sector: %s (timeframe: %s)", sector_key, sector_timeframe)
 
         # Check if this is "All Sectors" request
         if is_all_sectors_identifier(sector_key):
@@ -1427,9 +1428,9 @@ class NewsService:
             if not tickers:
                 raise ValueError(f"No tickers found for sector: {sector_key}")
 
-            print(f"Found {len(tickers)} tickers for sector '{sector_key}': {tickers[:5]}...")
+            logger.info("Found %d tickers for sector '%s': %s...", len(tickers), sector_key, tickers[:5])
             if market_weight_coverage is not None:
-                print(f"Holding weight coverage: {market_weight_coverage:.2%}")
+                logger.info("Holding weight coverage: %.2f%%", market_weight_coverage * 100)
 
             sector_metadata = sector_service_instance.get_sector_metadata(sector_key)
 
@@ -1449,7 +1450,7 @@ class NewsService:
             return result
 
         except Exception as e:
-            print(f"ERROR: Failed to fetch sector news for '{sector_key}': {str(e)}")
+            logger.error("Failed to fetch sector news for '%s': %s", sector_key, e)
             raise ValueError(f"Failed to fetch sector news: {str(e)}")
 
 

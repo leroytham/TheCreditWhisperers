@@ -5,6 +5,7 @@ Service for managing sector data and retrieving ETF constituent ticker baskets.
 Uses ETF holdings data for sector composition.
 """
 
+import logging
 from typing import List, Dict, Tuple
 from yahooquery import Ticker as YQTicker
 from app.core.cache import cache_result
@@ -16,6 +17,8 @@ from app.config.yfinance_sector_mapping import (
     DEFAULT_SECTOR_TICKER_LIMIT
 )
 
+logger = logging.getLogger(__name__)
+
 
 class SectorService:
     """
@@ -26,14 +29,14 @@ class SectorService:
     def __new__(cls):
         # Singleton pattern ensures we only ever have one instance
         if cls._instance is None:
-            print("Creating SectorService instance...")
+            logger.info("Creating SectorService instance...")
             cls._instance = super(SectorService, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
 
     def _initialize(self):
         """Initializes the service."""
-        print("SectorService initialized successfully.")
+        logger.info("SectorService initialized successfully.")
 
     @cache_result(ttl=86400)  # Cache for 24 hours (ETF composition changes infrequently)
     def get_sector_tickers(
@@ -58,7 +61,7 @@ class SectorService:
             ValueError: If ETF ticker is invalid or data cannot be fetched
         """
         etf_ticker = resolve_sector_identifier(etf_ticker)
-        print(f"Fetching ETF holdings for: {etf_ticker} (limit: {limit})")
+        logger.info("Fetching ETF holdings for: %s (limit: %s)", etf_ticker, limit)
 
         if not is_valid_etf_ticker(etf_ticker):
             raise ValueError(f"Invalid or unsupported ETF ticker: {etf_ticker}")
@@ -97,13 +100,13 @@ class SectorService:
             tickers = [symbol for symbol, _ in holdings_limited]
             total_weight = sum(weight for _, weight in holdings_limited)
 
-            print(f"Retrieved {len(tickers)} tickers for ETF '{etf_ticker}': {tickers[:5]}...")
-            print(f"Holding weight coverage: {total_weight:.2%}")
+            logger.info("Retrieved %d tickers for ETF '%s': %s...", len(tickers), etf_ticker, tickers[:5])
+            logger.info("Holding weight coverage: %.2f%%", total_weight * 100)
 
             return tickers, total_weight
 
         except Exception as e:
-            print(f"ERROR: Failed to fetch holdings for ETF '{etf_ticker}': {str(e)}")
+            logger.error("Failed to fetch holdings for ETF '%s': %s", etf_ticker, e)
             raise ValueError(f"Failed to fetch ETF holdings: {str(e)}")
 
     @cache_result(ttl=86400)  # Cache for 24 hours (sector metadata rarely changes)

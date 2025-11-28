@@ -23,7 +23,7 @@ class EarningsService:
 
     def __new__(cls):
         if cls._instance is None:
-            print("Creating EarningsService instance...")
+            logger.info("Creating EarningsService instance...")
             cls._instance = super(EarningsService, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
@@ -34,9 +34,9 @@ class EarningsService:
         self.alpha_vantage_api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
 
         if not self.alpha_vantage_api_key:
-            print("WARNING: ALPHA_VANTAGE_API_KEY not found. Earnings call transcript service will be disabled.")
+            logger.warning("ALPHA_VANTAGE_API_KEY not found. Earnings call transcript service will be disabled.")
         else:
-            print("Alpha Vantage API key loaded for earnings service.")
+            logger.info("Alpha Vantage API key loaded for earnings service.")
 
     @async_cache_result(ttl=86400)  # Cache for 24 hours - earnings transcripts don't change
     async def fetch_earnings_transcript(
@@ -108,7 +108,7 @@ class EarningsService:
                 return await response.json()
 
         try:
-            print(f"Fetching earnings transcript for {ticker} - {quarter}...")
+            logger.info("Fetching earnings transcript for %s - %s...", ticker, quarter)
             data = await cb.call(_make_request) if cb else await _make_request()
 
             # Check for API errors
@@ -155,21 +155,21 @@ class EarningsService:
                 "quarter": quarter
             }
         except asyncio.TimeoutError:
-            print(f"Timeout fetching earnings transcript for {ticker} - {quarter}")
+            logger.warning("Timeout fetching earnings transcript for %s - %s", ticker, quarter)
             return {
                 "error": "Request timeout",
                 "symbol": ticker,
                 "quarter": quarter
             }
         except aiohttp.ClientError as e:
-            print(f"Network error fetching earnings transcript: {str(e)}")
+            logger.error("Network error fetching earnings transcript: %s", e)
             return {
                 "error": f"Network error: {str(e)}",
                 "symbol": ticker,
                 "quarter": quarter
             }
         except Exception as e:
-            print(f"Unexpected error fetching earnings transcript: {str(e)}")
+            logger.error("Unexpected error fetching earnings transcript: %s", e)
             return {
                 "error": f"Unexpected error: {str(e)}",
                 "symbol": ticker,
@@ -345,7 +345,7 @@ class EarningsService:
                 return await response.text()
 
         try:
-            print(f"Fetching earnings calendar for {ticker} with horizon {horizon}...")
+            logger.info("Fetching earnings calendar for %s with horizon %s...", ticker, horizon)
             text_data = await cb.call(_make_request) if cb else await _make_request()
 
             # Check for API errors in text response
@@ -395,21 +395,21 @@ class EarningsService:
                 "earnings_events": []
             }
         except asyncio.TimeoutError:
-            print(f"Timeout fetching earnings calendar for {ticker}")
+            logger.warning("Timeout fetching earnings calendar for %s", ticker)
             return {
                 "error": "Request timeout",
                 "ticker": ticker,
                 "earnings_events": []
             }
         except aiohttp.ClientError as e:
-            print(f"Network error fetching earnings calendar: {str(e)}")
+            logger.error("Network error fetching earnings calendar: %s", e)
             return {
                 "error": f"Network error: {str(e)}",
                 "ticker": ticker,
                 "earnings_events": []
             }
         except Exception as e:
-            print(f"Unexpected error fetching earnings calendar: {str(e)}")
+            logger.error("Unexpected error fetching earnings calendar: %s", e)
             return {
                 "error": f"Unexpected error: {str(e)}",
                 "ticker": ticker,
@@ -471,7 +471,7 @@ class EarningsService:
             events.sort(key=lambda x: x['earnings_date'])
 
         except Exception as e:
-            print(f"Error parsing earnings calendar CSV: {str(e)}")
+            logger.error("Error parsing earnings calendar CSV: %s", e)
             return []
 
         return events

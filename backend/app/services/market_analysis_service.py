@@ -1,5 +1,6 @@
 # app/services/market_analysis_service.py
 
+import logging
 import os
 import numpy as np
 import pandas as pd
@@ -13,6 +14,8 @@ from .news_service import NewsService
 from app.core.cache import cache_result
 from app.core.config import settings
 from app.core.http_client import http_client
+
+logger = logging.getLogger(__name__)
 
 
 class MarketAnalysisService:
@@ -195,7 +198,7 @@ class MarketAnalysisService:
             start_date = pd.to_datetime(event.start_date)
             end_date = pd.to_datetime(event.end_date)
             
-            print(f"DEBUG Event: start={start_date}, end={end_date}, days={event.num_days}, move={event.total_move_pct:.2f}%")
+            logger.debug("Event: start=%s, end=%s, days=%d, move=%.2f%%", start_date, end_date, event.num_days, event.total_move_pct)
 
             # Filter news from pre-fetched articles if provided, otherwise fetch from API
             if news_articles is not None:
@@ -224,15 +227,15 @@ class MarketAnalysisService:
                         if window_start <= article_date <= window_end:
                             news.append(article)
                     except Exception as e:
-                        print(f"DEBUG: Error parsing article date: {e}")
+                        logger.debug("Error parsing article date: %s", e)
                         continue
 
-                print(f"DEBUG: Filtered {len(news)} articles from cache for event on {start_date.strftime('%Y-%m-%d')}")
+                logger.debug("Filtered %d articles from cache for event on %s", len(news), start_date.strftime('%Y-%m-%d'))
             else:
                 # Fallback to fetching news from API
                 # Use sector-aware fetching if ticker is a known sector ETF
                 if ticker.upper() in self.sector_etf_tickers:
-                    print(f"DEBUG: Detected sector ETF {ticker}, fetching aggregated constituent news")
+                    logger.debug("Detected sector ETF %s, fetching aggregated constituent news", ticker)
                     news = self.fetch_sector_aggregated_news(ticker, start_date)
                 else:
                     news = self.fetch_alpha_vantage_news(ticker, start_date)
@@ -334,7 +337,7 @@ class MarketAnalysisService:
             # Get top 5 constituents
             constituents = stock_data_service.get_sector_top_constituents(sector_ticker)
             if not constituents:
-                print(f"No constituents found for sector {sector_ticker}, falling back to ETF news")
+                logger.debug("No constituents found for sector %s, falling back to ETF news", sector_ticker)
                 return self.fetch_alpha_vantage_news(ticker, target_date)
 
             # Limit to top 5 constituents to avoid too many API calls
@@ -454,7 +457,7 @@ class MarketAnalysisService:
             return formatted_news
 
         except Exception as e:
-            print(f"Error fetching sector aggregated news for {ticker}: {e}")
+            logger.error("Error fetching sector aggregated news for %s: %s", ticker, e)
             # Fall back to regular news fetch
             return self.fetch_alpha_vantage_news(ticker, target_date)
 
@@ -571,7 +574,7 @@ class MarketAnalysisService:
             return formatted_news
 
         except Exception as e:
-            print(f"Alpha Vantage API error for {ticker}: {e}")
+            logger.error("Alpha Vantage API error for %s: %s", ticker, e)
             return []
 
     def calculate_volatility(self, df: pd.DataFrame, window: int = 30) -> float:

@@ -7,6 +7,8 @@ Provides both sync (PyMongo) and async (Motor) clients for different use cases:
 - Async client: Used by FastAPI route handlers for non-blocking I/O
 """
 
+import logging
+import threading
 from pymongo import MongoClient
 from pymongo.database import Database
 from pymongo.collection import Collection
@@ -14,6 +16,12 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase, AsyncI
 from typing import Optional
 import certifi
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Thread locks for thread-safe lazy initialization
+_sync_lock = threading.Lock()
+_async_lock = threading.Lock()
 
 # =============================================================================
 # SYNC CLIENT (PyMongo) - For background tasks and services
@@ -23,18 +31,21 @@ _database: Optional[Database] = None
 
 
 def get_client() -> MongoClient:
-    """Get or create MongoDB client singleton."""
+    """Get or create MongoDB client singleton (thread-safe)."""
     global _client
     if _client is None:
-        _client = MongoClient(
-            settings.MONGO_URI,
-            tls=True,
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000  # 5 second timeout
-        )
-        # Test connection
-        _client.server_info()
-        print(f"✅ Connected to MongoDB at {settings.MONGO_URI}")
+        with _sync_lock:
+            # Double-checked locking pattern
+            if _client is None:
+                _client = MongoClient(
+                    settings.MONGO_URI,
+                    tls=True,
+                    tlsCAFile=certifi.where(),
+                    serverSelectionTimeoutMS=5000  # 5 second timeout
+                )
+                # Test connection
+                _client.server_info()
+                logger.info("Connected to MongoDB at %s", settings.MONGO_URI)
     return _client
 
 
@@ -75,13 +86,14 @@ def get_portfolios_collection() -> Collection:
 
 
 def close_database_connection():
-    """Close MongoDB connection (for cleanup)."""
+    """Close MongoDB connection (thread-safe cleanup)."""
     global _client, _database
-    if _client:
-        _client.close()
-        _client = None
-        _database = None
-        print("🔌 Closed MongoDB connection")
+    with _sync_lock:
+        if _client:
+            _client.close()
+            _client = None
+            _database = None
+            logger.info("Closed MongoDB connection")
 
 
 # =============================================================================
@@ -93,31 +105,34 @@ _motor_database: Optional[AsyncIOMotorDatabase] = None
 
 def get_motor_client() -> AsyncIOMotorClient:
     """
-    Get or create async Motor client singleton with optimized connection pooling.
+    Get or create async Motor client singleton with optimized connection pooling (thread-safe).
 
     This client is used by FastAPI route handlers for non-blocking database operations.
     Connection settings are optimized for Azure Cosmos DB / MongoDB Atlas.
     """
     global _motor_client
     if _motor_client is None:
-        _motor_client = AsyncIOMotorClient(
-            settings.MONGO_URI,
-            tls=True,
-            tlsCAFile=certifi.where(),
-            # Connection pool settings
-            maxPoolSize=50,              # Maximum connections in the pool
-            minPoolSize=10,              # Minimum connections to maintain
-            maxIdleTimeMS=45000,         # Close idle connections after 45 seconds
-            # Timeout settings
-            serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
-            connectTimeoutMS=10000,         # 10 second timeout for initial connection
-            socketTimeoutMS=30000,          # 30 second timeout for socket operations
-            # Retry and keep-alive settings
-            retryWrites=True,            # Automatically retry write operations
-            retryReads=True,             # Automatically retry read operations
-            heartbeatFrequencyMS=10000,  # Send heartbeat every 10 seconds
-            appname="FYP-Backend"        # Application name for MongoDB logs
-        )
+        with _async_lock:
+            # Double-checked locking pattern
+            if _motor_client is None:
+                _motor_client = AsyncIOMotorClient(
+                    settings.MONGO_URI,
+                    tls=True,
+                    tlsCAFile=certifi.where(),
+                    # Connection pool settings
+                    maxPoolSize=50,              # Maximum connections in the pool
+                    minPoolSize=10,              # Minimum connections to maintain
+                    maxIdleTimeMS=45000,         # Close idle connections after 45 seconds
+                    # Timeout settings
+                    serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
+                    connectTimeoutMS=10000,         # 10 second timeout for initial connection
+                    socketTimeoutMS=30000,          # 30 second timeout for socket operations
+                    # Retry and keep-alive settings
+                    retryWrites=True,            # Automatically retry write operations
+                    retryReads=True,             # Automatically retry read operations
+                    heartbeatFrequencyMS=10000,  # Send heartbeat every 10 seconds
+                    appname="FYP-Backend"        # Application name for MongoDB logs
+                )
     return _motor_client
 
 
@@ -159,13 +174,14 @@ def get_transactions_collection_async() -> AsyncIOMotorCollection:
 
 
 async def close_motor_connection():
-    """Close async Motor connection (for cleanup)."""
+    """Close async Motor connection (thread-safe cleanup)."""
     global _motor_client, _motor_database
-    if _motor_client:
-        _motor_client.close()
-        _motor_client = None
-        _motor_database = None
-        print("🔌 Closed Motor (async) MongoDB connection")
+    with _async_lock:
+        if _motor_client:
+            _motor_client.close()
+            _motor_client = None
+            _motor_database = None
+            logger.info("Closed Motor (async) MongoDB connection")
 
 
 # =============================================================================
@@ -224,4 +240,4 @@ def create_indexes():
     portfolios.create_index("created_at")
     portfolios.create_index("tickers")  # For queries by ticker
 
-    print("📇 Created database indexes for notifications and portfolios")
+    logger.info("Created database indexes for notifications and portfolios")

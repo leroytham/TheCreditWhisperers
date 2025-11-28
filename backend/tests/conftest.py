@@ -286,3 +286,88 @@ def reset_overrides(app):
         clear_dependency_caches()
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def reset_global_state():
+    """
+    Auto-reset global state variables after each test.
+
+    This fixture ensures clean state for:
+    - Database connections (sync and async)
+    - Azure AD MSAL client
+    - OpenTelemetry telemetry
+
+    Note: This runs after each test to prevent state leakage between tests.
+    """
+    yield
+
+    # Reset database globals
+    try:
+        import app.database as db_module
+        db_module._client = None
+        db_module._database = None
+        db_module._motor_client = None
+        db_module._motor_database = None
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset Azure AD MSAL client
+    try:
+        from app.core.azure_auth import reset_msal_client
+        reset_msal_client()
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset OpenTelemetry telemetry
+    try:
+        from app.core.telemetry import reset_telemetry
+        reset_telemetry()
+    except (ImportError, AttributeError):
+        pass
+
+
+@pytest.fixture
+def clean_global_state():
+    """
+    Explicitly reset all globals BEFORE and AFTER a test.
+
+    Use this fixture for tests that need guaranteed clean state at the start.
+    Unlike the autouse fixture, this also resets state before the test runs.
+
+    Usage:
+        def test_database_init(clean_global_state):
+            # Globals are reset before this test runs
+            client = get_client()
+            assert client is not None
+    """
+    _reset_all_globals()
+    yield
+    _reset_all_globals()
+
+
+def _reset_all_globals():
+    """Helper to reset all module globals."""
+    # Reset database globals
+    try:
+        import app.database as db_module
+        db_module._client = None
+        db_module._database = None
+        db_module._motor_client = None
+        db_module._motor_database = None
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset Azure AD MSAL client
+    try:
+        from app.core.azure_auth import reset_msal_client
+        reset_msal_client()
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset OpenTelemetry telemetry
+    try:
+        from app.core.telemetry import reset_telemetry
+        reset_telemetry()
+    except (ImportError, AttributeError):
+        pass

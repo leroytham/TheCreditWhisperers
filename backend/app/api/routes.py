@@ -45,9 +45,9 @@ CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
 # Validate Azure credentials at startup
 if not CLIENT_ID or CLIENT_ID == "<your-client-id>":
-    print("WARNING: Azure CLIENT_ID (APPLICATION_ID) is not configured. Azure authentication will not work.")
+    logger.warning("Azure CLIENT_ID (APPLICATION_ID) is not configured. Azure authentication will not work.")
 if not CLIENT_SECRET:
-    print("WARNING: Azure CLIENT_SECRET is not configured. Azure authentication will not work.")
+    logger.warning("Azure CLIENT_SECRET is not configured. Azure authentication will not work.")
 
 
 router = APIRouter()
@@ -483,7 +483,7 @@ async def get_sector_aggregated_news(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"ERROR in get_sector_aggregated_news: {str(e)}")
+        logger.error("Error in get_sector_aggregated_news: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 
@@ -540,11 +540,11 @@ async def get_sector_daily_sentiment(
         # Try to get from cache
         cached_result = await redis_cache.aget(cache_key)
         if cached_result is not None:
-            print(f"[CACHE HIT] Returning cached daily sentiment for sector {sector_identifier}")
+            logger.debug("Cache hit: returning cached daily sentiment for sector %s", sector_identifier)
             cached_result['cached'] = True
             return cached_result
 
-        print(f"[CACHE MISS] Calculating daily sentiment for sector {sector_identifier}")
+        logger.debug("Cache miss: calculating daily sentiment for sector %s", sector_identifier)
 
         # Resolve sector identifier to yfinance key
         sector_key = sector_service_instance.resolve_sector_key(sector_identifier)
@@ -590,9 +590,7 @@ async def get_sector_daily_sentiment(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"ERROR in get_sector_daily_sentiment: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Error in get_sector_daily_sentiment: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
 
@@ -615,7 +613,7 @@ async def get_significant_events_for_ticker(ticker: str, timeframe: str = "1Y"):
                 trigger_progressive=False  # Don't trigger progressive fetch
             )
         except Exception as e:
-            print(f"Warning: Could not fetch cached news for significant events: {e}")
+            logger.warning("Could not fetch cached news for significant events: %s", e)
             cached_news = None
 
         # Pass cached news to avoid redundant API calls
@@ -673,7 +671,7 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         try:
             cached_response = redis_cache.get(cache_key)
             if cached_response is not None:
-                print(f"[CACHE HIT] {cache_key}")
+                logger.debug("Cache hit: %s", cache_key)
                 return cached_response
         except Exception:
             # If cache backend unavailable, continue without failing
@@ -689,16 +687,16 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         if stock_data is None or stock_data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for ticker {ticker}")
 
-        print(f"[DEBUG] Raw data for {ticker} ({timeframe}): {len(stock_data)} rows")
+        logger.debug("Raw data for %s (%s): %d rows", ticker, timeframe, len(stock_data))
         if len(stock_data) > 0:
-            print(f"[DEBUG] Last 3 dates in raw data: {stock_data.index[-3:].tolist()}")
+            logger.debug("Last 3 dates in raw data: %s", stock_data.index[-3:].tolist())
 
         # Filter by timeframe if needed
         filtered_data = stock_data_service.filter_data_by_timeframe(stock_data, timeframe)
 
-        print(f"[DEBUG] Filtered data for {ticker} ({timeframe}): {len(filtered_data)} rows")
+        logger.debug("Filtered data for %s (%s): %d rows", ticker, timeframe, len(filtered_data))
         if len(filtered_data) > 0:
-            print(f"[DEBUG] Last date in filtered data: {filtered_data.index[-1]}")
+            logger.debug("Last date in filtered data: %s", filtered_data.index[-1])
 
         # Fetch company info for metadata
         company_info = stock_data_service.get_company_info(ticker)
@@ -714,19 +712,19 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
             try:
                 # Fetch 5 days to ensure we have previous close even with weekends
                 hist_5d = ticker_obj.history(period="5d", interval="1d")
-                print(f"[DEBUG] Fetched {len(hist_5d)} days of data for prev close")
-                print(f"[DEBUG] Last 2 dates: {hist_5d.index[-2:].tolist() if len(hist_5d) >= 2 else 'N/A'}")
+                logger.debug("Fetched %d days of data for prev close", len(hist_5d))
+                logger.debug("Last 2 dates: %s", hist_5d.index[-2:].tolist() if len(hist_5d) >= 2 else 'N/A')
 
                 if len(hist_5d) >= 2:
                     # Get the second-to-last day's close (previous trading day)
                     prev_close = float(hist_5d['Close'].iloc[-2])
-                    print(f"[DEBUG] Previous close for {ticker}: {prev_close}")
+                    logger.debug("Previous close for %s: %s", ticker, prev_close)
                 elif len(hist_5d) == 1:
                     # Fallback if only one day available
                     prev_close = float(hist_5d['Close'].iloc[0])
-                    print(f"[DEBUG] Only 1 day available, using: {prev_close}")
+                    logger.debug("Only 1 day available, using: %s", prev_close)
             except Exception as e:
-                print(f"[ERROR] Error fetching previous close for {ticker}: {e}")
+                logger.error("Error fetching previous close for %s: %s", ticker, e)
 
         # Convert to the format expected by frontend
         prices = []
@@ -762,9 +760,9 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
         try:
             ttl = settings.PRICE_CACHE_TTL if timeframe != "1D" else max(30, int(settings.PRICE_CACHE_TTL / 10))
             redis_cache.set(cache_key, response, ttl=ttl)
-            print(f"[CACHE SET] {cache_key} (ttl={ttl}s)")
+            logger.debug("Cache set: %s (ttl=%ds)", cache_key, ttl)
         except Exception as e:
-            print(f"[CACHE ERROR] Failed to set cache for {cache_key}: {e}")
+            logger.warning("Failed to set cache for %s: %s", cache_key, e)
 
         return response
 
@@ -1178,11 +1176,11 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
         try:
             sector_key = sector_service_instance.resolve_sector_key(ticker)
             is_sector = True
-            print(f"Resolved '{ticker}' as sector: {sector_key}")
+            logger.debug("Resolved '%s' as sector: %s", ticker, sector_key)
         except ValueError:
             # Not a sector, treat as stock ticker
             is_sector = False
-            print(f"Treating '{ticker}' as stock ticker")
+            logger.debug("Treating '%s' as stock ticker", ticker)
 
         # Configure timeframe parameters for Rolling 24h Windows
         timeframe_configs = {
@@ -1205,11 +1203,11 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
         if is_sector:
             effective_timeframe = timeframe if timeframe in ['1D', '1W', '1M'] else '1M'
             if effective_timeframe != timeframe:
-                print(f"[SECTOR OVERRIDE] Timeframe '{timeframe}' capped to '1M' for sector analysis")
+                logger.debug("Sector timeframe '%s' capped to '1M' for sector analysis", timeframe)
 
         if is_sector:
             # SECTOR PATH: Fetch aggregated sector news and calculate rolling sentiment
-            print(f"Fetching sector rolling sentiment for: {sector_key} (timeframe: {effective_timeframe})")
+            logger.info("Fetching sector rolling sentiment for: %s (timeframe: %s)", sector_key, effective_timeframe)
 
             # Get sector tickers
             tickers, _ = sector_service_instance.get_sector_tickers(sector_key)
@@ -1251,7 +1249,7 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
 
         else:
             # STOCK PATH: Existing logic for individual stocks
-            print(f"Fetching stock rolling sentiment for: {ticker} (timeframe: {timeframe})")
+            logger.info("Fetching stock rolling sentiment for: %s (timeframe: %s)", ticker, timeframe)
 
             # Fetch news articles using timeframe-aware method with progressive fetching
             news_articles = await news_service_instance.get_ticker_news_for_timeframe(
@@ -1260,13 +1258,13 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
                 trigger_progressive=True
             )
 
-            print(f"[ROLLING SENTIMENT] Received {len(news_articles) if news_articles else 0} articles from news service")
+            logger.debug("Rolling sentiment: received %d articles from news service", len(news_articles) if news_articles else 0)
 
             # Add score definitions to response
             score_defs = get_score_definitions()
 
             if not news_articles:
-                print(f"[ROLLING SENTIMENT] No articles found for {ticker} - returning empty response")
+                logger.debug("Rolling sentiment: no articles found for %s - returning empty response", ticker)
                 return {
                     "ticker": ticker,
                     "timeframe": timeframe,
@@ -1378,8 +1376,8 @@ async def get_rolling_sentiment(ticker: str, timeframe: str = "1W"):
             # Check if we have sufficient data
             has_data = any(point["volume"] > 0 for point in data_points)
 
-            print(f"[ROLLING SENTIMENT] Generated {len(data_points)} data points, has_data={has_data}")
-            print(f"[ROLLING SENTIMENT] Data points with volume: {sum(1 for p in data_points if p['volume'] > 0)}")
+            logger.debug("Rolling sentiment: generated %d data points, has_data=%s", len(data_points), has_data)
+            logger.debug("Rolling sentiment: data points with volume: %d", sum(1 for p in data_points if p['volume'] > 0))
 
             # Extract source earliest dates metadata if available
             source_earliest_dates = None
@@ -1555,14 +1553,14 @@ if CLIENT_ID and CLIENT_ID != "<your-client-id>" and CLIENT_SECRET:
             authority=AUTHORITY,
             client_credential=CLIENT_SECRET,
         )
-        print(f"✓ Azure AD authentication initialized")
-        print(f"  Redirect URI: {REDIRECT_URI}")
-        print(f"  Authority: {AUTHORITY}")
-        print(f"  Frontend URL: {FRONTEND_URL}")
+        logger.info("Azure AD authentication initialized")
+        logger.info("  Redirect URI: %s", REDIRECT_URI)
+        logger.info("  Authority: %s", AUTHORITY)
+        logger.info("  Frontend URL: %s", FRONTEND_URL)
     except Exception as e:
-        print(f"ERROR: Failed to initialize Azure AD authentication: {str(e)}")
+        logger.error("Failed to initialize Azure AD authentication: %s", e)
 else:
-    print("WARNING: Azure AD authentication is disabled due to missing credentials.")
+    logger.warning("Azure AD authentication is disabled due to missing credentials.")
 
 
 @router.get("/login")
@@ -1581,10 +1579,10 @@ def azure_login():
             SCOPES,
             redirect_uri=REDIRECT_URI,
         )
-        print(f"Azure login initiated. Redirect URI: {REDIRECT_URI}")
+        logger.info("Azure login initiated. Redirect URI: %s", REDIRECT_URI)
         return RedirectResponse(auth_url)
     except Exception as e:
-        print(f"Azure login error: {str(e)}")
+        logger.error("Azure login error: %s", e)
         raise HTTPException(status_code=500, detail=f"Azure login init failed: {str(e)}")
 
 
@@ -1596,7 +1594,7 @@ async def azure_auth_callback(request: Request):
     Uses FRONTEND_URL from settings to support both localhost and production.
     """
     if not cca:
-        print("ERROR: Azure callback called but cca is not initialized")
+        logger.error("Azure callback called but cca is not initialized")
         return RedirectResponse(f"{FRONTEND_URL}/login?error=not_configured")
 
     try:
@@ -1605,17 +1603,17 @@ async def azure_auth_callback(request: Request):
         error_description = request.query_params.get("error_description")
 
         if error:
-            print(f"Azure returned error: {error}")
-            print(f"Error description: {error_description}")
+            logger.error("Azure returned error: %s", error)
+            logger.error("Error description: %s", error_description)
             return RedirectResponse(f"{FRONTEND_URL}/login?error={error}")
 
         code = request.query_params.get("code")
         if not code:
-            print("ERROR: Missing authorization code in callback")
+            logger.error("Missing authorization code in callback")
             raise HTTPException(status_code=400, detail="Missing authorization code")
 
-        print(f"Exchanging authorization code for token...")
-        print(f"Using redirect URI: {REDIRECT_URI}")
+        logger.debug("Exchanging authorization code for token...")
+        logger.debug("Using redirect URI: %s", REDIRECT_URI)
 
         result = cca.acquire_token_by_authorization_code(
             code,
@@ -1626,8 +1624,8 @@ async def azure_auth_callback(request: Request):
         if "error" in result:
             error_msg = result.get("error", "unknown")
             error_desc = result.get("error_description", "No description")
-            print(f"Azure token exchange error: {error_msg}")
-            print(f"Error description: {error_desc}")
+            logger.error("Azure token exchange error: %s", error_msg)
+            logger.error("Error description: %s", error_desc)
             return RedirectResponse(f"{FRONTEND_URL}/login?error=azure_token_failed&msg={error_msg}")
 
         # Extract user info from Azure ID token claims
@@ -1635,7 +1633,7 @@ async def azure_auth_callback(request: Request):
         username = account.get("preferred_username", "unknown")
         user_id = account.get("oid", username)  # Azure Object ID (stable unique identifier)
 
-        print(f"✓ Azure Login Success: {username} (oid: {user_id})")
+        logger.info("Azure login success: %s (oid: %s)", username, user_id)
 
         # Create JWT token for API authentication
         from app.core.auth import create_access_token
@@ -1661,9 +1659,7 @@ async def azure_auth_callback(request: Request):
         return response
 
     except Exception as e:
-        print(f"Azure login callback exception: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Azure login callback exception: %s: %s", type(e).__name__, e, exc_info=True)
         return RedirectResponse(f"{FRONTEND_URL}/login?error=azure_failed")
 
 
@@ -2028,7 +2024,7 @@ async def save_portfolio(data: dict):
     except HTTPException as e:
         raise e
     except Exception as e:
-        print("Error saving portfolio:", e)
+        logger.error("Error saving portfolio: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to save portfolio: {str(e)}")
 
 
@@ -2161,7 +2157,7 @@ async def update_portfolio(data: dict):
     except HTTPException:
         raise
     except Exception as e:
-        print("Error updating portfolio:", e)
+        logger.error("Error updating portfolio: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Invalid Stock Symbol: {str(e)}")
 
 
@@ -2285,7 +2281,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
                     sector = sector_info.get("sector", "N/A")
                     industry = sector_info.get("industry", "N/A")
                 except Exception as e:
-                    print(f"⚠️ Sector fetch failed for {symbol}: {e}")
+                    logger.warning("Sector fetch failed for %s: %s", symbol, e)
                     sector, industry = "N/A", "N/A"
 
                 # Create range52week object if both values exist
@@ -2456,15 +2452,15 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             "ITD": None,                     # Will calculate based on holdings
         }
 
-        print(f"\nTime Periods:")
+        logger.debug("Time Periods:")
         for period_name, start_date in periods.items():
             if start_date:
-                print(f"  {period_name}: {start_date.strftime('%Y-%m-%d')} to {today.strftime('%Y-%m-%d')}")
+                logger.debug("  %s: %s to %s", period_name, start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
             else:
-                print(f"  {period_name}: From purchase dates to {today.strftime('%Y-%m-%d')}")
+                logger.debug("  %s: From purchase dates to %s", period_name, today.strftime('%Y-%m-%d'))
 
         # OPTIMIZATION: Fetch current prices ONCE for all holdings (not per period)
-        print(f"📊 Fetching current prices for {len(holdings_list)} holdings in parallel...")
+        logger.info("Fetching current prices for %d holdings in parallel...", len(holdings_list))
         current_prices = {}
 
         async def fetch_current_price(symbol: str):
@@ -2474,7 +2470,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                 if price_data and price_data.get("market_price"):
                     return symbol, float(price_data["market_price"])
             except Exception as e:
-                print(f"⚠️ Error fetching current price for {symbol}: {e}")
+                logger.warning("Error fetching current price for %s: %s", symbol, e)
             return symbol, None
 
         # Fetch all current prices in parallel
@@ -2488,13 +2484,13 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                 if price is not None:
                     current_prices[symbol] = price
 
-        print(f"✅ Fetched current prices for {len(current_prices)} holdings")
+        logger.info("Fetched current prices for %d holdings", len(current_prices))
 
         # Calculate portfolio value at each period
         results = []
 
         for period_name, start_date in periods.items():
-            print(f"\n--- Calculating {period_name} Performance ---")
+            logger.debug("Calculating %s Performance", period_name)
 
             # For ITD, calculate earliest purchase date
             if period_name == "ITD":
@@ -2503,7 +2499,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                     for h in holdings_list
                 )
                 start_date = earliest_purchase
-                print(f"  ITD Start Date (earliest purchase): {start_date.strftime('%Y-%m-%d')}")
+                logger.debug("ITD Start Date (earliest purchase): %s", start_date.strftime('%Y-%m-%d'))
 
             # Helper function to fetch start price for a holding in this period
             async def fetch_holding_period_data(holding: dict):
@@ -2532,7 +2528,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                             period_start_price = float(hist_data["start_price"])
                             price_source = f"Market Price on {start_date.strftime('%Y-%m-%d')}"
                         else:
-                            print(f"    WARNING: No market data for {symbol} at period start, using purchase price")
+                            logger.warning("No market data for %s at period start, using purchase price", symbol)
                             period_start_price = purchase_price
                             price_source = "Purchase Price (fallback)"
 
@@ -2540,7 +2536,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                     current_price = current_prices.get(symbol)
 
                     if not current_price:
-                        print(f"    WARNING: No current price for {symbol}")
+                        logger.warning("No current price for %s", symbol)
                         return None
 
                     # Calculate position values
@@ -2560,11 +2556,11 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                     }
 
                 except Exception as e:
-                    print(f"    ERROR fetching data for {symbol}: {e}")
+                    logger.error("Error fetching data for %s: %s", symbol, e)
                     return None
 
             # Fetch period data for all holdings in parallel
-            print(f"  📊 Fetching period data for {len(holdings_list)} holdings in parallel...")
+            logger.debug("Fetching period data for %d holdings in parallel...", len(holdings_list))
             period_tasks = [fetch_holding_period_data(holding) for holding in holdings_list]
             holdings_details = await asyncio.gather(*period_tasks, return_exceptions=True)
 
@@ -2574,7 +2570,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             total_value_at_period_start = sum(h["value_at_start"] for h in holdings_details)
             total_value_now = sum(h["value_now"] for h in holdings_details)
 
-            print(f"  ✅ Processed {len(holdings_details)} holdings successfully")
+            logger.debug("Processed %d holdings successfully", len(holdings_details))
 
             # Step 4: Calculate TOTAL portfolio return for this period
             if total_value_at_period_start > 0:
@@ -2582,10 +2578,8 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
             else:
                 portfolio_return = 0
 
-            print(f"\n  PORTFOLIO SUMMARY:")
-            print(f"    Total Value at {period_name} Start: ${total_value_at_period_start:,.2f}")
-            print(f"    Total Value Now: ${total_value_now:,.2f}")
-            print(f"    Portfolio {period_name} Return: {portfolio_return:+.2f}%")
+            logger.debug("Portfolio summary - %s: Start=$%.2f, Now=$%.2f, Return=%.2f%%",
+                        period_name, total_value_at_period_start, total_value_now, portfolio_return)
 
             # Step 5: Fetch S&P 500 performance for the SAME period
             try:
@@ -2605,19 +2599,19 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                     sp500_end = float(sp500_hist['Close'].iloc[-1])
                     sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
 
-                    print(f"    S&P 500 at Start: ${sp500_start:.2f} | Now: ${sp500_end:.2f}")
-                    print(f"    S&P 500 {period_name} Return: {sp500_return:+.2f}%")
+                    logger.debug("S&P 500 %s: Start=$%.2f, Now=$%.2f, Return=%.2f%%",
+                                period_name, sp500_start, sp500_end, sp500_return)
                 else:
                     sp500_return = 0
-                    print(f"    WARNING: Insufficient S&P 500 data")
+                    logger.warning("Insufficient S&P 500 data for %s", period_name)
 
             except Exception as e:
-                print(f"    ERROR fetching S&P 500 data: {e}")
+                logger.error("Error fetching S&P 500 data: %s", e)
                 sp500_return = 0
 
             # Step 6: Calculate outperformance
             outperformance = portfolio_return - sp500_return
-            print(f"    Outperformance vs S&P 500: {outperformance:+.2f}%")
+            logger.debug("Outperformance vs S&P 500 for %s: %.2f%%", period_name, outperformance)
 
             # Step 7: Calculate top gainers and losers for attribution
             sorted_holdings = sorted(holdings_details, key=lambda x: x["return"], reverse=True)
@@ -2636,8 +2630,8 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                 holding["gain_loss"] = round(value_now - value_at_start, 2)
                 holding["return_percent"] = round(holding["return"], 2)
 
-            print(f"    Top {len(top_gainers)} Gainers: {[h['symbol'] for h in top_gainers]}")
-            print(f"    Top {len(top_losers)} Losers: {[h['symbol'] for h in top_losers]}")
+            logger.debug("Top %d Gainers: %s", len(top_gainers), [h['symbol'] for h in top_gainers])
+            logger.debug("Top %d Losers: %s", len(top_losers), [h['symbol'] for h in top_losers])
 
             results.append({
                 "period": period_name,
@@ -2652,7 +2646,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                 "top_losers": top_losers
             })
 
-        print(f"\n=== CALCULATION COMPLETE ===\n")
+        logger.info("Portfolio performance calculation complete")
 
         # Feature 1: Generate historical time-series data for chart
         # Timeframe is configurable via query parameter (1D, 1W, 1M, 6M, YTD, 1Y, 3Y, 5Y)
@@ -2687,19 +2681,19 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
 
             # Handle errors from parallel fetching
             if isinstance(historical_data, Exception):
-                print(f"⚠️ Error generating portfolio time-series: {historical_data}")
+                logger.warning("Error generating portfolio time-series: %s", historical_data)
                 historical_data = {"timeframe": timeframe, "data_points": [], "error": str(historical_data)}
             else:
-                print(f"Generated {len(historical_data.get('data_points', []))} time-series data points for {timeframe}")
+                logger.debug("Generated %d time-series data points for %s", len(historical_data.get('data_points', [])), timeframe)
 
             if isinstance(benchmark_data, Exception):
-                print(f"⚠️ Error fetching benchmark time-series: {benchmark_data}")
+                logger.warning("Error fetching benchmark time-series: %s", benchmark_data)
                 benchmark_data = {"timeframe": timeframe, "data_points": [], "error": str(benchmark_data)}
             else:
-                print(f"Generated {len(benchmark_data.get('data_points', []))} benchmark data points")
+                logger.debug("Generated %d benchmark data points", len(benchmark_data.get('data_points', [])))
 
         except Exception as e:
-            print(f"⚠️ Error generating time-series data: {e}")
+            logger.warning("Error generating time-series data: %s", e)
             historical_data = {"timeframe": timeframe, "data_points": [], "error": str(e)}
             benchmark_data = {"timeframe": timeframe, "data_points": [], "error": str(e)}
 
@@ -2754,7 +2748,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                                 "impact_value": None
                             })
                 except Exception as e:
-                    print(f"⚠️ Error fetching events for {symbol}: {e}")
+                    logger.warning("Error fetching events for %s: %s", symbol, e)
                     continue
 
             # Add purchase events from holdings (if purchase_date is available)
@@ -2778,16 +2772,16 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                                 "impact_value": round(total_cost, 2)
                             })
                     except Exception as e:
-                        print(f"⚠️ Error processing purchase event: {e}")
+                        logger.warning("Error processing purchase event: %s", e)
                         continue
 
             # Sort events by date (most recent first)
             events.sort(key=lambda x: x["date"], reverse=True)
 
-            print(f"Generated {len(events)} portfolio events")
+            logger.debug("Generated %d portfolio events", len(events))
 
         except Exception as e:
-            print(f"⚠️ Error generating events timeline: {e}")
+            logger.warning("Error generating events timeline: %s", e)
             events = []
 
         return {
@@ -2801,9 +2795,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
         }
 
     except Exception as e:
-        import traceback
-        print(f"ERROR calculating portfolio performance: {e}")
-        traceback.print_exc()
+        logger.error("Error calculating portfolio performance: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to calculate performance: {str(e)}")
 
 
@@ -2822,8 +2814,7 @@ async def get_portfolio_news(username: str, account_name: str):
     Example: /api/portfolio/news/john_doe/Investment%20Account
     """
     try:
-        print(f"\n=== PORTFOLIO NEWS AGGREGATION ===")
-        print(f"Username: {username}, Account: {account_name}")
+        logger.info("Portfolio news aggregation started for %s/%s", username, account_name)
 
         # Fetch holdings
         cursor = get_holdings_collection_async().find({
@@ -2857,7 +2848,7 @@ async def get_portfolio_news(username: str, account_name: str):
                 **score_defs
             }
 
-        print(f"Fetching news for {len(unique_tickers)} tickers: {unique_tickers}")
+        logger.info("Fetching news for %d tickers: %s", len(unique_tickers), unique_tickers)
 
         # Feature 6: Parallel bulk fetching with preserve_all_tickers mode
         # Use asyncio.gather to fetch all ticker news in parallel
@@ -2879,7 +2870,7 @@ async def get_portfolio_news(username: str, account_name: str):
 
         for ticker, raw_articles in zip(unique_tickers, raw_feed_results):
             if isinstance(raw_articles, Exception):
-                print(f"⚠️ Error fetching raw feed for {ticker}: {raw_articles}")
+                logger.warning("Error fetching raw feed for %s: %s", ticker, raw_articles)
                 continue
 
             if not raw_articles:
@@ -2939,7 +2930,7 @@ async def get_portfolio_news(username: str, account_name: str):
                 "relevance_score": relevance_score
             })
 
-        print(f"Aggregated {len(all_raw_articles)} unique articles from {len(unique_tickers)} holdings")
+        logger.info("Aggregated %d unique articles from %d holdings", len(all_raw_articles), len(unique_tickers))
 
         # Get score definitions
         score_defs = get_score_definitions()
@@ -2968,9 +2959,7 @@ async def get_portfolio_news(username: str, account_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"ERROR in portfolio news aggregation: {e}")
-        traceback.print_exc()
+        logger.error("Error in portfolio news aggregation: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch portfolio news: {str(e)}")
 
 
@@ -2988,8 +2977,7 @@ async def get_portfolio_sentiment(username: str, account_name: str):
     try:
         from collections import defaultdict
 
-        print(f"\n=== PORTFOLIO SECTOR SENTIMENT AGGREGATION ===")
-        print(f"Username: {username}, Account: {account_name}")
+        logger.info("Portfolio sector sentiment aggregation started for %s/%s", username, account_name)
 
         # Fetch holdings with sector data
         cursor = get_holdings_collection_async().find({
@@ -3023,7 +3011,7 @@ async def get_portfolio_sentiment(username: str, account_name: str):
                 market_price = info.get("currentPrice") or info.get("regularMarketPrice")
 
                 if not market_price:
-                    print(f"⚠️ No market price for {symbol}, skipping")
+                    logger.warning("No market price for %s, skipping", symbol)
                     continue
 
                 market_value = quantity * float(market_price)
@@ -3047,7 +3035,7 @@ async def get_portfolio_sentiment(username: str, account_name: str):
                 symbol_data[symbol]["market_value"] += market_value
 
             except Exception as e:
-                print(f"⚠️ Error processing {symbol}: {e}")
+                logger.warning("Error processing %s: %s", symbol, e)
                 continue
 
         # Fetch sentiment for each symbol
@@ -3059,7 +3047,7 @@ async def get_portfolio_sentiment(username: str, account_name: str):
                     sentiment_score = sentiment_results.get("overall_weighted_score")
                     symbol_data[symbol]["sentiment"] = sentiment_score
             except Exception as e:
-                print(f"⚠️ Sentiment fetch failed for {symbol}: {e}")
+                logger.warning("Sentiment fetch failed for %s: %s", symbol, e)
                 symbol_data[symbol]["sentiment"] = None
 
         # Aggregate by sector
@@ -3119,8 +3107,8 @@ async def get_portfolio_sentiment(username: str, account_name: str):
         else:
             overall_sentiment = None
 
-        print(f"Processed {len(symbol_data)} holdings across {len(sentiment_by_sector)} sectors")
-        print(f"Overall portfolio sentiment: {overall_sentiment}")
+        logger.info("Processed %d holdings across %d sectors. Overall sentiment: %s",
+                    len(symbol_data), len(sentiment_by_sector), overall_sentiment)
 
         return {
             "username": username,
@@ -3133,9 +3121,7 @@ async def get_portfolio_sentiment(username: str, account_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"ERROR in portfolio sentiment aggregation: {e}")
-        traceback.print_exc()
+        logger.error("Error in portfolio sentiment aggregation: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to aggregate sentiment: {str(e)}")
 
 
@@ -3154,9 +3140,8 @@ async def get_portfolio_daily_sentiment(
     Example: /api/portfolio/daily-sentiment/john_doe/Investment%20Account?days=30
     """
     try:
-        print(f"\n=== PORTFOLIO DAILY SENTIMENT AGGREGATION ===")
-        print(f"Username: {username}, Account: {account_name}")
-        print(f"Timeframe: {timeframe}, Days: {days}")
+        logger.info("Portfolio daily sentiment aggregation started for %s/%s (timeframe=%s, days=%s)",
+                    username, account_name, timeframe, days)
 
         # Fetch holdings
         cursor = get_holdings_collection_async().find({
@@ -3195,7 +3180,7 @@ async def get_portfolio_daily_sentiment(
                         "market_value": market_value
                     })
             except Exception as e:
-                print(f"⚠️ Error getting market value for {symbol}: {e}")
+                logger.warning("Error getting market value for %s: %s", symbol, e)
                 continue
 
         if not enriched_holdings:
@@ -3224,9 +3209,7 @@ async def get_portfolio_daily_sentiment(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"ERROR in portfolio daily sentiment: {e}")
-        traceback.print_exc()
+        logger.error("Error in portfolio daily sentiment: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch portfolio daily sentiment: {str(e)}")
 
 
@@ -3244,9 +3227,8 @@ async def get_portfolio_rolling_sentiment(
     Example: /api/portfolio/rolling-sentiment/john_doe/Investment%20Account?timeframe=1Y
     """
     try:
-        print(f"\n=== PORTFOLIO ROLLING SENTIMENT AGGREGATION ===")
-        print(f"Username: {username}, Account: {account_name}")
-        print(f"Timeframe: {timeframe}")
+        logger.info("Portfolio rolling sentiment aggregation started for %s/%s (timeframe=%s)",
+                    username, account_name, timeframe)
 
         # Fetch holdings
         cursor = get_holdings_collection_async().find({
@@ -3285,7 +3267,7 @@ async def get_portfolio_rolling_sentiment(
                         "market_value": market_value
                     })
             except Exception as e:
-                print(f"⚠️ Error getting market value for {symbol}: {e}")
+                logger.warning("Error getting market value for %s: %s", symbol, e)
                 continue
 
         if not enriched_holdings:
@@ -3313,9 +3295,7 @@ async def get_portfolio_rolling_sentiment(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"ERROR in portfolio rolling sentiment: {e}")
-        traceback.print_exc()
+        logger.error("Error in portfolio rolling sentiment: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch portfolio rolling sentiment: {str(e)}")
 
 
@@ -3445,7 +3425,7 @@ async def create_transaction_endpoint(username: str, transaction_data: dict):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Validation error: {str(e)}")
     except Exception as e:
-        print(f"Error creating transaction: {e}")
+        logger.error("Error creating transaction: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
 
 
@@ -3520,7 +3500,7 @@ async def get_transactions_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Error fetching transactions: {e}")
+        logger.error("Error fetching transactions: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch transactions: {str(e)}")
 
 
@@ -3556,7 +3536,7 @@ async def get_transaction_stats_endpoint(
         return stats
 
     except Exception as e:
-        print(f"Error fetching transaction stats: {e}")
+        logger.error("Error fetching transaction stats: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
 
 
@@ -3580,7 +3560,7 @@ async def delete_transaction_endpoint(username: str, transaction_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error deleting transaction: {e}")
+        logger.error("Error deleting transaction: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete transaction: {str(e)}")
 
 
@@ -3727,9 +3707,7 @@ async def get_portfolio_performance_twr(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error calculating TWR performance: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Error calculating TWR performance: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to calculate TWR: {str(e)}")
 
 

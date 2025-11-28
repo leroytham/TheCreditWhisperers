@@ -27,11 +27,15 @@ Usage:
 
 import os
 import logging
+import threading
 from typing import Optional, Callable, Any
 from functools import wraps
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
+
+# Thread lock for thread-safe initialization
+_telemetry_lock = threading.Lock()
 
 # Global tracer instance
 _tracer = None
@@ -44,7 +48,7 @@ def init_telemetry(
     otlp_endpoint: str = None,
 ) -> bool:
     """
-    Initialize OpenTelemetry tracing.
+    Initialize OpenTelemetry tracing (thread-safe).
 
     Args:
         app: FastAPI application instance
@@ -56,83 +60,127 @@ def init_telemetry(
     """
     global _tracer, _initialized
 
-    # Get configuration from environment
-    service_name = service_name or os.getenv("OTEL_SERVICE_NAME", "creditwhisperers-backend")
-    otlp_endpoint = otlp_endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-    otel_enabled = os.getenv("OTEL_ENABLED", "true").lower() in ("true", "1", "yes")
+    # Quick check without lock
+    if _initialized:
+        return _tracer is not None
 
-    if not otel_enabled:
-        logger.info("OpenTelemetry tracing disabled via OTEL_ENABLED=false")
-        _initialized = True
-        return False
+    with _telemetry_lock:
+        # Double-checked locking pattern
+        if _initialized:
+            return _tracer is not None
 
-    if not otlp_endpoint:
-        logger.info("OpenTelemetry tracing disabled: OTEL_EXPORTER_OTLP_ENDPOINT not set")
-        _initialized = True
-        return False
+        # Get configuration from environment
+        service_name = service_name or os.getenv("OTEL_SERVICE_NAME", "creditwhisperers-backend")
+        otlp_endpoint = otlp_endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        otel_enabled = os.getenv("OTEL_ENABLED", "true").lower() in ("true", "1", "yes")
 
-    try:
-        from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-        from opentelemetry.instrumentation.requests import RequestsInstrumentor
-        from opentelemetry.instrumentation.logging import LoggingInstrumentor
+        if not otel_enabled:
+            logger.info("OpenTelemetry tracing disabled via OTEL_ENABLED=false")
+            _initialized = True
+            return False
 
-        # Create resource with service info
-        resource = Resource(attributes={
-            SERVICE_NAME: service_name,
-            "service.version": os.getenv("APP_VERSION", "1.0.0"),
-            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
-        })
+        if not otlp_endpoint:
+            logger.info("OpenTelemetry tracing disabled: OTEL_EXPORTER_OTLP_ENDPOINT not set")
+            _initialized = True
+            return False
 
-        # Create tracer provider
-        provider = TracerProvider(resource=resource)
+        try:
+            from opentelemetry import trace
+            from opentelemetry.sdk.trace import TracerProvider
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
+            from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            from opentelemetry.instrumentation.requests import RequestsInstrumentor
+            from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
-        # Configure OTLP exporter
-        otlp_exporter = OTLPSpanExporter(
-            endpoint=otlp_endpoint,
-            insecure=otlp_endpoint.startswith("http://"),
-        )
+            # Create resource with service info
+            resource = Resource(attributes={
+                SERVICE_NAME: service_name,
+                "service.version": os.getenv("APP_VERSION", "1.0.0"),
+                "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+            })
 
-        # Add span processor
-        provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            # Create tracer provider
+            provider = TracerProvider(resource=resource)
 
-        # Set global tracer provider
-        trace.set_tracer_provider(provider)
+            # Configure OTLP exporter
+            otlp_exporter = OTLPSpanExporter(
+                endpoint=otlp_endpoint,
+                insecure=otlp_endpoint.startswith("http://"),
+            )
 
-        # Get tracer
-        _tracer = trace.get_tracer(__name__)
+            # Add span processor
+            provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
 
-        # Instrument FastAPI
-        if app:
-            FastAPIInstrumentor.instrument_app(app)
-            logger.info("FastAPI instrumentation enabled")
+            # Set global tracer provider
+            trace.set_tracer_provider(provider)
 
-        # Instrument requests library (for external API calls)
-        RequestsInstrumentor().instrument()
-        logger.info("Requests library instrumentation enabled")
+            # Get tracer
+            _tracer = trace.get_tracer(__name__)
 
-        # Instrument logging (adds trace context to logs)
-        LoggingInstrumentor().instrument(set_logging_format=True)
-        logger.info("Logging instrumentation enabled")
+            # Instrument FastAPI
+            if app:
+                FastAPIInstrumentor.instrument_app(app)
+                logger.info("FastAPI instrumentation enabled")
 
-        _initialized = True
-        logger.info(f"OpenTelemetry tracing initialized: service={service_name}, endpoint={otlp_endpoint}")
-        return True
+            # Instrument requests library (for external API calls)
+            RequestsInstrumentor().instrument()
+            logger.info("Requests library instrumentation enabled")
 
-    except ImportError as e:
-        logger.warning(f"OpenTelemetry packages not installed: {e}")
-        logger.warning("Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp")
-        _initialized = True
-        return False
+            # Instrument logging (adds trace context to logs)
+            LoggingInstrumentor().instrument(set_logging_format=True)
+            logger.info("Logging instrumentation enabled")
 
-    except Exception as e:
-        logger.error(f"Failed to initialize OpenTelemetry: {e}")
-        _initialized = True
-        return False
+            _initialized = True
+            logger.info("OpenTelemetry tracing initialized: service=%s, endpoint=%s", service_name, otlp_endpoint)
+            return True
+
+        except ImportError as e:
+            logger.warning("OpenTelemetry packages not installed: %s", e)
+            logger.warning("Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp")
+            _initialized = True
+            return False
+
+        except Exception as e:
+            logger.error("Failed to initialize OpenTelemetry: %s", e)
+            _initialized = True
+            return False
+
+
+def shutdown_telemetry():
+    """
+    Shutdown OpenTelemetry tracing provider for cleanup.
+
+    This function should be called during application shutdown to properly
+    flush any pending spans and release resources.
+    """
+    global _tracer, _initialized
+    with _telemetry_lock:
+        if _tracer is not None:
+            try:
+                from opentelemetry import trace
+                provider = trace.get_tracer_provider()
+                if hasattr(provider, 'shutdown'):
+                    provider.shutdown()
+                    logger.info("OpenTelemetry tracing shutdown complete")
+            except Exception as e:
+                logger.warning("Error shutting down OpenTelemetry: %s", e)
+        _tracer = None
+        _initialized = False
+
+
+def reset_telemetry():
+    """
+    Reset telemetry state for testing.
+
+    This function is primarily used in tests to ensure clean state between tests.
+    Note: This does NOT shutdown the tracer provider, just resets the module state.
+    """
+    global _tracer, _initialized
+    with _telemetry_lock:
+        _tracer = None
+        _initialized = False
 
 
 def get_tracer():

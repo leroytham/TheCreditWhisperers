@@ -8,7 +8,10 @@ This module handles:
 """
 
 import hashlib
+import logging
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 class ArticleProcessor:
@@ -75,7 +78,7 @@ class ArticleProcessor:
                 "score": raw_score
             }
         except Exception as e:
-            print(f"Error analyzing sentiment with FinBERT: {e}")
+            logger.error("Error analyzing sentiment with FinBERT: %s", e)
             return {"label": "neutral", "confidence": 0.0, "score": 0.0}
 
     def analyze_with_finbert(self, article: Dict) -> Tuple[float, str, float]:

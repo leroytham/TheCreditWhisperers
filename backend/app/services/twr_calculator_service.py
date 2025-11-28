@@ -13,10 +13,13 @@ Mathematical Foundation:
 - Weighted Cash Flow = Σ(CF × Days Remaining / Total Days)
 """
 
+import logging
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import asyncio
+
+logger = logging.getLogger(__name__)
 
 
 class TWRCalculatorService:
@@ -148,9 +151,7 @@ class TWRCalculatorService:
             }
 
         except Exception as e:
-            print(f"Error calculating TWR: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error calculating TWR: %s", e, exc_info=True)
             return {
                 "twr_return": None,
                 "error": "calculation_failed",
@@ -204,9 +205,8 @@ class TWRCalculatorService:
 
         # Sanity check: extreme returns are likely errors
         if abs(period_return) > 10.0:  # More than 1000% return is suspicious
-            print(f"WARNING: Extreme return detected: {period_return * 100:.2f}%")
-            print(f"  Start: ${start_value:,.2f}, End: ${end_value:,.2f}")
-            print(f"  Net CF: ${net_cash_flow:,.2f}, Weighted CF: ${weighted_cash_flow:,.2f}")
+            logger.warning("Extreme return detected: %.2f%% (Start: $%.2f, End: $%.2f, Net CF: $%.2f, Weighted CF: $%.2f)",
+                          period_return * 100, start_value, end_value, net_cash_flow, weighted_cash_flow)
 
         return period_return
 
@@ -451,16 +451,14 @@ class TWRCalculatorService:
                             total_value += quantity * price
 
                 except Exception as e:
-                    print(f"Warning: Could not fetch price for {symbol} on {value_date}: {e}")
+                    logger.warning("Could not fetch price for %s on %s: %s", symbol, value_date, e)
                     # Skip this holding if price unavailable
                     continue
 
             return total_value
 
         except Exception as e:
-            print(f"Error calculating portfolio value: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error calculating portfolio value: %s", e, exc_info=True)
             return 0.0
 
 

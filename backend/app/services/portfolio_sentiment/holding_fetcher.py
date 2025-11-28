@@ -120,7 +120,7 @@ async def fetch_holding_daily_sentiment(
         }
 
     except Exception as e:
-        print(f"Error fetching daily sentiment for {ticker}: {e}")
+        logger.error("Error fetching daily sentiment for %s: %s", ticker, e)
         return None
 
 
@@ -293,7 +293,7 @@ async def fetch_holding_rolling_sentiment(
         }
 
     except Exception as e:
-        print(f"Error fetching rolling sentiment for {ticker}: {e}")
+        logger.error("Error fetching rolling sentiment for %s: %s", ticker, e)
         return None
 
 

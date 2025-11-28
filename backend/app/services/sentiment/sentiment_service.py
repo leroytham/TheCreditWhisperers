@@ -7,6 +7,7 @@ This is the main service class that orchestrates sentiment analysis using:
 - Analytics utilities for z-score, HHI, and topic analysis
 """
 
+import logging
 import math
 import pickle
 from datetime import datetime
@@ -17,6 +18,8 @@ from app.models import News, SentimentScore, RelevanceScore
 from app.config.scoring import map_alpha_vantage_label, classify_sentiment
 from app.core.config import settings
 from app.core.cache import redis_cache
+
+logger = logging.getLogger(__name__)
 
 from app.services.analytics import (
     classify_momentum,
@@ -44,7 +47,7 @@ class SentimentService:
 
     def __new__(cls):
         if cls._instance is None:
-            print("Creating SentimentService instance...")
+            logger.info("Creating SentimentService instance...")
             cls._instance = super(SentimentService, cls).__new__(cls)
             cls._instance._initialize()
         return cls._instance
@@ -52,7 +55,7 @@ class SentimentService:
     def _initialize(self):
         """Initialize sentiment service components."""
         self.article_processor = ArticleProcessor()
-        print("SentimentService initialized (FinBERT disabled - using Alpha Vantage scores only)")
+        logger.info("SentimentService initialized (FinBERT disabled - using Alpha Vantage scores only)")
 
     @property
     def finbert(self):
@@ -272,7 +275,7 @@ class SentimentService:
             if cached_result:
                 return pickle.loads(cached_result)
         except Exception as e:
-            print(f"Cache read error in analyze_sentiment_with_momentum: {e}")
+            logger.error("Cache read error in analyze_sentiment_with_momentum: %s", e)
 
         # Calculate decay constants from configured half-lives
         half_life_fast = settings.SENTIMENT_HALF_LIFE_FAST_HOURS
@@ -424,7 +427,7 @@ class SentimentService:
         try:
             redis_cache.set(cache_key, pickle.dumps(full_results), 600)
         except Exception as e:
-            print(f"Cache write error in analyze_sentiment_with_momentum: {e}")
+            logger.error("Cache write error in analyze_sentiment_with_momentum: %s", e)
 
         return full_results
 
