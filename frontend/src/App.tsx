@@ -28,14 +28,19 @@ function App() {
   // Activate WebSocket for real-time notifications (optional - app works without it)
   // Use a consistent client ID from Zustand store (persisted via middleware)
   const storeClientId = useAppStore(state => state.clientId);
+  const setNotificationMode = useAppStore(state => state.setNotificationMode);
+  const notifyInfo = useAppStore(state => state.notifyInfo);
   const clientId = `client-${storeClientId}`;
 
+  // WebSocket configuration
+  const autoConnect = false; // Temporarily disabled - WebSocket hanging on Windows
+
   const { isConnected, hasError } = useNotificationSocket(clientId, {
-    autoConnect: false, // Temporarily disabled - WebSocket hanging on Windows
+    autoConnect,
     maxReconnectAttempts: 3, // Reduced attempts to fail faster in development
     onConnect: () => console.log('📡 Real-time notifications connected'),
     onDisconnect: () => console.log('📡 Real-time notifications disconnected'),
-    onError: (error) => {
+    onError: () => {
       // Suppress error messages in development when backend is not running
       if (process.env.NODE_ENV === 'development') {
         console.log('💡 Tip: Start the backend server to enable real-time notifications');
@@ -43,16 +48,39 @@ function App() {
     },
   });
 
-  // Log connection status for debugging (development only)
+  // Notify user when using polling mode (WebSocket disabled)
   React.useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (isConnected) {
+    if (!autoConnect) {
+      // Set notification mode to polling
+      setNotificationMode('polling');
+
+      // Show one-time info toast per session
+      const notifiedKey = 'pollingModeNotified';
+      if (!sessionStorage.getItem(notifiedKey)) {
+        notifyInfo(
+          'Using standard refresh mode. Notifications update every 1-5 minutes.',
+          { category: 'System', duration: 6000 }
+        );
+        sessionStorage.setItem(notifiedKey, 'true');
+      }
+    }
+  }, [autoConnect, setNotificationMode, notifyInfo]);
+
+  // Update notification mode based on WebSocket connection state
+  React.useEffect(() => {
+    if (isConnected) {
+      setNotificationMode('realtime');
+      if (process.env.NODE_ENV === 'development') {
         console.log('✅ WebSocket Status: Connected');
-      } else if (hasError) {
+      }
+    } else if (hasError && autoConnect) {
+      // WebSocket failed after attempting to connect - fall back to polling
+      setNotificationMode('polling');
+      if (process.env.NODE_ENV === 'development') {
         console.log('⚠️ WebSocket Status: Unavailable (app will work without real-time updates)');
       }
     }
-  }, [isConnected, hasError]);
+  }, [isConnected, hasError, autoConnect, setNotificationMode]);
 
   return (
     <Router>

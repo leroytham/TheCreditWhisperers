@@ -352,6 +352,14 @@ const useAppStore = create<AppStoreState>()(
         clearArchivedNotifications: () => set((state) => ({
           notifications: state.notifications.filter((n: any) => !n.isArchived),
         })),
+
+        // ===== NOTIFICATION DELIVERY MODE =====
+        // Tracks whether we're using WebSocket (realtime) or polling
+        // NOT persisted - determined at runtime based on connection status
+        notificationMode: 'connecting' as const,
+
+        setNotificationMode: (mode: 'realtime' | 'polling' | 'connecting') =>
+          set({ notificationMode: mode }),
       }),
       {
         name: 'app-storage', // localStorage key

@@ -133,6 +133,10 @@ export interface AppStoreState {
   clearNotifications: () => void;
   clearActiveNotifications: () => void;
   clearArchivedNotifications: () => void;
+
+  // Notification Delivery Mode (WebSocket vs Polling)
+  notificationMode: 'realtime' | 'polling' | 'connecting';
+  setNotificationMode: (mode: 'realtime' | 'polling' | 'connecting') => void;
 }
 
 // =============================================================================
