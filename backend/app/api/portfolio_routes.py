@@ -22,7 +22,7 @@ from app.models.portfolio_model import (
     set_primary_portfolio
 )
 
-from app.database import get_portfolios_collection, get_collection
+from app.database import get_portfolios_collection
 from app.schemas.portfolio import (
     PortfolioResponse,
     PortfolioListResponse,
@@ -32,6 +32,8 @@ from app.schemas.portfolio import (
     SetPrimaryRequest
 )
 from app.core.auth import get_current_user
+from app.repositories.factory import get_holding_repository
+from app.repositories.holding_repository import HoldingRepository
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +169,8 @@ async def get_portfolio_details(
 @router.get("/{portfolio_id}/holdings", response_model=List[PortfolioHoldingResponse])
 async def get_portfolio_holdings(
     portfolio_id: str,
-    user_id: str = Depends(get_current_user)
+    user_id: str = Depends(get_current_user),
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
 ):
     """
     Get holdings for a specific portfolio.
@@ -188,12 +191,12 @@ async def get_portfolio_holdings(
         if portfolio.username != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        # Get holdings from Stock_Holding collection
-        holdings_collection = get_collection("Stock_Holding")
-        holdings = holdings_collection.find({
-            "username": portfolio.username,
-            "client_account_name": portfolio.account_name
-        })
+        # Get holdings using async repository
+        holdings = await holding_repo.get_holdings_by_account(
+            portfolio.username,
+            portfolio.account_name,
+            include_closed=True
+        )
 
         holding_responses = []
         for holding in holdings:
@@ -265,7 +268,8 @@ async def set_portfolio_as_primary(
 @router.post("/{portfolio_id}/refresh-cache", response_model=Dict[str, Any])
 async def refresh_portfolio_cache(
     portfolio_id: str,
-    user_id: str = Depends(get_current_user)
+    user_id: str = Depends(get_current_user),
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
 ):
     """
     Refresh the cached holdings data for a portfolio.
@@ -286,12 +290,12 @@ async def refresh_portfolio_cache(
         if portfolio.username != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        # Get current holdings
-        holdings_collection = get_collection("Stock_Holding")
-        holdings = list(holdings_collection.find({
-            "username": portfolio.username,
-            "client_account_name": portfolio.account_name
-        }))
+        # Get current holdings using async repository
+        holdings = await holding_repo.get_holdings_by_account(
+            portfolio.username,
+            portfolio.account_name,
+            include_closed=True
+        )
 
         # Update cache
         success = await update_portfolio_holdings_cache(

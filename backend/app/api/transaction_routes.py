@@ -22,11 +22,11 @@ from app.models.transaction import (
     TransactionType,
     TransactionSummary,
 )
-from app.database import get_accounts_collection_async
 from app.services.twr_calculator_service import TWRCalculatorService
 from app.core.dependencies import get_twr_calculator_service
-from app.repositories.factory import get_transaction_repository
+from app.repositories.factory import get_transaction_repository, get_account_repository
 from app.repositories.transaction_repository import TransactionRepository
+from app.repositories.account_repository import AccountRepository
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +230,7 @@ async def get_portfolio_performance_twr(
     account_name: str,
     timeframe: str = Query("1Y", description="Timeframe: MTD, QTD, YTD, 1Y, 5Y, ITD"),
     twr_calculator_service: TWRCalculatorService = Depends(get_twr_calculator_service),
+    account_repo: AccountRepository = Depends(get_account_repository),
 ):
     """
     Calculate portfolio performance using Time-Weighted Returns (TWR).
@@ -266,7 +267,6 @@ async def get_portfolio_performance_twr(
         from app.database import get_motor_db
 
         db = get_motor_db()
-        accounts_col = get_accounts_collection_async()
 
         # Parse timeframe to date range
         end_date = date.today()
@@ -283,11 +283,8 @@ async def get_portfolio_performance_twr(
         elif timeframe == "5Y":
             start_date = end_date - timedelta(days=365 * 5)
         elif timeframe == "ITD":
-            # Get portfolio inception date
-            account = await accounts_col.find_one({
-                "username": username,
-                "client_account_name": account_name,
-            })
+            # Get portfolio inception date using repository
+            account = await account_repo.get_by_account_name(username, account_name)
             if account and "open_date" in account:
                 start_date = datetime.strptime(account["open_date"], "%Y-%m-%d").date()
             else:

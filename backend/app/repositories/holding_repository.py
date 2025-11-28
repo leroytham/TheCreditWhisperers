@@ -345,3 +345,147 @@ class HoldingRepository(BaseRepository):
         except Exception as e:
             logger.error("Error getting total value: %s", e)
             raise
+
+    async def add_lot_to_holding(
+        self,
+        username: str,
+        account_name: str,
+        account_no: str,
+        symbol: str,
+        new_lot: Dict[str, Any],
+        new_quantity: float,
+        new_avg_price: float,
+        earliest_purchase_date: str,
+    ) -> bool:
+        """
+        Add a lot to an existing holding and update aggregated values.
+
+        Uses atomic $set and $push operations.
+
+        Args:
+            username: The user's username
+            account_name: The account name
+            account_no: The account number
+            symbol: Stock ticker symbol
+            new_lot: The lot data to add
+            new_quantity: New total quantity
+            new_avg_price: New weighted average price
+            earliest_purchase_date: Earliest purchase date to preserve
+
+        Returns:
+            True if updated successfully
+        """
+        try:
+            result = await self.collection.update_one(
+                {
+                    "username": username,
+                    "client_account_name": account_name,
+                    "account_no": account_no,
+                    "symbol": symbol.upper(),
+                },
+                {
+                    "$set": {
+                        "quantity": new_quantity,
+                        "purchase_price": round(new_avg_price, 2),
+                        "purchase_date": earliest_purchase_date,
+                        "updated_at": datetime.now(timezone.utc),
+                    },
+                    "$push": {
+                        "lots": new_lot,
+                    },
+                },
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error("Error adding lot to holding: %s", e)
+            raise
+
+    async def get_holding_by_full_key(
+        self,
+        username: str,
+        account_name: str,
+        account_no: str,
+        symbol: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a holding by all key fields.
+
+        Args:
+            username: The user's username
+            account_name: The account name
+            account_no: The account number
+            symbol: Stock ticker symbol
+
+        Returns:
+            The holding if found, None otherwise
+        """
+        return await self.find_one({
+            "username": username,
+            "client_account_name": account_name,
+            "account_no": account_no,
+            "symbol": symbol.upper(),
+        })
+
+    async def delete_holding_by_id(self, holding_id: str) -> bool:
+        """
+        Delete a holding by its MongoDB ObjectId.
+
+        Args:
+            holding_id: The ObjectId as string
+
+        Returns:
+            True if deleted successfully
+        """
+        object_id = self._to_object_id(holding_id)
+        if object_id is None:
+            return False
+
+        try:
+            result = await self.collection.delete_one({"_id": object_id})
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error("Error deleting holding by ID: %s", e)
+            raise
+
+    async def update_holding_after_sell(
+        self,
+        holding_id: str,
+        new_quantity: float,
+        new_avg_price: float,
+        earliest_date: str,
+        updated_lots: List[Dict[str, Any]],
+    ) -> bool:
+        """
+        Update holding after a partial sell operation.
+
+        Args:
+            holding_id: The holding's ObjectId as string
+            new_quantity: New total quantity after sell
+            new_avg_price: New weighted average price
+            earliest_date: Earliest remaining purchase date
+            updated_lots: Updated lots array after FIFO reduction
+
+        Returns:
+            True if updated successfully
+        """
+        object_id = self._to_object_id(holding_id)
+        if object_id is None:
+            return False
+
+        try:
+            result = await self.collection.update_one(
+                {"_id": object_id},
+                {
+                    "$set": {
+                        "quantity": new_quantity,
+                        "purchase_price": round(new_avg_price, 2),
+                        "purchase_date": earliest_date,
+                        "lots": updated_lots,
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                },
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error("Error updating holding after sell: %s", e)
+            raise

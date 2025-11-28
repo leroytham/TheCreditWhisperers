@@ -32,9 +32,13 @@ from app.core.auth import get_current_user
 from app.database import (
     get_motor_client,
     get_motor_database,
-    get_accounts_collection_async,
-    get_holdings_collection_async,
 )
+from app.repositories.factory import (
+    get_account_repository,
+    get_holding_repository,
+)
+from app.repositories.account_repository import AccountRepository
+from app.repositories.holding_repository import HoldingRepository
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -1769,7 +1773,7 @@ def reduce_lots_fifo(lots: list, quantity_to_reduce: float) -> tuple[list, float
 
 
 async def apply_sell_transaction(
-    holdings_col,
+    holding_repo: HoldingRepository,
     username: str,
     account_name: str,
     account_no: str,
@@ -1781,7 +1785,7 @@ async def apply_sell_transaction(
     Applies a SELL transaction to reduce holdings using FIFO lot tracking.
 
     Args:
-        holdings_col: MongoDB Stock_Holding collection
+        holding_repo: HoldingRepository instance
         username: Username
         account_name: Account name
         account_no: Account number
@@ -1796,12 +1800,9 @@ async def apply_sell_transaction(
         ValueError: If holding not found or insufficient shares
     """
     # Find existing holding
-    holding = await holdings_col.find_one({
-        "username": username,
-        "client_account_name": account_name,
-        "account_no": account_no,
-        "symbol": symbol.upper()
-    })
+    holding = await holding_repo.get_holding_by_full_key(
+        username, account_name, account_no, symbol
+    )
 
     if not holding:
         raise ValueError(f"No holding found for {symbol}")
@@ -1822,7 +1823,8 @@ async def apply_sell_transaction(
 
     if new_quantity <= 0:
         # Completely sold out - delete holding
-        await holdings_col.delete_one({"_id": holding["_id"]})
+        holding_id = str(holding["_id"])
+        await holding_repo.delete_holding_by_id(holding_id)
         return {
             "status": "deleted",
             "symbol": symbol,
@@ -1845,17 +1847,13 @@ async def apply_sell_transaction(
             for lot in updated_lots
         ) if updated_lots else holding.get("purchase_date")
 
-        await holdings_col.update_one(
-            {"_id": holding["_id"]},
-            {
-                "$set": {
-                    "quantity": new_quantity,
-                    "purchase_price": round(new_avg_price, 2),
-                    "purchase_date": earliest_date,
-                    "lots": updated_lots,
-                    "updated_at": datetime.utcnow()
-                }
-            }
+        holding_id = str(holding["_id"])
+        await holding_repo.update_holding_after_sell(
+            holding_id=holding_id,
+            new_quantity=new_quantity,
+            new_avg_price=new_avg_price,
+            earliest_date=earliest_date,
+            updated_lots=updated_lots,
         )
 
         return {
@@ -1868,7 +1866,11 @@ async def apply_sell_transaction(
 
 
 @router.post("/portfolio/save")
-async def save_portfolio(data: dict):
+async def save_portfolio(
+    data: dict,
+    account_repo: AccountRepository = Depends(get_account_repository),
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+):
     """
     Save a new portfolio (Account Details + Holdings) into MongoDB.
     Only saves if ALL stock symbols are valid.
@@ -1884,16 +1886,13 @@ async def save_portfolio(data: dict):
         account_name = account["accountName"].strip()
         account_no = account["accountNumber"].strip()
 
-        # 1️. Check if account already exists
-        existing_account = await get_accounts_collection_async().find_one({
-            "username": username,
-            "account_no": account_no
-        })
+        # 1. Check if account already exists
+        existing_account = await account_repo.get_by_account_no(username, account_no)
 
         if existing_account:
             raise HTTPException(status_code=400, detail="Account already exists for this user.")
 
-        # 2️. Validate ALL stock symbols before saving
+        # 2. Validate ALL stock symbols before saving
         invalid_symbols = []
         for h in holdings:
             symbol = h.get("symbol", "").upper().strip()
@@ -1913,7 +1912,7 @@ async def save_portfolio(data: dict):
             except Exception:
                 invalid_symbols.append(symbol)
 
-        # 3️. If any invalid stock symbol, reject the entire save
+        # 3. If any invalid stock symbol, reject the entire save
         if invalid_symbols:
             raise HTTPException(
                 status_code=400,
@@ -1921,17 +1920,15 @@ async def save_portfolio(data: dict):
                        f"Portfolio not saved."
             )
 
-        # 4️. Insert account (all stocks are valid at this point)
-        account_record = {
-            "username": username,
-            "client_account_name": account_name,
-            "account_no": account_no,
-            "open_date": account["openDate"],
-            "created_at": datetime.utcnow()
-        }
-        await get_accounts_collection_async().insert_one(account_record)
+        # 4. Insert account (all stocks are valid at this point)
+        await account_repo.create_account(
+            username=username,
+            account_name=account_name,
+            account_no=account_no,
+            open_date=account["openDate"],
+        )
 
-        # 5️. Insert holdings or merge if exists
+        # 5. Insert holdings or merge if exists
         holdings_added, holdings_updated = 0, 0
 
         for h in holdings:
@@ -1940,12 +1937,9 @@ async def save_portfolio(data: dict):
             purchase_price = float(h["purchasePrice"])
             purchase_date = h["purchaseDate"]
 
-            existing_holding = await get_holdings_collection_async().find_one({
-                "username": username,
-                "client_account_name": account_name,
-                "account_no": account_no,
-                "symbol": symbol
-            })
+            existing_holding = await holding_repo.get_holding_by_full_key(
+                username, account_name, account_no, symbol
+            )
 
             if existing_holding:
                 # Weighted average update
@@ -1963,31 +1957,19 @@ async def save_portfolio(data: dict):
                     "created_at": datetime.utcnow()
                 }
 
-                # Get existing lots array (or initialize empty)
-                existing_lots = existing_holding.get("lots", [])
-
                 # Determine earliest purchase date (preserve for backward compatibility)
                 existing_purchase_date = existing_holding.get("purchase_date", purchase_date)
                 earliest_date = min(existing_purchase_date, purchase_date) if existing_purchase_date else purchase_date
 
-                await get_holdings_collection_async().update_one(
-                    {
-                        "username": username,
-                        "client_account_name": account_name,
-                        "account_no": account_no,
-                        "symbol": symbol
-                    },
-                    {
-                        "$set": {
-                            "quantity": new_qty,
-                            "purchase_price": round(new_price, 2),
-                            "purchase_date": earliest_date,  # Preserve earliest, not latest
-                            "updated_at": datetime.utcnow()
-                        },
-                        "$push": {
-                            "lots": new_lot
-                        }
-                    }
+                await holding_repo.add_lot_to_holding(
+                    username=username,
+                    account_name=account_name,
+                    account_no=account_no,
+                    symbol=symbol,
+                    new_lot=new_lot,
+                    new_quantity=new_qty,
+                    new_avg_price=new_price,
+                    earliest_purchase_date=earliest_date,
                 )
                 holdings_updated += 1
             else:
@@ -2011,7 +1993,7 @@ async def save_portfolio(data: dict):
                     "lots": [first_lot],  # Initialize lots array
                     "created_at": datetime.utcnow()
                 }
-                await get_holdings_collection_async().insert_one(holding_record)
+                await holding_repo.create(holding_record)
                 holdings_added += 1
 
         return {
@@ -2032,17 +2014,19 @@ async def save_portfolio(data: dict):
 
 
 @router.get("/accounts/{username}")
-async def get_accounts_for_user(username: str):
+async def get_accounts_for_user(
+    username: str,
+    account_repo: AccountRepository = Depends(get_account_repository),
+):
     """
     Get all client accounts for a given username.
     Returns client_account_name and account_no.
     """
     try:
-        cursor = get_accounts_collection_async().find(
-            {"username": username},
-            {"_id": 0, "client_account_name": 1, "account_no": 1}
+        accounts = await account_repo.get_by_username(
+            username,
+            projection={"_id": 0, "client_account_name": 1, "account_no": 1}
         )
-        accounts = await cursor.to_list(length=None)
 
         if not accounts:
             return {"accounts": []}
@@ -2055,25 +2039,30 @@ async def get_accounts_for_user(username: str):
 
 
 @router.get("/portfolio/{username}/{account_name}")
-async def get_portfolio_details(username: str, account_name: str):
+async def get_portfolio_details(
+    username: str,
+    account_name: str,
+    account_repo: AccountRepository = Depends(get_account_repository),
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+):
     """
     Returns the account details and all holdings for this user/account.
     """
     try:
         # Fetch account details
-        account = await get_accounts_collection_async().find_one(
-            {"username": username, "client_account_name": account_name},
-            {"_id": 0}
+        account = await account_repo.get_by_account_name(
+            username, account_name, projection={"_id": 0}
         )
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
 
-        # Fetch holdings
-        cursor = get_holdings_collection_async().find(
-            {"username": username, "client_account_name": account_name},
-            {"_id": 0}
+        # Fetch holdings (include closed to match original behavior)
+        holdings = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
         )
-        holdings = await cursor.to_list(length=None)
+        # Remove _id from holdings for API response
+        for h in holdings:
+            h.pop("_id", None)
 
         return {"account": account, "holdings": holdings}
 
@@ -2086,7 +2075,11 @@ async def get_portfolio_details(username: str, account_name: str):
 
 
 @router.put("/portfolio/update")
-async def update_portfolio(data: dict):
+async def update_portfolio(
+    data: dict,
+    account_repo: AccountRepository = Depends(get_account_repository),
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+):
     try:
         username = data.get("username")
         account = data.get("accountDetails")
@@ -2118,20 +2111,22 @@ async def update_portfolio(data: dict):
             )
 
         # Step 2: Update the account details
-        result = await get_accounts_collection_async().update_one(
+        updated = await account_repo.update_account_by_query(
             {"username": username, "client_account_name": account["accountName"]},
-            {"$set": {
+            {
                 "account_no": account.get("accountNumber"),
                 "open_date": account.get("openDate"),
-                "updated_at": datetime.utcnow()
-            }}
+            }
         )
 
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Account not found")
+        if not updated:
+            # Check if account exists
+            existing = await account_repo.get_by_account_name(username, account["accountName"])
+            if not existing:
+                raise HTTPException(status_code=404, detail="Account not found")
 
         # Step 3: Clear old holdings for this account
-        await get_holdings_collection_async().delete_many({
+        await holding_repo.delete_many({
             "username": username,
             "client_account_name": account["accountName"]
         })
@@ -2150,7 +2145,7 @@ async def update_portfolio(data: dict):
             })
 
         if new_holdings:
-            await get_holdings_collection_async().insert_many(new_holdings)
+            await holding_repo.create_many(new_holdings)
 
         return {"message": "Portfolio updated successfully!"}
 
@@ -2163,7 +2158,11 @@ async def update_portfolio(data: dict):
 
 
 @router.get("/portfolio/holdings/{username}/{account_name}")
-async def get_portfolio_holdings(username: str, account_name: str):
+async def get_portfolio_holdings(
+    username: str,
+    account_name: str,
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+):
     """
     Retrieve holdings for a user and account, aggregate duplicates,
     calculate avg cost, market price, P/L, and attach live news + sentiment data.
@@ -2179,14 +2178,11 @@ async def get_portfolio_holdings(username: str, account_name: str):
     logger.info(f"[PORTFOLIO-HOLDINGS] Request started - username={username}, account={account_name}")
 
     try:
-        # Query MongoDB for holdings
+        # Query MongoDB for holdings using repository
         logger.debug(f"[PORTFOLIO-HOLDINGS-DB] Querying holdings: username={username}, account={account_name}")
-        holdings_cursor = get_holdings_collection_async().find({
-            "username": username,
-            "client_account_name": account_name
-        })
-
-        holdings_list = await holdings_cursor.to_list(length=None)
+        holdings_list = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
+        )
 
         db_elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"[PORTFOLIO-HOLDINGS-DB] Found {len(holdings_list)} holdings in {db_elapsed_ms:.0f}ms")
@@ -2367,7 +2363,13 @@ async def get_portfolio_holdings(username: str, account_name: str):
 
 
 @router.get("/portfolio/performance/{username}/{account_name}")
-async def get_portfolio_performance(username: str, account_name: str, timeframe: str = "1Y"):
+async def get_portfolio_performance(
+    username: str,
+    account_name: str,
+    timeframe: str = "1Y",
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+    account_repo: AccountRepository = Depends(get_account_repository),
+):
     """
     Calculate portfolio performance vs S&P 500 for different time periods.
 
@@ -2418,13 +2420,11 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
         from datetime import datetime, timedelta
         import pandas as pd
 
-        # Fetch ALL current holdings
+        # Fetch ALL current holdings using repository
         logger.debug(f"[PORTFOLIO-PERF-DB] Querying holdings: username={username}, account={account_name}")
-        holdings_cursor = get_holdings_collection_async().find({
-            "username": username,
-            "client_account_name": account_name
-        })
-        holdings_list = await holdings_cursor.to_list(length=None)
+        holdings_list = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
+        )
 
         db_elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"[PORTFOLIO-PERF-DB] Found {len(holdings_list)} holdings in {db_elapsed_ms:.0f}ms")
@@ -2652,10 +2652,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
         # Timeframe is configurable via query parameter (1D, 1W, 1M, 6M, YTD, 1Y, 3Y, 5Y)
         try:
             # Fetch account info to get open_date
-            account_info = await get_accounts_collection_async().find_one({
-                "username": username,
-                "client_account_name": account_name
-            })
+            account_info = await account_repo.get_by_account_name(username, account_name)
             open_date = account_info.get("open_date") if account_info else None
 
             # Generate time-series data with requested timeframe
@@ -2801,7 +2798,11 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
 
 @router.get("/portfolio/news/{username}/{account_name}")
 @async_cache_result(ttl=settings.NEWS_CACHE_TTL, key_prefix="portfolio_news")
-async def get_portfolio_news(username: str, account_name: str):
+async def get_portfolio_news(
+    username: str,
+    account_name: str,
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+):
     """
     Feature 6: Optimized portfolio-level news aggregation endpoint.
 
@@ -2816,12 +2817,10 @@ async def get_portfolio_news(username: str, account_name: str):
     try:
         logger.info("Portfolio news aggregation started for %s/%s", username, account_name)
 
-        # Fetch holdings
-        cursor = get_holdings_collection_async().find({
-            "username": username,
-            "client_account_name": account_name
-        })
-        holdings_list = await cursor.to_list(length=None)
+        # Fetch holdings using repository
+        holdings_list = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
+        )
 
         if not holdings_list:
             raise HTTPException(
@@ -2964,7 +2963,11 @@ async def get_portfolio_news(username: str, account_name: str):
 
 
 @router.get("/portfolio/sentiment/{username}/{account_name}")
-async def get_portfolio_sentiment(username: str, account_name: str):
+async def get_portfolio_sentiment(
+    username: str,
+    account_name: str,
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
+):
     """
     Feature 5: Aggregate sentiment analysis by sector for the portfolio.
 
@@ -2979,12 +2982,10 @@ async def get_portfolio_sentiment(username: str, account_name: str):
 
         logger.info("Portfolio sector sentiment aggregation started for %s/%s", username, account_name)
 
-        # Fetch holdings with sector data
-        cursor = get_holdings_collection_async().find({
-            "username": username,
-            "client_account_name": account_name
-        })
-        holdings_list = await cursor.to_list(length=None)
+        # Fetch holdings with sector data using repository
+        holdings_list = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
+        )
 
         if not holdings_list:
             raise HTTPException(
@@ -3130,7 +3131,8 @@ async def get_portfolio_daily_sentiment(
     username: str,
     account_name: str,
     days: int = None,
-    timeframe: str = None
+    timeframe: str = None,
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
 ):
     """
     Get aggregated daily sentiment data for a portfolio.
@@ -3143,12 +3145,10 @@ async def get_portfolio_daily_sentiment(
         logger.info("Portfolio daily sentiment aggregation started for %s/%s (timeframe=%s, days=%s)",
                     username, account_name, timeframe, days)
 
-        # Fetch holdings
-        cursor = get_holdings_collection_async().find({
-            "username": username,
-            "client_account_name": account_name
-        })
-        holdings_list = await cursor.to_list(length=None)
+        # Fetch holdings using repository
+        holdings_list = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
+        )
 
         if not holdings_list:
             raise HTTPException(
@@ -3217,7 +3217,8 @@ async def get_portfolio_daily_sentiment(
 async def get_portfolio_rolling_sentiment(
     username: str,
     account_name: str,
-    timeframe: str = "1W"
+    timeframe: str = "1W",
+    holding_repo: HoldingRepository = Depends(get_holding_repository),
 ):
     """
     Get aggregated rolling-window sentiment data for a portfolio.
@@ -3230,12 +3231,10 @@ async def get_portfolio_rolling_sentiment(
         logger.info("Portfolio rolling sentiment aggregation started for %s/%s (timeframe=%s)",
                     username, account_name, timeframe)
 
-        # Fetch holdings
-        cursor = get_holdings_collection_async().find({
-            "username": username,
-            "client_account_name": account_name
-        })
-        holdings_list = await cursor.to_list(length=None)
+        # Fetch holdings using repository
+        holdings_list = await holding_repo.get_holdings_by_account(
+            username, account_name, include_closed=True
+        )
 
         if not holdings_list:
             raise HTTPException(
@@ -3572,7 +3571,8 @@ async def delete_transaction_endpoint(username: str, transaction_id: str):
 async def get_portfolio_performance_twr(
     username: str,
     account_name: str,
-    timeframe: str = "1Y"  # MTD, QTD, YTD, 1Y, 5Y, ITD
+    timeframe: str = "1Y",  # MTD, QTD, YTD, 1Y, 5Y, ITD
+    account_repo: AccountRepository = Depends(get_account_repository),
 ):
     """
     Calculate portfolio performance using Time-Weighted Returns (TWR).
@@ -3624,11 +3624,8 @@ async def get_portfolio_performance_twr(
         elif timeframe == "5Y":
             start_date = end_date - timedelta(days=365 * 5)
         elif timeframe == "ITD":
-            # Get portfolio inception date
-            account = await get_accounts_collection_async().find_one({
-                "username": username,
-                "client_account_name": account_name
-            })
+            # Get portfolio inception date using repository
+            account = await account_repo.get_by_account_name(username, account_name)
             if account and "open_date" in account:
                 start_date = datetime.strptime(account["open_date"], "%Y-%m-%d").date()
             else:
@@ -3637,6 +3634,7 @@ async def get_portfolio_performance_twr(
             raise HTTPException(status_code=400, detail=f"Invalid timeframe: {timeframe}")
 
         # Calculate TWR
+        db = get_motor_database()
         twr_result = await twr_calculator_service.calculate_twr(
             username, account_name, start_date, end_date, db
         )

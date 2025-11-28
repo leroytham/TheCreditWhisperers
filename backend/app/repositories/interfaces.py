@@ -411,15 +411,100 @@ class IAccountRepository(IRepository["AccountModel"]):
     """
 
     @abstractmethod
-    async def get_by_username(self, username: str) -> List["AccountModel"]:
+    async def get_by_username(
+        self,
+        username: str,
+        projection: Optional[Dict[str, int]] = None,
+    ) -> List["AccountModel"]:
         """
         Get all accounts for a user.
 
         Args:
             username: The user's username
+            projection: Optional field projection
 
         Returns:
             List of accounts
+        """
+        pass
+
+    @abstractmethod
+    async def get_by_account_name(
+        self,
+        username: str,
+        account_name: str,
+        projection: Optional[Dict[str, int]] = None,
+    ) -> Optional["AccountModel"]:
+        """
+        Get a specific account by username and account name.
+
+        Args:
+            username: The user's username
+            account_name: The account name (client_account_name)
+            projection: Optional field projection
+
+        Returns:
+            The account if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def get_by_account_no(
+        self,
+        username: str,
+        account_no: str,
+    ) -> Optional["AccountModel"]:
+        """
+        Get a specific account by username and account number.
+
+        Args:
+            username: The user's username
+            account_no: The account number
+
+        Returns:
+            The account if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def create_account(
+        self,
+        username: str,
+        account_name: str,
+        account_no: str,
+        open_date: Optional[str] = None,
+        **kwargs,
+    ) -> str:
+        """
+        Create a new account.
+
+        Args:
+            username: The user's username
+            account_name: The account name
+            account_no: The account number
+            open_date: Account open date
+            **kwargs: Additional fields
+
+        Returns:
+            The ID of the created account
+        """
+        pass
+
+    @abstractmethod
+    async def update_account(
+        self,
+        account_id: str,
+        updates: Dict[str, Any],
+    ) -> bool:
+        """
+        Update an account with arbitrary fields.
+
+        Args:
+            account_id: The account ID
+            updates: Dictionary of fields to update
+
+        Returns:
+            True if updated successfully
         """
         pass
 
@@ -430,7 +515,7 @@ class IAccountRepository(IRepository["AccountModel"]):
         amount_delta: float,
     ) -> Tuple[bool, float]:
         """
-        Update account balance.
+        Update account balance atomically.
 
         Args:
             account_id: The account ID
@@ -438,6 +523,42 @@ class IAccountRepository(IRepository["AccountModel"]):
 
         Returns:
             Tuple of (success, new_balance)
+        """
+        pass
+
+    @abstractmethod
+    async def delete_account(
+        self,
+        account_id: str,
+        username: str,
+    ) -> bool:
+        """
+        Delete an account (with ownership check).
+
+        Args:
+            account_id: The account ID
+            username: The username (for ownership verification)
+
+        Returns:
+            True if deleted successfully
+        """
+        pass
+
+    @abstractmethod
+    async def account_exists(
+        self,
+        username: str,
+        account_no: str,
+    ) -> bool:
+        """
+        Check if an account exists by username and account number.
+
+        Args:
+            username: The user's username
+            account_no: The account number
+
+        Returns:
+            True if account exists
         """
         pass
 
