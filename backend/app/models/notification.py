@@ -297,21 +297,31 @@ class PriceAlertModel(BaseModel):
         return cls(**doc) if doc else None
 
 
-# Data Access Layer Functions
+# =============================================================================
+# DEPRECATED: Data Access Layer Functions
+# =============================================================================
+# These functions have been moved to the Repository Pattern implementation.
+# See: app/repositories/notification_repository.py
+#      app/repositories/preference_repository.py
+#      app/repositories/price_alert_repository.py
+#
+# The functions below are kept for backward compatibility with existing code
+# that hasn't been migrated yet. New code should use the repositories directly.
+# =============================================================================
+
+# Re-export repository factory functions for backward compatibility
+# This allows existing code using `from app.models.notification import create_notification`
+# to continue working while we migrate to the repository pattern.
 
 async def create_notification(notification: NotificationModel) -> str:
-    """Create a new notification in MongoDB."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.create_notification() instead.
 
-    collection = get_notifications_collection()
-    doc = notification.to_mongo()
-
-    # Set expiration if not specified (default 365 days)
-    if 'expires_at' not in doc:
-        doc['expires_at'] = datetime.utcnow() + timedelta(days=365)
-
-    result = collection.insert_one(doc)
-    return str(result.inserted_id)
+    Create a new notification in MongoDB.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.create_notification(notification)
 
 
 async def get_notifications(
@@ -324,149 +334,111 @@ async def get_notifications(
     limit: int = 50,
     offset: int = 0
 ) -> List[NotificationModel]:
-    """Get notifications for a user with filters."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.get_user_notifications() instead.
 
-    collection = get_notifications_collection()
-
-    # Build query
-    query = {"user_id": user_id}
-    if is_archived is not None:
-        query["is_archived"] = is_archived
-    if is_read is not None:
-        query["is_read"] = is_read
-    if category:
-        query["category"] = category
-
-    # Portfolio filtering
-    if portfolio_id:
-        if include_global:
-            # Include notifications for specific portfolio OR global notifications
-            query["$or"] = [
-                {"portfolio_id": portfolio_id},
-                {"is_global": True}
-            ]
-        else:
-            # Only notifications for specific portfolio
-            query["portfolio_id"] = portfolio_id
-    elif not include_global:
-        # Exclude global notifications if not specifically included
-        query["is_global"] = False
-
-    # Execute query with sorting and pagination
-    cursor = collection.find(query).sort("created_at", -1).skip(offset).limit(limit)
-
-    notifications = []
-    for doc in cursor:
-        notifications.append(NotificationModel.from_mongo(doc))
-
-    return notifications
+    Get notifications for a user with filters.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.get_user_notifications(
+        user_id=user_id,
+        is_archived=is_archived,
+        is_read=is_read,
+        category=category,
+        portfolio_id=portfolio_id,
+        include_global=include_global,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def get_unread_count(user_id: str) -> int:
-    """Get count of unread notifications for a user."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.get_unread_count() instead.
 
-    collection = get_notifications_collection()
-    count = collection.count_documents({
-        "user_id": user_id,
-        "is_read": False,
-        "is_archived": False
-    })
-    return count
+    Get count of unread notifications for a user.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.get_unread_count(user_id)
 
 
 async def mark_as_read(notification_id: str, user_id: str) -> bool:
-    """Mark a notification as read."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.mark_single_as_read() instead.
 
-    collection = get_notifications_collection()
-    result = collection.update_one(
-        {"_id": ObjectId(notification_id), "user_id": user_id},
-        {"$set": {"is_read": True, "read_at": datetime.utcnow()}}
-    )
-    return result.modified_count > 0
+    Mark a notification as read.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.mark_single_as_read(notification_id, user_id)
 
 
 async def mark_all_as_read(user_id: str) -> int:
-    """Mark all notifications as read for a user."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.mark_all_as_read() instead.
 
-    collection = get_notifications_collection()
-    result = collection.update_many(
-        {"user_id": user_id, "is_archived": False},
-        {"$set": {"is_read": True, "read_at": datetime.utcnow()}}
-    )
-    return result.modified_count
+    Mark all notifications as read for a user.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.mark_all_as_read(user_id)
 
 
 async def archive_notification(notification_id: str, user_id: str) -> bool:
-    """Archive a notification."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.archive_notification() instead.
 
-    collection = get_notifications_collection()
-    result = collection.update_one(
-        {"_id": ObjectId(notification_id), "user_id": user_id},
-        {"$set": {"is_archived": True, "archived_at": datetime.utcnow()}}
-    )
-    return result.modified_count > 0
+    Archive a notification.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.archive_notification(notification_id, user_id)
 
 
 async def delete_notification(notification_id: str, user_id: str) -> bool:
-    """Delete a notification."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.delete_notification() instead.
 
-    collection = get_notifications_collection()
-    result = collection.delete_one(
-        {"_id": ObjectId(notification_id), "user_id": user_id}
-    )
-    return result.deleted_count > 0
+    Delete a notification.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.delete_notification(notification_id, user_id)
 
 
 async def get_or_create_preferences(user_id: str) -> NotificationPreferenceModel:
-    """Get or create notification preferences for a user."""
-    from app.database import get_notification_preferences_collection
+    """
+    DEPRECATED: Use PreferenceRepository.get_or_create() instead.
 
-    collection = get_notification_preferences_collection()
-    doc = collection.find_one({"user_id": user_id})
-
-    if doc:
-        return NotificationPreferenceModel.from_mongo(doc)
-    else:
-        # Create default preferences
-        prefs = NotificationPreferenceModel(user_id=user_id)
-        doc = prefs.to_mongo()
-        collection.insert_one(doc)
-        return prefs
+    Get or create notification preferences for a user.
+    """
+    from app.repositories.factory import get_preference_repository
+    repo = get_preference_repository()
+    return await repo.get_or_create(user_id)
 
 
 async def update_preferences(user_id: str, updates: Dict[str, Any]) -> NotificationPreferenceModel:
-    """Update notification preferences for a user."""
-    from app.database import get_notification_preferences_collection
+    """
+    DEPRECATED: Use PreferenceRepository.update_preferences() instead.
 
-    collection = get_notification_preferences_collection()
-
-    # Ensure updated_at is set
-    updates["updated_at"] = datetime.utcnow()
-
-    collection.update_one(
-        {"user_id": user_id},
-        {"$set": updates},
-        upsert=True
-    )
-
-    # Return updated preferences
-    return await get_or_create_preferences(user_id)
+    Update notification preferences for a user.
+    """
+    from app.repositories.factory import get_preference_repository
+    repo = get_preference_repository()
+    return await repo.update_preferences(user_id, updates)
 
 
 async def create_price_alert(alert: PriceAlertModel) -> str:
-    """Create a new price alert."""
-    from app.database import get_price_alerts_collection
+    """
+    DEPRECATED: Use PriceAlertRepository.create_alert() instead.
 
-    collection = get_price_alerts_collection()
-    doc = alert.to_mongo()
-    result = collection.insert_one(doc)
-    return str(result.inserted_id)
+    Create a new price alert.
+    """
+    from app.repositories.factory import get_price_alert_repository
+    repo = get_price_alert_repository()
+    return await repo.create_alert(alert)
 
 
 async def get_price_alerts(
@@ -476,90 +448,56 @@ async def get_price_alerts(
     portfolio_id: Optional[str] = None,
     include_global: bool = True
 ) -> List[PriceAlertModel]:
-    """Get price alerts for a user."""
-    from app.database import get_price_alerts_collection
+    """
+    DEPRECATED: Use PriceAlertRepository.get_user_alerts() instead.
 
-    collection = get_price_alerts_collection()
-
-    # Build query
-    query = {"user_id": user_id}
-    if is_active is not None:
-        query["is_active"] = is_active
-    if ticker:
-        query["ticker"] = ticker.upper()
-
-    # Portfolio filtering
-    if portfolio_id:
-        if include_global:
-            # Include alerts for specific portfolio OR global alerts
-            query["$or"] = [
-                {"portfolio_id": portfolio_id},
-                {"is_global": True}
-            ]
-        else:
-            # Only alerts for specific portfolio
-            query["portfolio_id"] = portfolio_id
-
-    # Execute query
-    cursor = collection.find(query).sort("created_at", -1)
-
-    alerts = []
-    for doc in cursor:
-        alerts.append(PriceAlertModel.from_mongo(doc))
-
-    return alerts
+    Get price alerts for a user.
+    """
+    from app.repositories.factory import get_price_alert_repository
+    repo = get_price_alert_repository()
+    return await repo.get_user_alerts(
+        user_id=user_id,
+        is_active=is_active,
+        ticker=ticker,
+        portfolio_id=portfolio_id,
+        include_global=include_global,
+    )
 
 
 async def get_active_alerts_for_ticker(ticker: str) -> List[PriceAlertModel]:
-    """Get all active alerts for a specific ticker (across all users)."""
-    from app.database import get_price_alerts_collection
+    """
+    DEPRECATED: Use PriceAlertRepository.get_alerts_for_ticker() instead.
 
-    collection = get_price_alerts_collection()
-
-    cursor = collection.find({
-        "ticker": ticker.upper(),
-        "is_active": True,
-        "triggered": False
-    })
-
-    alerts = []
-    for doc in cursor:
-        alerts.append(PriceAlertModel.from_mongo(doc))
-
-    return alerts
+    Get all active alerts for a specific ticker (across all users).
+    """
+    from app.repositories.factory import get_price_alert_repository
+    repo = get_price_alert_repository()
+    return await repo.get_alerts_for_ticker(ticker)
 
 
 async def trigger_price_alert(alert_id: str, triggered_price: float) -> bool:
-    """Mark a price alert as triggered."""
-    from app.database import get_price_alerts_collection
+    """
+    DEPRECATED: Use PriceAlertRepository.trigger_alert() instead.
 
-    collection = get_price_alerts_collection()
-    result = collection.update_one(
-        {"_id": ObjectId(alert_id)},
-        {
-            "$set": {
-                "triggered": True,
-                "triggered_at": datetime.utcnow(),
-                "triggered_price": triggered_price,
-                "is_active": False  # Deactivate after triggering
-            }
-        }
-    )
-    return result.modified_count > 0
+    Mark a price alert as triggered.
+    """
+    from app.repositories.factory import get_price_alert_repository
+    repo = get_price_alert_repository()
+    return await repo.trigger_alert(alert_id, triggered_price)
 
 
 async def delete_price_alert(alert_id: str, user_id: str) -> bool:
-    """Delete a price alert."""
-    from app.database import get_price_alerts_collection
+    """
+    DEPRECATED: Use PriceAlertRepository.delete_alert() instead.
 
-    collection = get_price_alerts_collection()
-    result = collection.delete_one(
-        {"_id": ObjectId(alert_id), "user_id": user_id}
-    )
-    return result.deleted_count > 0
+    Delete a price alert.
+    """
+    from app.repositories.factory import get_price_alert_repository
+    repo = get_price_alert_repository()
+    return await repo.delete_alert(alert_id, user_id)
 
 
-# Portfolio-specific notification functions
+# Portfolio-specific notification functions (deprecated wrappers)
 
 async def get_portfolio_notifications(
     user_id: str,
@@ -568,7 +506,11 @@ async def get_portfolio_notifications(
     limit: int = 50,
     offset: int = 0
 ) -> List[NotificationModel]:
-    """Get notifications for a specific portfolio."""
+    """
+    DEPRECATED: Use NotificationRepository.get_user_notifications() instead.
+
+    Get notifications for a specific portfolio.
+    """
     return await get_notifications(
         user_id=user_id,
         portfolio_id=portfolio_id,
@@ -583,27 +525,18 @@ async def get_portfolio_unread_count(
     portfolio_id: str,
     include_global: bool = True
 ) -> int:
-    """Get count of unread notifications for a specific portfolio."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.get_unread_count() instead.
 
-    collection = get_notifications_collection()
-
-    query = {
-        "user_id": user_id,
-        "is_read": False,
-        "is_archived": False
-    }
-
-    if include_global:
-        query["$or"] = [
-            {"portfolio_id": portfolio_id},
-            {"is_global": True}
-        ]
-    else:
-        query["portfolio_id"] = portfolio_id
-
-    count = collection.count_documents(query)
-    return count
+    Get count of unread notifications for a specific portfolio.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.get_unread_count(
+        user_id=user_id,
+        portfolio_id=portfolio_id,
+        include_global=include_global,
+    )
 
 
 async def get_multi_portfolio_notifications(
@@ -613,51 +546,31 @@ async def get_multi_portfolio_notifications(
     limit: int = 50,
     offset: int = 0
 ) -> List[NotificationModel]:
-    """Get notifications for multiple portfolios."""
-    from app.database import get_notifications_collection
+    """
+    DEPRECATED: Use NotificationRepository.get_multi_portfolio_notifications() instead.
 
-    collection = get_notifications_collection()
-
-    query = {
-        "user_id": user_id,
-        "is_archived": False
-    }
-
-    if include_global:
-        query["$or"] = [
-            {"portfolio_id": {"$in": portfolio_ids}},
-            {"is_global": True}
-        ]
-    else:
-        query["portfolio_id"] = {"$in": portfolio_ids}
-
-    cursor = collection.find(query).sort("created_at", -1).skip(offset).limit(limit)
-
-    notifications = []
-    for doc in cursor:
-        notifications.append(NotificationModel.from_mongo(doc))
-
-    return notifications
+    Get notifications for multiple portfolios.
+    """
+    from app.repositories.factory import get_notification_repository
+    repo = get_notification_repository()
+    return await repo.get_multi_portfolio_notifications(
+        user_id=user_id,
+        portfolio_ids=portfolio_ids,
+        include_global=include_global,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def get_portfolio_alerts_for_ticker(
     ticker: str,
     portfolio_id: str
 ) -> List[PriceAlertModel]:
-    """Get all active alerts for a ticker in a specific portfolio."""
-    from app.database import get_price_alerts_collection
+    """
+    DEPRECATED: Use PriceAlertRepository.get_portfolio_alerts_for_ticker() instead.
 
-    collection = get_price_alerts_collection()
-
-    cursor = collection.find({
-        "ticker": ticker.upper(),
-        "portfolio_id": portfolio_id,
-        "is_active": True,
-        "triggered": False
-    })
-
-    alerts = []
-    for doc in cursor:
-        alerts.append(PriceAlertModel.from_mongo(doc))
-
-    return alerts
+    Get all active alerts for a ticker in a specific portfolio.
+    """
+    from app.repositories.factory import get_price_alert_repository
+    repo = get_price_alert_repository()
+    return await repo.get_portfolio_alerts_for_ticker(ticker, portfolio_id)

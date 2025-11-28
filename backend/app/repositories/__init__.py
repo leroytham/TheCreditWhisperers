@@ -32,6 +32,8 @@ from app.repositories.factory import (
     get_portfolio_repository,
     get_holding_repository,
     get_account_repository,
+    get_price_alert_repository,
+    get_preference_repository,
     clear_repository_caches,
 )
 
@@ -47,5 +49,7 @@ __all__ = [
     "get_portfolio_repository",
     "get_holding_repository",
     "get_account_repository",
+    "get_price_alert_repository",
+    "get_preference_repository",
     "clear_repository_caches",
 ]

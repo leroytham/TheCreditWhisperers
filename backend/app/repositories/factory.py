@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from app.repositories.holding_repository import HoldingRepository
     from app.repositories.account_repository import AccountRepository
     from app.repositories.price_alert_repository import PriceAlertRepository
+    from app.repositories.preference_repository import PreferenceRepository
 
 
 @lru_cache(maxsize=1)
@@ -125,6 +126,19 @@ def get_price_alert_repository() -> "PriceAlertRepository":
     return PriceAlertRepository()
 
 
+@lru_cache(maxsize=1)
+def get_preference_repository() -> "PreferenceRepository":
+    """
+    Get singleton PreferenceRepository instance.
+
+    Returns:
+        Cached PreferenceRepository instance
+    """
+    from app.repositories.preference_repository import PreferenceRepository
+
+    return PreferenceRepository()
+
+
 def clear_repository_caches() -> None:
     """
     Clear all repository caches.
@@ -146,6 +160,7 @@ def clear_repository_caches() -> None:
     get_holding_repository.cache_clear()
     get_account_repository.cache_clear()
     get_price_alert_repository.cache_clear()
+    get_preference_repository.cache_clear()
 
 
 # Convenience function to get all repositories at once
@@ -165,4 +180,5 @@ def get_all_repositories() -> dict:
         "holding": get_holding_repository(),
         "account": get_account_repository(),
         "price_alert": get_price_alert_repository(),
+        "preference": get_preference_repository(),
     }
