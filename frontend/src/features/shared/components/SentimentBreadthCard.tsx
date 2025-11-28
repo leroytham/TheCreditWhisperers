@@ -49,7 +49,7 @@ const SentimentBreadthCard = ({
   const isLowConfidence = breadthQuality === 'low_confidence';
 
   // Get breadth details for display
-  const getBreadthDetails = (score) => {
+  const getBreadthDetails = (score: number | null | undefined) => {
     if (score === null || score === undefined) {
       return { label: 'N/A', color: 'text-gray-400', bgColor: 'bg-gray-100', borderColor: 'border-gray-200' };
     }
@@ -71,7 +71,7 @@ const SentimentBreadthCard = ({
   const breadthDetails = getBreadthDetails(sentimentBreadthScore);
 
   // Format breadth score as percentage
-  const formatBreadthPercentage = (score) => {
+  const formatBreadthPercentage = (score: number | null | undefined) => {
     if (score === null || score === undefined) return '--';
     const percentage = Math.abs(score * 100).toFixed(0);
     const sign = score > 0 ? '+' : score < 0 ? '-' : '';

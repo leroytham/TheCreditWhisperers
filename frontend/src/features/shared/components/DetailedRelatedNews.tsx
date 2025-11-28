@@ -1,4 +1,4 @@
-// frontend/src/features/shared/components/DetailedRelatedNews.jsx
+// frontend/src/features/shared/components/DetailedRelatedNews.tsx
 
 import React, { useState, useMemo, useCallback } from 'react';
 import CompactNewsCard from './CompactNewsCard';
@@ -8,12 +8,82 @@ import NewsEmpty from './NewsEmpty';
 import NewsError from './NewsError';
 import { Search, SortAsc, Grid2x2, Grid3x3 } from 'lucide-react';
 
+// Type definitions
+interface TickerSentiment {
+  ticker?: string;
+  relevance_score?: string | number;
+  ticker_sentiment_score?: string | number;
+}
+
+interface Topic {
+  topic: string;
+  relevance_score?: string | number;
+}
+
+// Input type - accepts both formats of topics (string[] from global type or Topic[] from API)
+interface NewsArticleInput {
+  title?: string;
+  summary?: string;
+  link?: string;
+  url?: string;
+  image?: string;
+  banner_image?: string;
+  provider?: string;
+  source?: string;
+  publish_timestamp?: string;
+  publish_date?: string;
+  time_published?: string;
+  sentiment_score?: number;
+  overall_sentiment_score?: number;
+  sentiment_label?: string;
+  overall_sentiment_label?: string;
+  topics?: Topic[] | string[];
+  ticker_sentiment?: TickerSentiment[];
+}
+
+// Transformed type - topics normalized to Topic[]
+interface NewsArticle {
+  title?: string;
+  summary?: string;
+  link?: string;
+  url?: string;
+  image?: string;
+  banner_image?: string;
+  provider?: string;
+  source?: string;
+  publish_timestamp?: string;
+  publish_date?: string;
+  time_published?: string;
+  sentiment_score?: number;
+  overall_sentiment_score?: number;
+  sentiment_label?: string;
+  overall_sentiment_label?: string;
+  topics?: Topic[];
+  ticker_sentiment?: TickerSentiment[];
+}
+
+interface ApiMetadata {
+  sector_name?: string;
+  tickers_queried?: string[];
+}
+
+interface DetailedRelatedNewsProps {
+  news: NewsArticleInput[] | null;
+  displayName: string;
+  ticker?: string;
+  loading: boolean;
+  error: string | null;
+  handleRetry?: () => void;
+  className?: string;
+  apiMetadata?: ApiMetadata;
+}
+
 /**
  * Enhanced news feed component that displays all API data
  * with filtering, sorting, and comprehensive information display
  * Supports 3 and 5 column layouts with modal details
  */
-const DetailedRelatedNews = ({
+const DetailedRelatedNews: React.FC<DetailedRelatedNewsProps> = ({
   news,
   displayName,
   ticker,
@@ -22,15 +92,6 @@ const DetailedRelatedNews = ({
   handleRetry,
   className = '',
   apiMetadata = {},
-}: {
-  news: any;
-  displayName: any;
-  ticker: any;
-  loading: any;
-  error: any;
-  handleRetry?: () => void;
-  className?: string;
-  apiMetadata?: any;
 }) => {
   const [filter, setFilter] = useState('');
   const [sortOption, setSortOption] = useState('date-desc');
@@ -38,28 +99,42 @@ const DetailedRelatedNews = ({
   const [selectedSentiment, setSelectedSentiment] = useState('all');
   const [minRelevance, setMinRelevance] = useState(0); // Minimum ticker relevance score
   const [columnLayout, setColumnLayout] = useState(3); // 3 or 5 columns
-  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Transform API response to match CompactNewsCard expected fields
-  const transformedNews = useMemo(() => {
+  const transformedNews = useMemo((): NewsArticle[] => {
     if (!news || news.length === 0) return [];
 
-    return news.map(article => ({
-      ...article,
-      // Map API fields to component expected fields
-      banner_image: article.image || article.banner_image,
-      source: article.provider || article.source,
-      time_published: article.publish_timestamp || article.publish_date || article.time_published,
-      overall_sentiment_score: article.sentiment_score ?? article.overall_sentiment_score,
-      overall_sentiment_label: article.sentiment_label || article.overall_sentiment_label,
-      // Keep other fields as-is
-      title: article.title,
-      summary: article.summary,
-      link: article.link,
-      topics: article.topics || [],
-      ticker_sentiment: article.ticker_sentiment || []
-    }));
+    return news.map((article: NewsArticleInput): NewsArticle => {
+      // Normalize topics: convert string[] to Topic[] if needed
+      const normalizedTopics: Topic[] = (article.topics || []).map((t): Topic => {
+        if (typeof t === 'string') {
+          return { topic: t };
+        }
+        return t;
+      });
+
+      return {
+        title: article.title,
+        summary: article.summary,
+        link: article.link,
+        url: article.url,
+        image: article.image,
+        banner_image: article.image || article.banner_image,
+        provider: article.provider,
+        source: article.provider || article.source,
+        publish_timestamp: article.publish_timestamp,
+        publish_date: article.publish_date,
+        time_published: article.publish_timestamp || article.publish_date || article.time_published,
+        sentiment_score: article.sentiment_score,
+        overall_sentiment_score: article.sentiment_score ?? article.overall_sentiment_score,
+        sentiment_label: article.sentiment_label,
+        overall_sentiment_label: article.sentiment_label || article.overall_sentiment_label,
+        topics: normalizedTopics,
+        ticker_sentiment: article.ticker_sentiment || []
+      };
+    });
   }, [news]);
 
   // Determine if this is a sector view based on apiMetadata
@@ -74,7 +149,7 @@ const DetailedRelatedNews = ({
   }, [isSector, apiMetadata]);
 
   // Calculate relevance score based on sector vs entity context
-  const calculateRelevanceScore = useCallback((article) => {
+  const calculateRelevanceScore = useCallback((article: NewsArticle) => {
     if (!article.ticker_sentiment || article.ticker_sentiment.length === 0) {
       return 0;
     }
@@ -82,9 +157,9 @@ const DetailedRelatedNews = ({
     if (isSector) {
       // For sectors/portfolios: sum raw relevance scores (independent of sentiment direction)
       let totalRelevance = 0;
-      article.ticker_sentiment.forEach(ts => {
+      article.ticker_sentiment.forEach((ts: TickerSentiment) => {
         if (sectorTickers.has(ts.ticker?.toUpperCase())) {
-          const relevanceScore = parseFloat(ts.relevance_score) || 0;
+          const relevanceScore = parseFloat(String(ts.relevance_score)) || 0;
           totalRelevance += relevanceScore;
         }
       });
@@ -94,7 +169,7 @@ const DetailedRelatedNews = ({
       const tickerSent = article.ticker_sentiment.find(
         ts => ts.ticker?.toUpperCase() === ticker?.toUpperCase()
       );
-      return tickerSent ? parseFloat(tickerSent.relevance_score) || 0 : 0;
+      return tickerSent ? parseFloat(String(tickerSent.relevance_score)) || 0 : 0;
     }
   }, [isSector, sectorTickers, ticker]);
 
@@ -105,9 +180,9 @@ const DetailedRelatedNews = ({
     const topicsSet = new Set<string>();
     const sentimentsSet = new Set<string>();
 
-    transformedNews.forEach(article => {
+    transformedNews.forEach((article: NewsArticle) => {
       if (article.topics) {
-        article.topics.forEach(t => topicsSet.add(t.topic));
+        article.topics.forEach((t: Topic) => topicsSet.add(t.topic));
       }
       if (article.overall_sentiment_label) {
         sentimentsSet.add(article.overall_sentiment_label);
@@ -180,7 +255,7 @@ const DetailedRelatedNews = ({
     return filtered;
   }, [transformedNews, filter, selectedTopic, selectedSentiment, sortOption, minRelevance, ticker, calculateRelevanceScore]);
 
-  const handleArticleClick = (article) => {
+  const handleArticleClick = (article: NewsArticle) => {
     setSelectedArticle(article);
     setIsModalOpen(true);
   };
@@ -218,8 +293,8 @@ const DetailedRelatedNews = ({
         {newsToDisplay.map((article, index) => (
           <CompactNewsCard
             key={`${index}-${article.title?.substring(0, 20) || ''}-${article.time_published || ''}`}
-            article={article}
-            onClick={handleArticleClick}
+            article={article as Parameters<typeof CompactNewsCard>[0]['article']}
+            onClick={handleArticleClick as Parameters<typeof CompactNewsCard>[0]['onClick']}
           />
         ))}
       </div>
@@ -351,7 +426,7 @@ const DetailedRelatedNews = ({
 
       {/* Modal */}
       <NewsDetailModal
-        article={selectedArticle}
+        article={selectedArticle as Parameters<typeof NewsDetailModal>[0]['article']}
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         mode="modal"

@@ -1,29 +1,34 @@
 import React, { useState } from 'react';
-import { ChevronDown, Star, Info } from 'lucide-react';
+import { Star, Info } from 'lucide-react';
+
+interface Source {
+  name: string;
+  sentiment: number;
+  reliability?: number;
+  articles?: number;
+  consistency?: number;
+}
+
+interface SentimentSourceBreakdownProps {
+  sources?: Source[];
+  timeframe?: string;
+  loading?: boolean;
+  className?: string;
+}
 
 /**
  * SentimentSourceBreakdown Component
  *
  * Displays sentiment and reliability metrics by news source
  * Helps users understand which sources are contributing to overall sentiment
- *
- * @param {Object} props
- * @param {Array} props.sources - Array of source objects with:
- *   - name: string (e.g., 'Bloomberg')
- *   - sentiment: number (-1 to 1)
- *   - reliability: number (0-1, as percentage)
- *   - articles: number (article count)
- * @param {string} props.timeframe - Display timeframe (e.g., '1W', '1M')
- * @param {boolean} props.loading - Whether data is loading
- * @param {string} props.className - Additional CSS classes
  */
-const SentimentSourceBreakdown = ({
+const SentimentSourceBreakdown: React.FC<SentimentSourceBreakdownProps> = ({
   sources = [],
   timeframe = '1W',
   loading = false,
   className = ''
 }) => {
-  const [expandedSource, setExpandedSource] = useState(null);
+  const [expandedSource, setExpandedSource] = useState<number | null>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
@@ -34,7 +39,7 @@ const SentimentSourceBreakdown = ({
   const displaySources = showAll ? sortedSources : sortedSources.slice(0, 3);
   const hasMore = sortedSources.length > 3;
 
-  const getSentimentLabel = (score) => {
+  const getSentimentLabel = (score: number): string => {
     if (score >= 0.5) return 'Very Bullish';
     if (score >= 0.2) return 'Bullish';
     if (score >= -0.2) return 'Neutral';
@@ -42,7 +47,7 @@ const SentimentSourceBreakdown = ({
     return 'Very Bearish';
   };
 
-  const getSentimentColor = (score) => {
+  const getSentimentColor = (score: number): string => {
     if (score >= 0.5) return 'text-green-700';
     if (score >= 0.2) return 'text-green-600';
     if (score >= -0.2) return 'text-gray-600';
@@ -50,7 +55,7 @@ const SentimentSourceBreakdown = ({
     return 'text-red-600';
   };
 
-  const getBarColor = (score) => {
+  const getBarColor = (score: number): string => {
     if (score >= 0.5) return 'bg-green-600';
     if (score >= 0.2) return 'bg-green-500';
     if (score >= -0.2) return 'bg-gray-400';
@@ -58,7 +63,7 @@ const SentimentSourceBreakdown = ({
     return 'bg-red-600';
   };
 
-  const getReliabilityBadge = (reliability) => {
+  const getReliabilityBadge = (reliability: number): string => {
     if (reliability >= 0.9) return 'bg-green-100 text-green-800';
     if (reliability >= 0.75) return 'bg-blue-100 text-blue-800';
     return 'bg-yellow-100 text-yellow-800';

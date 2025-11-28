@@ -1,17 +1,35 @@
-// frontend/src/features/shared/components/CompactNewsCard.jsx
+// frontend/src/features/shared/components/CompactNewsCard.tsx
 
 import React from 'react';
 import { ExternalLink, TrendingUp } from 'lucide-react';
+
+interface Article {
+  title?: string;
+  summary?: string;
+  source?: string;
+  url?: string;
+  banner_image?: string;
+  time_published?: string;
+  overall_sentiment_score?: number;
+  overall_sentiment_label?: string;
+  topics?: Array<{ topic?: string }>;
+  [key: string]: unknown;
+}
+
+interface CompactNewsCardProps {
+  article: Article;
+  onClick: (article: Article) => void;
+}
 
 /**
  * Compact news card for multi-column grid layouts
  * Clicking opens the full detail modal
  */
-const CompactNewsCard = ({
+const CompactNewsCard: React.FC<CompactNewsCardProps> = ({
   article,
   onClick,
 }) => {
-  const formatPublishTime = (timeStr) => {
+  const formatPublishTime = (timeStr: string | undefined): string => {
     if (!timeStr) return 'Unknown';
 
     // Check if it's an ISO date format (e.g., "2025-11-13T11:53:58+00:00" or "2025-11-13")
@@ -45,7 +63,8 @@ const CompactNewsCard = ({
     return 'Unknown';
   };
 
-  const getSentimentColor = (score) => {
+  const getSentimentColor = (score: number | undefined): string => {
+    if (score === undefined) return 'text-gray-600 bg-gray-50 border-gray-200';
     if (score >= 0.35) return 'text-green-600 bg-green-50 border-green-200';
     if (score >= 0.15) return 'text-lime-600 bg-lime-50 border-lime-200';
     if (score > -0.15) return 'text-gray-600 bg-gray-50 border-gray-200';
@@ -57,7 +76,7 @@ const CompactNewsCard = ({
     onClick(article);
   };
 
-  const handleLinkClick = (e) => {
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.stopPropagation();
   };
 

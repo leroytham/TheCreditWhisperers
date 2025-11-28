@@ -2,33 +2,46 @@ import React from 'react';
 import { getSentimentColor } from '../utils/formatters';
 import { getSentimentDetails, getMomentumDetails, getMomentumArrow, formatMomentumValue, getMomentumColor } from '../utils/sentimentHelpers';
 
+interface SentimentObject {
+  avg_score?: number | null;
+  [key: string]: unknown;
+}
+
+interface OverallSentimentProps {
+  sentiment?: SentimentObject | number | null;
+  sentimentAvg?: number | null;
+  newsCount?: number;
+  dataQuality?: string;
+  halfLifeHours?: number;
+  sentimentMomentum?: number | null;
+  momentumLabel?: string | null;
+  momentumInterpretation?: string | null;
+  momentumQuality?: string | null;
+  fastScore?: number | null;
+  slowScore?: number | null;
+  halfLifeFastHours?: number;
+  halfLifeSlowHours?: number;
+  sentimentVolatility?: number | null;
+  volatilityQuality?: string | null;
+  effectiveNewsVolume?: number | null;
+  volumeInterpretation?: string | null;
+  className?: string;
+}
+
+interface VolatilityDetails {
+  label: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
 /**
  * Shared OverallSentiment Component
  *
  * Displays overall sentiment metrics with momentum analysis (MACD-style Fast vs. Slow)
  * Used by both Entity and Sector features
- *
- * @param {Object} props
- * @param {Object|number} props.sentiment - Sentiment object with avg_score property or direct number value
- * @param {number} props.sentimentAvg - Alternative: direct sentiment average value
- * @param {number} props.newsCount - Number of news articles analyzed
- * @param {string} props.dataQuality - Data quality indicator ("good", "low_confidence", "insufficient_recent_data", "no_data")
- * @param {number} props.halfLifeHours - Half-life of news recency decay in hours
- * @param {number} props.sentimentMomentum - Momentum value (fast_score - slow_score)
- * @param {string} props.momentumLabel - Momentum classification label
- * @param {string} props.momentumInterpretation - Human-readable momentum interpretation
- * @param {string} props.momentumQuality - Momentum data quality
- * @param {number} props.fastScore - Fast score (short half-life)
- * @param {number} props.slowScore - Slow score (long half-life)
- * @param {number} props.halfLifeFastHours - Fast score half-life in hours
- * @param {number} props.halfLifeSlowHours - Slow score half-life in hours
- * @param {number} props.sentimentVolatility - Weighted standard deviation of sentiment scores
- * @param {string} props.volatilityQuality - Volatility data quality indicator
- * @param {number} props.effectiveNewsVolume - Sum of all weighted news (quantity/coverage metric)
- * @param {string} props.volumeInterpretation - Coverage level interpretation
- * @param {string} props.className - Additional CSS classes for wrapper
  */
-const OverallSentiment = ({
+const OverallSentiment: React.FC<OverallSentimentProps> = ({
   sentiment,
   sentimentAvg,
   newsCount = 0,
@@ -69,7 +82,7 @@ const OverallSentiment = ({
   const isVolatilityInsufficient = volatilityQuality === 'insufficient_recent_data' || volatilityQuality === null;
 
   // Get volatility level and color
-  const getVolatilityDetails = (vol) => {
+  const getVolatilityDetails = (vol: number | null | undefined): VolatilityDetails => {
     if (vol === null || vol === undefined) return { label: 'N/A', color: 'text-gray-400', bgColor: 'bg-gray-100', borderColor: 'border-gray-200' };
     if (vol < 0.1) return { label: 'Low Uncertainty', color: 'text-green-700', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
     if (vol < 0.3) return { label: 'Medium Uncertainty', color: 'text-yellow-700', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
@@ -127,9 +140,9 @@ const OverallSentiment = ({
               </div>
               <div>
                 <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                  avgScore > 0
+                  (avgScore ?? 0) > 0
                     ? 'bg-green-100 text-green-800'
-                    : avgScore < 0
+                    : (avgScore ?? 0) < 0
                     ? 'bg-red-100 text-red-800'
                     : 'bg-gray-100 text-gray-800'
                 }`}>

@@ -8,13 +8,51 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../../../services/api';
 
-export const usePortfolioNews = (username, accountName) => {
-  const [news, setNews] = useState([]);
-  const [apiMetadata, setApiMetadata] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+// Type definitions
+interface NewsItem {
+  title?: string;
+  url?: string;
+  time_published?: string;
+  authors?: string[];
+  summary?: string;
+  source?: string;
+  overall_sentiment_score?: number;
+  overall_sentiment_label?: string;
+  ticker_sentiment?: Array<{
+    ticker: string;
+    relevance_score: string;
+    ticker_sentiment_score: string;
+    ticker_sentiment_label: string;
+  }>;
+}
 
-  const fetchPortfolioNews = useCallback(async (controller) => {
+interface ApiMetadata {
+  items?: number;
+  sentiment_score_definition?: string;
+  relevance_score_definition?: string;
+  tickers_queried: string[];
+  is_portfolio: boolean;
+  total_articles?: number;
+}
+
+export const usePortfolioNews = (
+  username: string | undefined,
+  accountName: string | undefined
+) => {
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [apiMetadata, setApiMetadata] = useState<ApiMetadata>({
+    tickers_queried: [],
+    is_portfolio: true,
+  });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchPortfolioNews = useCallback(async (controller: AbortController) => {
+    // Guard against undefined values
+    if (!username || !accountName) {
+      return;
+    }
+
     try {
       const response = await apiService.getPortfolioNews(username, accountName, {
         signal: controller.signal
@@ -40,11 +78,12 @@ export const usePortfolioNews = (username, accountName) => {
         total_articles: data.total_articles,
       });
 
-    } catch (err) {
+    } catch (err: unknown) {
       // Only set error if request wasn't aborted
       if (!controller.signal.aborted) {
         console.error('Error fetching portfolio news:', err);
-        setError(err.message);
+        const error = err as { message?: string };
+        setError(error?.message || 'Failed to fetch portfolio news');
       }
     } finally {
       // Only clear loading if request wasn't aborted

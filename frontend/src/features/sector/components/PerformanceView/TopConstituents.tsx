@@ -1,9 +1,36 @@
 import React, { useState, useEffect } from 'react';
 
+// Type definitions
+interface Constituent {
+  name?: string;
+  symbol?: string;
+  industry?: string;
+  price?: number;
+  currentPrice?: number;
+  marketCap?: number;
+  market_cap?: number;
+  percentOfAssets?: number;
+  percent_of_assets?: number;
+  volume?: number;
+  sentimentScore?: number;
+  sentiment_score?: number;
+  sentimentMomentum?: number;
+  sentiment_momentum?: number;
+  fiftyTwoWeekHigh?: number;
+  fifty_two_week_high?: number;
+  fiftyTwoWeekLow?: number;
+  fifty_two_week_low?: number;
+}
+
+interface TopConstituentsProps {
+  constituents: Constituent[] | null;
+  sectorName?: string;
+}
+
 /**
  * TopConstituents component - displays all holdings in the sector
  */
-const TopConstituents = ({ constituents, sectorName }) => {
+const TopConstituents: React.FC<TopConstituentsProps> = ({ constituents, sectorName }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'percentOfAssets', direction: 'desc' });
 
   // Debug: Log constituent data
@@ -39,7 +66,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
     return score !== null && score !== undefined;
   });
   const avgSentiment = constituentsWithSentiment.length > 0
-    ? constituentsWithSentiment.reduce((sum, c) => sum + (c.sentimentScore ?? c.sentiment_score), 0) / constituentsWithSentiment.length
+    ? constituentsWithSentiment.reduce((sum, c) => sum + (c.sentimentScore ?? c.sentiment_score ?? 0), 0) / constituentsWithSentiment.length
     : 0;
   const bullishCount = constituents.filter(c => {
     const score = c.sentimentScore ?? c.sentiment_score;
@@ -51,7 +78,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
   }).length;
 
   // Sort function
-  const handleSort = (key) => {
+  const handleSort = (key: string) => {
     setSortConfig({
       key,
       direction: sortConfig.key === key && sortConfig.direction === 'desc' ? 'asc' : 'desc'
@@ -67,7 +94,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
     'sentimentMomentum'
   ]);
 
-  const getSortValue = (item, key) => {
+  const getSortValue = (item: Constituent, key: string): string | number | null => {
     let rawValue;
     switch (key) {
       case 'price':
@@ -90,7 +117,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
         rawValue = item.sentimentMomentum ?? item.sentiment_momentum;
         break;
       default:
-        rawValue = item[key];
+        rawValue = (item as Record<string, unknown>)[key];
         break;
     }
 
@@ -107,7 +134,8 @@ const TopConstituents = ({ constituents, sectorName }) => {
       return rawValue.toLowerCase();
     }
 
-    return rawValue;
+    // For any other types, return null
+    return null;
   };
 
   const sortedConstituents = [...constituents].sort((a, b) => {
@@ -132,7 +160,7 @@ const TopConstituents = ({ constituents, sectorName }) => {
     return aVal < bVal ? 1 : -1;
   });
 
-  const SortIcon = ({ columnKey }) => {
+  const SortIcon = ({ columnKey }: { columnKey: string }) => {
     if (sortConfig.key !== columnKey) {
       return <span className="ml-1 text-gray-400">↕</span>;
     }

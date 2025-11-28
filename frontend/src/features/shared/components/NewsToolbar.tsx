@@ -1,19 +1,21 @@
-// frontend/src/features/shared/components/NewsToolbar.jsx
+// frontend/src/features/shared/components/NewsToolbar.tsx
 
 import React from 'react';
 import { Search, List, LayoutGrid, ChevronsUpDown } from 'lucide-react';
 
+interface NewsToolbarProps {
+  onFilterChange: (value: string) => void;
+  onSortChange: (value: string) => void;
+  onLayoutChange: (value: 'list' | 'grid') => void;
+  sortOption: string;
+  layoutOption: 'list' | 'grid';
+  resultCount: number;
+}
+
 /**
  * A toolbar for filtering, sorting, and changing the layout of the news feed.
- * @param {object} props
- * @param {function(string): void} props.onFilterChange - Callback for search input changes.
- * @param {function(string): void} props.onSortChange - Callback for sort option changes.
- * @param {function(string): void} props.onLayoutChange - Callback for layout changes.
- * @param {string} props.sortOption - The current sort option.
- * @param {string} props.layoutOption - The current layout option ('list' or 'grid').
- * @param {number} props.resultCount - The number of news articles being displayed.
  */
-const NewsToolbar = ({
+const NewsToolbar: React.FC<NewsToolbarProps> = ({
   onFilterChange,
   onSortChange,
   onLayoutChange,

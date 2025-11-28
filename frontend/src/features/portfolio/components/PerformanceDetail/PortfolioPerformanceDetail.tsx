@@ -8,6 +8,79 @@ import { formatCurrency, formatPercentage, normalizeToPercentageReturn, normaliz
 import { parseExchangeDate } from '../../../shared/utils/formatters';
 import apiService from '../../../../services/api';
 
+// Types for price data points
+interface PriceDataPoint {
+  date: string;
+  close: number;
+  price: number;
+  capital_flow?: number;
+  portfolio_value?: number;
+  lot_breakdown?: unknown[];
+}
+
+interface TWRData {
+  twr_return?: number;
+  has_cash_flows?: boolean;
+  error?: string;
+}
+
+// Types for holding attribution data
+interface HoldingAttribution {
+  symbol: string;
+  quantity: number;
+  return_percent?: number;
+  gain_loss?: number;
+}
+
+// Types for API data
+interface ApiData {
+  top_gainers?: HoldingAttribution[];
+  top_losers?: HoldingAttribution[];
+  holdings_count?: number;
+}
+
+// Types for events
+interface PortfolioEvent {
+  date: string;
+  type: string;
+  start_date?: string;
+  label?: string;
+  trend?: string;
+}
+
+// Performance data state interface
+interface PerformanceDataState {
+  priceData: PriceDataPoint[];
+  benchmarkPriceData: PriceDataPoint[];
+  events: PortfolioEvent[];
+  timeframe: string;
+  currentValue: number;
+  previousClose: number;
+  absoluteReturn: number;
+  adjustedAbsoluteReturn: number;
+  cumulativeCapitalFlow: number;
+  percentReturn: number;
+  twrReturn: number | null;
+  hasCashFlows: boolean;
+  displayReturn: number;
+  twrData: TWRData | null;
+  benchmarkReturn: number;
+  outperformance: number;
+  holdingsCount: number;
+  period: string;
+  apiData: ApiData;
+  apiPeriod: string;
+  missingSymbols: string[];
+}
+
+// Chart display data state
+interface ChartDisplayDataState extends PerformanceDataState {
+  chartPriceData: (PriceDataPoint & { isZeroBaseline?: boolean; hasNoInvestments?: boolean; baselineValue?: number; baselineDate?: string })[];
+  chartBenchmarkData: PriceDataPoint[];
+  chartDisplayReturn: number | null;
+  chartOutperformance: number | null;
+}
+
 /**
  * PortfolioPerformanceDetail Component
  *
@@ -26,26 +99,26 @@ import apiService from '../../../../services/api';
  * // Used in Portfolio page "Performance" tab
  * <PortfolioPerformanceDetail />
  */
-const PortfolioPerformanceDetail = () => {
+const PortfolioPerformanceDetail: React.FC = () => {
   // Default to NYSE timezone for portfolio data (US market standard)
   const DEFAULT_EXCHANGE = 'NYSE';
 
-  const [timeframe, setTimeframe] = useState('1M');
-  const [showEvents, setShowEvents] = useState(true);
-  const [performanceData, setPerformanceData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [retryTrigger, setRetryTrigger] = useState(0);
+  const [timeframe, setTimeframe] = useState<string>('1M');
+  const [showEvents, setShowEvents] = useState<boolean>(true);
+  const [performanceData, setPerformanceData] = useState<PerformanceDataState | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState<number>(0);
 
   // Display mode: 'value' (Portfolio Value $) or 'percent' (% Return)
   // Use lazy initializer with SSR guard to prevent crashes in SSR/test environments
-  const [displayMode, setDisplayMode] = useState(() =>
+  const [displayMode, setDisplayMode] = useState<'value' | 'percent'>(() =>
     typeof window !== 'undefined'
-      ? localStorage.getItem('portfolioDisplayMode') || 'value'
+      ? (localStorage.getItem('portfolioDisplayMode') as 'value' | 'percent') || 'value'
       : 'value'
   );
   // Show S&P 500 benchmark overlay (only in percent mode)
-  const [showBenchmark, setShowBenchmark] = useState(() =>
+  const [showBenchmark, setShowBenchmark] = useState<boolean>(() =>
     typeof window !== 'undefined'
       ? localStorage.getItem('portfolioShowBenchmark') === 'true'
       : false
@@ -53,7 +126,7 @@ const PortfolioPerformanceDetail = () => {
 
   // Use hooks for account selection
   const { selectedAccount } = useSelectedAccount();
-  const abortControllerRef = useRef(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Persist display preferences to localStorage
   useEffect(() => {
@@ -100,7 +173,13 @@ const PortfolioPerformanceDetail = () => {
 
         // Transform historical data points for chart
         // PriceChart expects 'close' or 'price' field, not 'value'
-        const priceData = (historicalData.data_points || []).map(point => ({
+        interface RawDataPoint {
+          date: string;
+          portfolio_value: number;
+          capital_flow?: number;
+          lot_breakdown?: unknown[];
+        }
+        const priceData: PriceDataPoint[] = (historicalData.data_points || []).map((point: RawDataPoint) => ({
           date: point.date,
           close: point.portfolio_value, // Required by generateChartData
           price: point.portfolio_value,  // Fallback field
@@ -117,7 +196,12 @@ const PortfolioPerformanceDetail = () => {
           : 0;
 
         // Transform benchmark data using absolute values for chart display
-        const benchmarkPriceData = (benchmarkData.data_points || []).map(point => ({
+        interface RawBenchmarkPoint {
+          date: string;
+          close?: number;
+          value?: number;
+        }
+        const benchmarkPriceData: PriceDataPoint[] = (benchmarkData.data_points || []).map((point: RawBenchmarkPoint) => ({
           date: point.date,
           close: point.value || 0,  // Use absolute S&P 500 index value for proper normalization
           price: point.value || 0
@@ -128,7 +212,7 @@ const PortfolioPerformanceDetail = () => {
         const previousClose = priceData.length > 0 ? priceData[0].close : 0;
 
         // Calculate cumulative capital flow across the period
-        const cumulativeCapitalFlow = priceData.reduce((sum, point) => sum + (point.capital_flow || 0), 0);
+        const cumulativeCapitalFlow = priceData.reduce((sum: number, point: PriceDataPoint) => sum + (point.capital_flow || 0), 0);
 
         // Always calculate simple return from chart data (first to last point)
         const absoluteReturn = currentValue - previousClose;
@@ -154,16 +238,26 @@ const PortfolioPerformanceDetail = () => {
         else if (timeframe === '3M' || timeframe === '6M') periodForBenchmark = 'QTD';
         else if (timeframe === 'YTD' || timeframe === '1Y') periodForBenchmark = 'YTD';
 
-        const benchmarkApiData = data.performance?.find(p => p.period === periodForBenchmark) || data.performance?.[0] || {};
+        interface PerformancePeriod {
+          period: string;
+          holdings_count?: number;
+          top_gainers?: HoldingAttribution[];
+          top_losers?: HoldingAttribution[];
+        }
+        const benchmarkApiData: ApiData = data.performance?.find((p: PerformancePeriod) => p.period === periodForBenchmark) || data.performance?.[0] || {};
 
         // Calculate trend for each event based on portfolio value movement
-        const eventsWithTrend = events.map(e => {
+        interface RawEvent {
+          date: string;
+          type: string;
+        }
+        const eventsWithTrend: PortfolioEvent[] = events.map((e: RawEvent) => {
           const eventDate = parseExchangeDate(e.date, DEFAULT_EXCHANGE);
 
           // Find the event date in priceData
-          const eventIndex = priceData.findIndex(p => {
+          const eventIndex = priceData.findIndex((p: PriceDataPoint) => {
             const pointDate = parseExchangeDate(p.date, DEFAULT_EXCHANGE);
-            return pointDate.toISOString().slice(0, 10) === eventDate.toISOString().slice(0, 10);
+            return pointDate?.toISOString().slice(0, 10) === eventDate?.toISOString().slice(0, 10);
           });
 
           let trend = 'Upward'; // Default to upward
@@ -211,14 +305,15 @@ const PortfolioPerformanceDetail = () => {
         });
 
         setLoading(false);
-      } catch (err) {
+      } catch (err: unknown) {
         // Don't show error for aborted requests
-        if (err.name === 'AbortError' || err.name === 'CanceledError') {
+        const error = err as { name?: string; response?: { data?: { detail?: string } }; message?: string };
+        if (error.name === 'AbortError' || error.name === 'CanceledError') {
           return;
         }
 
         setLoading(false);
-        setError(err.response?.data?.detail || err.message || 'Failed to load performance data');
+        setError(error.response?.data?.detail || error.message || 'Failed to load performance data');
         console.error('Error fetching performance data:', err);
       }
     };
@@ -241,22 +336,25 @@ const PortfolioPerformanceDetail = () => {
   };
 
   // Compute chart display data based on displayMode (client-side only, no refetch)
-  const chartDisplayData = useMemo(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chartDisplayData = useMemo((): ChartDisplayDataState | null => {
     if (!performanceData) return null;
 
-    let chartPriceData = performanceData.priceData;
-    let chartBenchmarkData = performanceData.benchmarkPriceData;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let chartPriceData: any[] = performanceData.priceData;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let chartBenchmarkData: any[] = performanceData.benchmarkPriceData;
 
     // Normalize to percentage if in percent mode
     if (displayMode === 'percent') {
       if (performanceData.priceData.length > 0) {
         // Check for available normalization methods
         // Check actual capital flow data instead of relying on hasCashFlows flag (which requires TWR success)
-        const hasCapitalFlows = performanceData.priceData.some(p => p.capital_flow && p.capital_flow !== 0);
+        const hasCapitalFlows = performanceData.priceData.some((p) => p.capital_flow && p.capital_flow !== 0);
         const hasTWRData = performanceData.twrData && !performanceData.twrData.error;
 
         // Calculate lot coverage to avoid using hybrid mode prematurely
-        const pointsWithLots = performanceData.priceData.filter(p => p.lot_breakdown && p.lot_breakdown.length > 0).length;
+        const pointsWithLots = performanceData.priceData.filter((p) => p.lot_breakdown && p.lot_breakdown.length > 0).length;
         const totalPoints = performanceData.priceData.length;
         const lotCoveragePercent = totalPoints > 0 ? (pointsWithLots / totalPoints) * 100 : 0;
         const hasAdequateLotCoverage = lotCoveragePercent > 80;
@@ -266,40 +364,45 @@ const PortfolioPerformanceDetail = () => {
           // This correctly handles pre-period vs in-period purchases
           // Only used when >80% of points have lot data to avoid chart collapse
           const periodStartDate = performanceData.priceData[0]?.date;
-          chartPriceData = normalizeToHybridReturn(performanceData.priceData, periodStartDate, performanceData.twrData);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          chartPriceData = normalizeToHybridReturn(performanceData.priceData as any[], periodStartDate, performanceData.twrData as any);
         } else if (hasTWRData && hasCapitalFlows) {
           // Good: Use TWR-based normalization if available
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           chartPriceData = normalizeToTWR(
-            performanceData.priceData,
-            performanceData.twrData
+            performanceData.priceData as any[],
+            performanceData.twrData as any
           );
         } else if (hasCapitalFlows) {
           // Decent: Use capital flow adjustment
-          chartPriceData = normalizeToPercentageReturnWithCapitalFlows(performanceData.priceData);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          chartPriceData = normalizeToPercentageReturnWithCapitalFlows(performanceData.priceData as any[]);
         } else {
           // Simple: No capital flows, use basic normalization
-          chartPriceData = normalizeToPercentageReturn(performanceData.priceData);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          chartPriceData = normalizeToPercentageReturn(performanceData.priceData as any[]);
         }
       }
 
       // Benchmark always uses simple normalization (no capital flows in S&P 500)
       if (performanceData.benchmarkPriceData.length > 0) {
-        chartBenchmarkData = normalizeToPercentageReturn(performanceData.benchmarkPriceData);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        chartBenchmarkData = normalizeToPercentageReturn(performanceData.benchmarkPriceData as any[]);
       }
 
       // Filter out pre-baseline points (close: null) to prevent hard zero-line rendering
       // normalizeToPercentageReturn emits close: null for points before first investment
-      chartPriceData = chartPriceData.filter(point => point.close !== null && point.close !== undefined);
+      chartPriceData = chartPriceData.filter((point) => point.close !== null && point.close !== undefined);
 
       // Synchronize benchmark to match portfolio's date range
       // Without this, portfolio and benchmark cover different date ranges after filtering,
       // causing misleading comparisons (e.g., portfolio shows Jun-Dec while benchmark shows Jan-Dec)
       if (chartPriceData.length > 0) {
         // Create set of valid dates from filtered portfolio data
-        const validDates = new Set(chartPriceData.map(p => p.date));
+        const validDates = new Set(chartPriceData.map((p) => p.date));
 
         // Filter benchmark to only include dates present in portfolio data
-        chartBenchmarkData = chartBenchmarkData.filter(point => validDates.has(point.date));
+        chartBenchmarkData = chartBenchmarkData.filter((point) => validDates.has(point.date));
 
         // Re-normalize benchmark to start from 0% at the new first point
         // This ensures portfolio and benchmark have matching baselines for visual comparison
@@ -307,9 +410,9 @@ const PortfolioPerformanceDetail = () => {
         // causing visual and numerical comparison errors
         if (chartBenchmarkData.length > 0) {
           const benchmarkStartValue = chartBenchmarkData[0].close || 0;
-          chartBenchmarkData = chartBenchmarkData.map(point => ({
+          chartBenchmarkData = chartBenchmarkData.map((point) => ({
             ...point,
-            close: point.close !== null ? point.close - benchmarkStartValue : null
+            close: point.close !== null ? point.close - benchmarkStartValue : 0
           }));
         }
       }
@@ -421,7 +524,7 @@ const PortfolioPerformanceDetail = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <div>
             <p className="text-sm text-gray-500">S&P 500 Return</p>
-            <p className={`text-2xl font-bold ${performanceData?.benchmarkReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <p className={`text-2xl font-bold ${(performanceData?.benchmarkReturn ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatPercentage(performanceData?.benchmarkReturn || 0)}
             </p>
           </div>
@@ -603,7 +706,7 @@ const PortfolioPerformanceDetail = () => {
                       Portfolio started at $0. Percentage returns are calculated from the first investment of{' '}
                       <span className="font-semibold">${baselineValue?.toFixed(2)}</span>
                       {baselineDate && (
-                        <span> on {parseExchangeDate(baselineDate, DEFAULT_EXCHANGE).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <span> on {parseExchangeDate(baselineDate, DEFAULT_EXCHANGE)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                       )}.
                     </p>
                   </div>
@@ -683,10 +786,13 @@ const PortfolioPerformanceDetail = () => {
 
               return (
                 <PriceChart
-                  priceData={chartDisplayData.chartPriceData}
-                  benchmarkData={chartDisplayData.chartBenchmarkData || []}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  priceData={chartDisplayData.chartPriceData as any}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  benchmarkData={(chartDisplayData.chartBenchmarkData || []) as any}
                   showBenchmark={displayMode === 'percent' && showBenchmark}
-                  significantEvents={showEvents ? chartDisplayData.events : []}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  significantEvents={(showEvents ? chartDisplayData.events : []) as any}
                   ticker={selectedAccount?.accountNumber || 'Portfolio'}
                   companyName={selectedAccount?.accountName || 'Portfolio'}
                   timeframe={timeframe}

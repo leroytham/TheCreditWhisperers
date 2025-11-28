@@ -3,22 +3,42 @@ import { industryData } from '../../config/sectorData';
 import { getCountryName } from '../../config/regionData';
 import { resolveSectorTicker, resolveDisplayTicker } from '../../utils/tickerResolver';
 
+// Type definitions
+interface Sector {
+  name: string;
+  index: string;
+  ticker?: string;
+  available: boolean;
+}
+
+interface SectorContext {
+  countryCode: string;
+  countryName: string;
+  sector: Sector;
+}
+
+interface SectorListProps {
+  selectedCountry: string | null;
+  selectedSector: string | null;
+  onSectorSelect?: (context: SectorContext) => void;
+}
+
 /**
  * SectorList component - displays sectors for selected country
  */
-const SectorList = ({ selectedCountry, selectedSector, onSectorSelect }) => {
-  const countryName = getCountryName(selectedCountry);
+const SectorList: React.FC<SectorListProps> = ({ selectedCountry, selectedSector, onSectorSelect }) => {
+  const countryName = getCountryName(selectedCountry || '');
 
-  const handleSectorClick = (sector) => {
+  const handleSectorClick = (sector: Sector) => {
     if (!sector.available) return;
 
-    const resolvedTicker = resolveSectorTicker(sector, selectedCountry);
+    const resolvedTicker = resolveSectorTicker(sector, selectedCountry ?? undefined);
 
-    if (onSectorSelect) {
+    if (onSectorSelect && selectedCountry) {
       onSectorSelect({
         countryCode: selectedCountry,
         countryName: countryName,
-        sector: { ...sector, ticker: resolvedTicker },
+        sector: { ...sector, ticker: resolvedTicker ?? sector.ticker },
       });
     }
   };
@@ -31,7 +51,7 @@ const SectorList = ({ selectedCountry, selectedSector, onSectorSelect }) => {
         </h2>
         {selectedCountry && (
           <p className="text-sm text-gray-600 mt-1">
-            {industryData[selectedCountry]?.length || 0} sectors available
+            {((industryData as Record<string, Sector[]>)[selectedCountry])?.length || 0} sectors available
           </p>
         )}
       </div>
@@ -47,8 +67,8 @@ const SectorList = ({ selectedCountry, selectedSector, onSectorSelect }) => {
         )}
         {selectedCountry && (
           <>
-            {industryData[selectedCountry] ? (
-              industryData[selectedCountry].map((sector) => (
+            {(industryData as Record<string, Sector[]>)[selectedCountry] ? (
+              ((industryData as Record<string, Sector[]>)[selectedCountry]).map((sector: Sector) => (
                 <div
                   key={sector.name}
                   className={`filter-item p-4 rounded-lg cursor-pointer flex flex-col border transition-all ${

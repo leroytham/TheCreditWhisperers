@@ -12,7 +12,14 @@ import React from 'react';
  * @param {Array} props.timeframes - Custom array of timeframes to display (optional)
  * @param {string} props.className - Additional CSS classes for wrapper
  */
-const TimeRangeSelector = ({
+interface TimeRangeSelectorProps {
+  activeTimeframe?: string;
+  onTimeframeChange: (timeframe: string) => void;
+  timeframes?: string[];
+  className?: string;
+}
+
+const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({
   activeTimeframe = '1W',
   onTimeframeChange,
   timeframes = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y'],

@@ -1,18 +1,21 @@
 import React from 'react';
 
+type SpinnerSize = 'sm' | 'md' | 'lg' | 'xl';
+
+interface LoadingSpinnerProps {
+  size?: SpinnerSize;
+  message?: string;
+  fullScreen?: boolean;
+  overlay?: boolean;
+  className?: string;
+}
+
 /**
  * LoadingSpinner Component
  *
  * Reusable loading spinner to replace scattered loading states
- *
- * @param {Object} props
- * @param {string} props.size - Size variant: 'sm', 'md', 'lg', 'xl' (default: 'md')
- * @param {string} props.message - Optional loading message
- * @param {boolean} props.fullScreen - If true, renders centered full screen overlay
- * @param {boolean} props.overlay - If true, renders as overlay over parent
- * @param {string} props.className - Additional CSS classes
  */
-const LoadingSpinner = ({
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   size = 'md',
   message = '',
   fullScreen = false,
@@ -20,22 +23,22 @@ const LoadingSpinner = ({
   className = '',
 }) => {
   // Size configurations
-  const sizeClasses = {
+  const sizeClasses: Record<SpinnerSize, string> = {
     sm: 'w-4 h-4 border-2',
     md: 'w-8 h-8 border-2',
     lg: 'w-12 h-12 border-3',
     xl: 'w-16 h-16 border-4',
   };
 
-  const textSizeClasses = {
+  const textSizeClasses: Record<SpinnerSize, string> = {
     sm: 'text-xs',
     md: 'text-sm',
     lg: 'text-base',
     xl: 'text-lg',
   };
 
-  const spinnerClass = sizeClasses[size] || sizeClasses.md;
-  const textClass = textSizeClasses[size] || textSizeClasses.md;
+  const spinnerClass = sizeClasses[size];
+  const textClass = textSizeClasses[size];
 
   const spinner = (
     <div className="flex flex-col items-center justify-center gap-3" aria-live="polite" aria-busy="true">
@@ -71,17 +74,24 @@ const LoadingSpinner = ({
   return spinner;
 };
 
+type InlineSpinnerSize = 'xs' | 'sm' | 'md';
+
+interface InlineSpinnerProps {
+  size?: InlineSpinnerSize;
+  className?: string;
+}
+
 /**
  * Inline loading spinner for buttons and small spaces
  */
-export const InlineSpinner = ({ size = 'sm', className = '' }) => {
-  const sizeClasses = {
+export const InlineSpinner: React.FC<InlineSpinnerProps> = ({ size = 'sm', className = '' }) => {
+  const sizeClasses: Record<InlineSpinnerSize, string> = {
     xs: 'w-3 h-3 border',
     sm: 'w-4 h-4 border-2',
     md: 'w-5 h-5 border-2',
   };
 
-  const spinnerClass = sizeClasses[size] || sizeClasses.sm;
+  const spinnerClass = sizeClasses[size];
 
   return (
     <div

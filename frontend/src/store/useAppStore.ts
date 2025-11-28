@@ -120,8 +120,9 @@ const useAppStore = create<AppStoreState>()(
               id: String(Date.now() + Math.random()),
               createdAt: new Date().toISOString(),
               isActive: true,
-              triggered: false,
               ...alert,
+              // Ensure triggered defaults to false if not provided
+              triggered: alert.triggered ?? false,
             } as PriceAlert,
           ],
         })),

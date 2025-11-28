@@ -2,23 +2,36 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 
+interface NotificationItem {
+  id: string | number;
+  title?: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+  isArchived: boolean;
+}
+
+interface NotificationDropdownProps {
+  notifications?: NotificationItem[];
+}
+
 /**
  * NotificationDropdown Component
  *
  * Bell icon with dropdown showing recent notifications
  */
-const NotificationDropdown = ({ notifications = [] }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
+const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ notifications = [] }) => {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const recentNotifications = notifications.filter(n => !n.isArchived).slice(0, 5);
-  const hasUnread = recentNotifications.some(n => !n.isRead);
+  const recentNotifications = notifications.filter((n: NotificationItem) => !n.isArchived).slice(0, 5);
+  const hasUnread = recentNotifications.some((n: NotificationItem) => !n.isRead);
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };

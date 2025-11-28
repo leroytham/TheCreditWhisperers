@@ -11,12 +11,17 @@ import { createPortal } from 'react-dom';
  * @param {React.ReactNode} props.children - The content to display in the tooltip
  * @param {string} props.className - Additional CSS classes for the icon wrapper
  */
-const TooltipPortal = ({ children, className = '' }) => {
+interface TooltipPortalProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const TooltipPortal: React.FC<TooltipPortalProps> = ({ children, className = '' }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const iconRef = useRef(null);
-  const tooltipRef = useRef(null);
-  const timeoutRef = useRef(null);
+  const iconRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const calculatePosition = useCallback(() => {
     if (!iconRef.current) return;

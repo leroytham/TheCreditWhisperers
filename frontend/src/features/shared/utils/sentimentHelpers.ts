@@ -1,4 +1,4 @@
-// frontend/src/features/shared/utils/sentimentHelpers.js
+// frontend/src/features/shared/utils/sentimentHelpers.ts
 
 import {
   ArrowUp,
@@ -6,7 +6,37 @@ import {
   ArrowRight,
   ArrowDownRight,
   ArrowDown,
+  LucideIcon,
 } from 'lucide-react';
+
+// Type definitions
+interface SentimentDetails {
+  label: string;
+  Icon: LucideIcon;
+  colorClasses: string;
+}
+
+interface RelevanceDetails {
+  value: string;
+  displayValue: string;
+  colorClasses: string;
+  label: string;
+}
+
+interface MomentumDetails {
+  label: string;
+  Icon: LucideIcon;
+  colorClasses: string;
+  arrow: string;
+  interpretation: string;
+  direction: string | null;
+  strength: string | null;
+}
+
+interface MomentumArrow {
+  symbol: string;
+  color: string;
+}
 
 /**
  * Maps sentiment score to a descriptive label, icon, and color classes.
@@ -22,7 +52,7 @@ import {
  * @param {number} score - The sentiment score, typically between -1 and 1.
  * @returns {object} An object containing the label, Icon component, and Tailwind CSS color classes.
  */
-export const getSentimentDetails = (score) => {
+export const getSentimentDetails = (score: number | null | undefined): SentimentDetails => {
   if (score === null || score === undefined) {
     return {
       label: 'Neutral',
@@ -72,14 +102,14 @@ export const getSentimentDetails = (score) => {
  * @param {number} score - The relevance score (0 < x <= 1)
  * @returns {object} An object containing the formatted display value and color classes.
  */
-export const getRelevanceDetails = (score) => {
+export const getRelevanceDetails = (score: number | null | undefined): RelevanceDetails | null => {
   if (score === null || score === undefined || score <= 0 || score > 1) {
     return null; // Invalid or missing relevance score
   }
 
   // Determine color intensity based on relevance
   // Higher relevance = stronger color
-  let colorClasses;
+  let colorClasses: string;
   if (score >= 0.8) {
     colorClasses = 'text-blue-700 bg-blue-100 border-blue-200';
   } else if (score >= 0.6) {
@@ -114,7 +144,11 @@ export const getRelevanceDetails = (score) => {
  * @param {number} thresholdStrong - Strong momentum threshold (default: 0.20)
  * @returns {object} Object containing label, Icon, colorClasses, arrow, and interpretation
  */
-export const getMomentumDetails = (momentum, thresholdWeak = 0.10, thresholdStrong = 0.20) => {
+export const getMomentumDetails = (
+  momentum: number | null | undefined,
+  thresholdWeak: number = 0.10,
+  thresholdStrong: number = 0.20
+): MomentumDetails => {
   if (momentum === null || momentum === undefined) {
     return {
       label: 'No Data',
@@ -196,7 +230,7 @@ export const getMomentumDetails = (momentum, thresholdWeak = 0.10, thresholdStro
  * @param {number} momentum - The momentum value
  * @returns {string} Tailwind CSS classes for text color
  */
-export const getMomentumColor = (momentum) => {
+export const getMomentumColor = (momentum: number | null | undefined): string => {
   if (momentum === null || momentum === undefined) return 'text-gray-400';
   if (momentum >= 0.20) return 'text-green-600';      // Strong positive
   if (momentum >= 0.10) return 'text-green-500';      // Positive
@@ -210,7 +244,7 @@ export const getMomentumColor = (momentum) => {
  * @param {number} momentum - The momentum value
  * @returns {string} Formatted momentum string (e.g., "+0.15", "-0.08", "~0.00")
  */
-export const formatMomentumValue = (momentum) => {
+export const formatMomentumValue = (momentum: number | null | undefined): string => {
   if (momentum === null || momentum === undefined) return '--';
 
   const absValue = Math.abs(momentum);
@@ -230,7 +264,10 @@ export const formatMomentumValue = (momentum) => {
  * @param {number} thresholdWeak - Weak momentum threshold (default: 0.10)
  * @returns {object} Object with arrow symbol and color class
  */
-export const getMomentumArrow = (momentum, thresholdWeak = 0.10) => {
+export const getMomentumArrow = (
+  momentum: number | null | undefined,
+  thresholdWeak: number = 0.10
+): MomentumArrow => {
   if (momentum === null || momentum === undefined) {
     return { symbol: '', color: 'text-gray-400' };
   }

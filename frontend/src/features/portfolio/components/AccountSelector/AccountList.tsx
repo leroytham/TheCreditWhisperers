@@ -1,32 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import apiService from '../../../../services/api';
 
+// Type definitions
+interface SelectedUser {
+  username: string;
+  displayName?: string;
+}
+
+interface AccountPerformance {
+  day: number;
+  month: number;
+  year: number;
+}
+
+interface Account {
+  account_name: string;
+  account_number: string;
+  total_value?: number;
+  formattedValue?: string;
+  holdings_count?: number;
+  performance?: AccountPerformance;
+  risk_level?: string;
+  last_updated?: string;
+}
+
+interface AccountListProps {
+  selectedUser: SelectedUser | null;
+  onAccountSelect: (params: { user: SelectedUser; account: Account }) => void;
+}
+
 /**
  * AccountList Component
  *
  * Displays all accounts for a selected user with portfolio values, holdings count,
  * and performance metrics (1D, 1M, 1Y). Fetches account data from API with fallback
  * to mock data for development.
- *
- * @param {Object} props - Component props
- * @param {Object} props.selectedUser - The user whose accounts should be displayed
- * @param {string} props.selectedUser.username - Username to fetch accounts for
- * @param {string} [props.selectedUser.displayName] - Display name of the user
- * @param {Function} props.onAccountSelect - Callback when an account is selected
- * @param {Object} props.onAccountSelect.user - Selected user object
- * @param {Object} props.onAccountSelect.account - Selected account object
- * @returns {React.ReactElement} Rendered account list component
- *
- * @example
- * <AccountList
- *   selectedUser={user}
- *   onAccountSelect={({user, account}) => handleAccountChange(user, account)}
- * />
  */
-const AccountList = ({ selectedUser, onAccountSelect }) => {
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+const AccountList: React.FC<AccountListProps> = ({ selectedUser, onAccountSelect }) => {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedUser) {
@@ -36,15 +49,15 @@ const AccountList = ({ selectedUser, onAccountSelect }) => {
     }
   }, [selectedUser]);
 
-  const fetchAccounts = async (username) => {
+  const fetchAccounts = async (username: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       const response = await apiService.getAccounts(username);
-      const data = response.data;
+      const data = response.data as { accounts?: Account[] };
 
       // Enrich accounts with additional metadata
-      const enrichedAccounts = (data.accounts || []).map(account => ({
+      const enrichedAccounts: Account[] = (data.accounts || []).map((account: Account) => ({
         ...account,
         formattedValue: formatCurrency(account.total_value || 0),
         performance: account.performance || { day: 0, month: 0, year: 0 }
@@ -62,18 +75,19 @@ const AccountList = ({ selectedUser, onAccountSelect }) => {
     }
   };
 
-  const getMockAccounts = (username) => {
+  const getMockAccounts = (username: string): Account[] => {
     // Generate mock accounts based on username
     const accountTypes = ['Retirement', 'Investment', 'Trading', 'Savings', 'Trust'];
     const numAccounts = Math.floor(Math.random() * 4) + 1;
-    const accounts = [];
+    const mockAccounts: Account[] = [];
 
     for (let i = 0; i < numAccounts; i++) {
       const accountType = accountTypes[i % accountTypes.length];
       const accountNumber = `${Math.random().toString().substr(2, 4)}-${Math.random().toString().substr(2, 4)}`;
       const totalValue = Math.floor(Math.random() * 900000) + 100000;
+      const riskLevels: string[] = ['Conservative', 'Moderate', 'Aggressive'];
 
-      accounts.push({
+      mockAccounts.push({
         account_name: `${accountType} Account`,
         account_number: accountNumber,
         total_value: totalValue,
@@ -84,15 +98,15 @@ const AccountList = ({ selectedUser, onAccountSelect }) => {
           month: (Math.random() - 0.3) * 10,
           year: (Math.random() - 0.2) * 30
         },
-        risk_level: ['Conservative', 'Moderate', 'Aggressive'][Math.floor(Math.random() * 3)],
+        risk_level: riskLevels[Math.floor(Math.random() * 3)],
         last_updated: new Date().toISOString()
       });
     }
 
-    return accounts;
+    return mockAccounts;
   };
 
-  const formatCurrency = (value) => {
+  const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
@@ -101,12 +115,12 @@ const AccountList = ({ selectedUser, onAccountSelect }) => {
     }).format(value);
   };
 
-  const formatPercentage = (value) => {
+  const formatPercentage = (value: number): string => {
     const prefix = value >= 0 ? '+' : '';
     return `${prefix}${value.toFixed(2)}%`;
   };
 
-  const getPerformanceColor = (value) => {
+  const getPerformanceColor = (value: number): string => {
     if (value > 0) return 'text-green-600';
     if (value < 0) return 'text-red-600';
     return 'text-gray-600';

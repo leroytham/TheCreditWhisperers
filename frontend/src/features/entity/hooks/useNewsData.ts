@@ -5,10 +5,114 @@
  * Optimized with React Query for automatic caching and background refetching
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
 import apiService from '../../../services/api';
+import type { NewsArticle, SourceInfo, TimeframeOption, SentimentByTopic, TopicWeights } from '../../../types';
 
-export const useNewsData = (ticker, timeframe = '1Y', options = {}) => {
+interface NewsResponse {
+  news?: NewsArticle[];
+  feed?: NewsArticle[];
+  items?: number;
+  sentiment_score_definition?: string;
+  relevance_score_definition?: string;
+  avg_score?: number;
+  sentiment_momentum?: number;
+  fast_score?: number;
+  slow_score?: number;
+  momentum_label?: string;
+  momentum_interpretation?: string;
+  momentum_quality?: string;
+  momentum_direction?: string;
+  momentum_strength?: number;
+  half_life_fast_hours?: number;
+  half_life_slow_hours?: number;
+  data_quality?: string;
+  sentiment_volatility?: number;
+  volatility_quality?: string;
+  effective_news_volume?: number;
+  volume_interpretation?: string;
+  sentiment_breadth_score?: number;
+  num_bullish_articles?: number;
+  num_bearish_articles?: number;
+  total_directional_articles?: number;
+  breadth_interpretation?: string;
+  breadth_quality?: string;
+  sentiment_z_score?: number;
+  z_score_interpretation?: string;
+  z_score_historical_mean?: number;
+  z_score_historical_std?: number;
+  z_score_days_of_history?: number;
+  z_score_quality?: string;
+  source_concentration_hhi?: number;
+  concentration_interpretation?: string;
+  top_sources?: SourceInfo[];
+  dominant_topic?: string;
+  dominant_topic_weight?: number;
+  dominant_topic_percentage?: number;
+  topic_count?: number;
+  sentiment_by_topic?: SentimentByTopic;
+  topic_weights?: TopicWeights;
+}
+
+interface SentimentData {
+  avg_score?: number;
+  sentiment_momentum?: number;
+  fast_score?: number;
+  slow_score?: number;
+  momentum_label?: string;
+  momentum_interpretation?: string;
+  momentum_quality?: string;
+  momentum_direction?: string;
+  momentum_strength?: number;
+  half_life_fast_hours?: number;
+  half_life_slow_hours?: number;
+  data_quality?: string;
+  sentiment_volatility?: number;
+  volatility_quality?: string;
+  effective_news_volume?: number;
+  volume_interpretation?: string;
+  sentiment_breadth_score?: number;
+  num_bullish_articles?: number;
+  num_bearish_articles?: number;
+  total_directional_articles?: number;
+  breadth_interpretation?: string;
+  breadth_quality?: string;
+  sentiment_z_score?: number;
+  z_score_interpretation?: string;
+  z_score_historical_mean?: number;
+  z_score_historical_std?: number;
+  z_score_days_of_history?: number;
+  z_score_quality?: string;
+  sourceConcentrationHhi?: number;
+  concentrationInterpretation?: string;
+  topSources: SourceInfo[];
+  dominantTopic?: string;
+  dominantTopicWeight?: number;
+  dominantTopicPercentage?: number;
+  topicCount: number;
+  sentimentByTopic: SentimentByTopic;
+  topicWeights: TopicWeights;
+}
+
+interface ApiMetadata {
+  items?: number;
+  sentiment_score_definition?: string;
+  relevance_score_definition?: string;
+}
+
+interface UseNewsDataReturn {
+  news: NewsArticle[];
+  sentiment: SentimentData;
+  apiMetadata: ApiMetadata;
+  loading: boolean;
+  error: string | null;
+}
+
+export const useNewsData = (
+  ticker: string,
+  timeframe: TimeframeOption | string = '1Y',
+  options: Partial<UseQueryOptions<NewsResponse>> = {}
+): UseNewsDataReturn => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['news', ticker, timeframe],
     queryFn: async () => {
@@ -84,6 +188,6 @@ export const useNewsData = (ticker, timeframe = '1Y', options = {}) => {
     sentiment,
     apiMetadata,
     loading: isLoading,
-    error: error?.message || null
+    error: error instanceof Error ? error.message : null
   };
 };

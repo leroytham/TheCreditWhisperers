@@ -1,8 +1,25 @@
 import React, { useState } from 'react';
-import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import LoadingSpinner from '../../../components/LoadingSpinner';
+
+// Type definitions
+interface Holding {
+  symbol: string;
+  quantity: number;
+  averageCostPrice?: string;
+  marketPrice?: string;
+  profitLoss: number | null;
+  gainLossPercent: number | null;
+  isPositive: boolean | null;
+  newsVolume: number;
+  sentiment: number;
+  position: string;
+}
+
+interface TopHoldingsTableProps {
+  onViewAllHoldings?: () => void;
+}
 
 /**
  * TopHoldingsTable Component
@@ -25,7 +42,7 @@ import LoadingSpinner from '../../../components/LoadingSpinner';
  * // Used in portfolio page to display holdings overview
  * <TopHoldingsTable onViewAllHoldings={() => setActiveTab('holdings')} />
  */
-const TopHoldingsTable = ({ onViewAllHoldings }) => {
+const TopHoldingsTable: React.FC<TopHoldingsTableProps> = ({ onViewAllHoldings }) => {
   const [activeTab, setActiveTab] = useState('all-holdings');
 
   // Use unified portfolio data hook - automatically handles caching and deduplication
@@ -38,16 +55,16 @@ const TopHoldingsTable = ({ onViewAllHoldings }) => {
   ];
 
   // Filter holdings based on selected tab
-  const filteredHoldings =
+  const filteredHoldings: Holding[] =
     activeTab === 'top-gainers'
-      ? holdings
-          .filter((h) => h.isPositive === true)
-          .sort((a, b) => b.gainLossPercent - a.gainLossPercent)
+      ? (holdings as Holding[])
+          .filter((h: Holding) => h.isPositive === true)
+          .sort((a: Holding, b: Holding) => (b.gainLossPercent ?? 0) - (a.gainLossPercent ?? 0))
       : activeTab === 'top-losers'
-      ? holdings
-          .filter((h) => h.isPositive === false)
-          .sort((a, b) => a.gainLossPercent - b.gainLossPercent)
-      : holdings;
+      ? (holdings as Holding[])
+          .filter((h: Holding) => h.isPositive === false)
+          .sort((a: Holding, b: Holding) => (a.gainLossPercent ?? 0) - (b.gainLossPercent ?? 0))
+      : (holdings as Holding[]);
 
   return (
     <div className="bg-white p-6 md:p-8 rounded-lg border border-gray-200">
@@ -99,7 +116,7 @@ const TopHoldingsTable = ({ onViewAllHoldings }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredHoldings.map((holding) => (
+            {filteredHoldings.map((holding: Holding) => (
               <tr key={holding.symbol} className="border-b hover:bg-gray-50">
                 <td className="py-4">
                   <div className="inline-flex items-center justify-center h-8 w-16 rounded bg-gray-100 text-gray-800 text-sm font-semibold">
@@ -172,10 +189,6 @@ const TopHoldingsTable = ({ onViewAllHoldings }) => {
       </div>
     </div>
   );
-};
-
-TopHoldingsTable.propTypes = {
-  onViewAllHoldings: PropTypes.func,
 };
 
 export default TopHoldingsTable;

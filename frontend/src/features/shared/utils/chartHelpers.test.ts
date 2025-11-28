@@ -21,7 +21,14 @@ import {
   formatXAxisLabel,
   getMarketHours,
   getMarketOpenClose,
+  PriceDataPoint,
+  ChartDataPoint,
 } from './chartHelpers';
+
+// Test data uses minimal properties - cast to expected types for type checking
+// The actual implementation handles partial data gracefully
+const asPriceData = (data: unknown[]): PriceDataPoint[] => data as PriceDataPoint[];
+const asChartData = (data: unknown[]): ChartDataPoint[] => data as ChartDataPoint[];
 
 describe('chartHelpers', () => {
   describe('generateChartData', () => {
@@ -32,7 +39,7 @@ describe('chartHelpers', () => {
         { date: '2024-01-03', close: 5, price: 131250 },
       ];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0].y).toBe(100);
       expect(chartData[1].y).toBe(0); // Should be 0, not 125000
@@ -45,7 +52,7 @@ describe('chartHelpers', () => {
         { date: '2024-01-02', close: undefined, price: 105 },
       ];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0].y).toBe(100);
       expect(chartData[1].y).toBe(105);
@@ -54,7 +61,7 @@ describe('chartHelpers', () => {
     it('should return null when both close and price are missing (chart gap)', () => {
       const priceData = [{ date: '2024-01-01', close: undefined, price: undefined }];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       // Implementation returns null for missing values to render gaps in charts
       expect(chartData[0].y).toBe(null);
@@ -67,7 +74,7 @@ describe('chartHelpers', () => {
         { date: '2024-01-03', close: -10 },
       ];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0].y).toBe(100);
       expect(chartData[1].y).toBe(-5);
@@ -77,7 +84,7 @@ describe('chartHelpers', () => {
     it('should include all required fields', () => {
       const priceData = [{ date: '2024-01-01', close: 100, time: '09:30', volume: 1000 }];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0]).toEqual({
         x: 0,
@@ -98,7 +105,7 @@ describe('chartHelpers', () => {
     it('should handle string numbers correctly', () => {
       const priceData = [{ date: '2024-01-01', close: '100.5', price: '200' }];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0].y).toBe(100.5);
     });
@@ -106,7 +113,7 @@ describe('chartHelpers', () => {
     it('should handle null close but valid price', () => {
       const priceData = [{ date: '2024-01-01', close: null, price: 150 }];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0].y).toBe(150);
     });
@@ -114,7 +121,7 @@ describe('chartHelpers', () => {
     it('should prefer close over price when both exist', () => {
       const priceData = [{ date: '2024-01-01', close: 100, price: 200 }];
 
-      const chartData = generateChartData(priceData);
+      const chartData = generateChartData(asPriceData(priceData));
 
       expect(chartData[0].y).toBe(100);
     });
@@ -124,7 +131,7 @@ describe('chartHelpers', () => {
     it('should calculate correct range with padding', () => {
       const chartData = [{ y: 100 }, { y: 200 }];
 
-      const range = getPriceRange(chartData, 0.1);
+      const range = getPriceRange(asChartData(chartData), 0.1);
 
       expect(range.min).toBe(90); // 100 - 10% of (200-100)
       expect(range.max).toBe(210); // 200 + 10% of (200-100)
@@ -133,7 +140,7 @@ describe('chartHelpers', () => {
     it('should handle zero values in chart data', () => {
       const chartData = [{ y: 0 }, { y: 100 }, { y: 50 }];
 
-      const range = getPriceRange(chartData, 0.1);
+      const range = getPriceRange(asChartData(chartData), 0.1);
 
       expect(range.min).toBeLessThan(0);
       expect(range.max).toBeGreaterThan(100);
@@ -142,7 +149,7 @@ describe('chartHelpers', () => {
     it('should handle flat series (all same values)', () => {
       const chartData = [{ y: 100 }, { y: 100 }, { y: 100 }];
 
-      const range = getPriceRange(chartData, 0.1);
+      const range = getPriceRange(asChartData(chartData), 0.1);
 
       // Should create artificial range around the midpoint
       expect(range.min).toBeLessThan(100);
@@ -158,7 +165,7 @@ describe('chartHelpers', () => {
     it('should use default padding of 0.1', () => {
       const chartData = [{ y: 0 }, { y: 100 }];
 
-      const range = getPriceRange(chartData);
+      const range = getPriceRange(asChartData(chartData));
 
       expect(range.min).toBe(-10); // 0 - 10% of 100
       expect(range.max).toBe(110); // 100 + 10% of 100
@@ -167,7 +174,7 @@ describe('chartHelpers', () => {
     it('should handle negative values', () => {
       const chartData = [{ y: -50 }, { y: 50 }];
 
-      const range = getPriceRange(chartData, 0.1);
+      const range = getPriceRange(asChartData(chartData), 0.1);
 
       expect(range.min).toBeLessThan(-50);
       expect(range.max).toBeGreaterThan(50);
@@ -178,7 +185,7 @@ describe('chartHelpers', () => {
     it('should calculate price changes correctly', () => {
       const chartData = [{ y: 100 }, { y: 110 }, { y: 105 }];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.startPrice).toBe(100);
       expect(result.currentPrice).toBe(105);
@@ -194,7 +201,7 @@ describe('chartHelpers', () => {
         { y: 10 }, // +10%
       ];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.startPrice).toBe(0);
       expect(result.currentPrice).toBe(10);
@@ -206,7 +213,7 @@ describe('chartHelpers', () => {
     it('should handle negative price changes', () => {
       const chartData = [{ y: 100 }, { y: 90 }];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.priceChange).toBe(-10);
       expect(result.priceChangePercent).toBe(-10);
@@ -231,7 +238,7 @@ describe('chartHelpers', () => {
         { y: -50 }, // Increase to -$50
       ];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.startPrice).toBe(-100);
       expect(result.currentPrice).toBe(-50);
@@ -244,7 +251,7 @@ describe('chartHelpers', () => {
     it('should prevent Infinity when result is infinite', () => {
       const chartData = [{ y: 0 }, { y: Infinity }];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.priceChangePercent).toBe(null);
       expect(result.isValidPercentage).toBe(false);
@@ -253,7 +260,7 @@ describe('chartHelpers', () => {
     it('should prevent NaN when result is NaN', () => {
       const chartData = [{ y: NaN }, { y: 100 }];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.priceChangePercent).toBe(null);
       expect(result.isValidPercentage).toBe(false);
@@ -262,7 +269,7 @@ describe('chartHelpers', () => {
     it('should handle single data point', () => {
       const chartData = [{ y: 100 }];
 
-      const result = calculatePriceChange(chartData);
+      const result = calculatePriceChange(asChartData(chartData));
 
       expect(result.startPrice).toBe(100);
       expect(result.currentPrice).toBe(100);
@@ -300,7 +307,7 @@ describe('chartHelpers', () => {
         { date: '2024-01-02', close: 103 },
       ];
 
-      const filtered = filterPriceDataByTimeframe(priceData, '1D');
+      const filtered = filterPriceDataByTimeframe(asPriceData(priceData), '1D');
 
       // Should only contain the latest date's data
       expect(filtered.every((pt) => pt.date === '2024-01-02')).toBe(true);
@@ -309,7 +316,7 @@ describe('chartHelpers', () => {
     it('should return original data for 1Y without today', () => {
       const priceData = createDateArray(365, 365);
 
-      const filtered = filterPriceDataByTimeframe(priceData, '1Y');
+      const filtered = filterPriceDataByTimeframe(asPriceData(priceData), '1Y');
 
       // Should have data, excluding today if present
       expect(filtered.length).toBeGreaterThan(0);

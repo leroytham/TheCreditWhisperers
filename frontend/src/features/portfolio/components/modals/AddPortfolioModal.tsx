@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
 import apiService from '../../../../services/api';
 import { useUser } from '../../../../hooks/useUser';
@@ -11,23 +10,42 @@ import {
   getFirstError,
 } from '../../../../schemas/portfolio';
 
+// Type definitions
+interface AddPortfolioModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+interface AccountDetails {
+  accountName: string;
+  accountNumber: string;
+  openDate: string;
+}
+
+interface HoldingInput {
+  symbol: string;
+  quantity: string;
+  purchasePrice: string;
+  purchaseDate: string;
+}
+
 /**
  * AddPortfolioModal Component
  *
  * Multi-step modal for creating a new portfolio (1 account + multiple holdings)
  */
-const AddPortfolioModal = ({ isOpen, onClose }) => {
+const AddPortfolioModal: React.FC<AddPortfolioModalProps> = ({ isOpen, onClose }) => {
   const { username } = useUser();
   const notifyWarning = useAppStore((state) => state.notifyWarning);
   const notifySuccess = useAppStore((state) => state.notifySuccess);
   const notifyError = useAppStore((state) => state.notifyError);
   const [currentStep, setCurrentStep] = useState(1);
-  const [accountDetails, setAccountDetails] = useState({
+  const [accountDetails, setAccountDetails] = useState<AccountDetails>({
     accountName: '',
     accountNumber: '',
     openDate: '',
   });
-  const [holdings, setHoldings] = useState([]);
+  const [holdings, setHoldings] = useState<HoldingInput[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleClose = () => {
@@ -37,19 +55,19 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  const updateAccount = (field, value) => {
+  const updateAccount = (field: keyof AccountDetails, value: string): void => {
     setAccountDetails({ ...accountDetails, [field]: value });
   };
 
-  const addHolding = () => {
+  const addHolding = (): void => {
     setHoldings([...holdings, { symbol: '', quantity: '', purchasePrice: '', purchaseDate: '' }]);
   };
 
-  const removeHolding = (index) => {
+  const removeHolding = (index: number): void => {
     setHoldings(holdings.filter((_, i) => i !== index));
   };
 
-  const updateHolding = (index, field, value) => {
+  const updateHolding = (index: number, field: keyof HoldingInput, value: string): void => {
     const updated = [...holdings];
     
     // Handle numeric fields
@@ -114,10 +132,11 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       await apiService.addPortfolio(payload);
       notifySuccess('Portfolio saved successfully!');
       handleClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Error handled by apiService interceptor
-      if (error?.name !== 'AbortError') {
-        notifyError('Error saving portfolio: ' + (error?.message || 'Unknown error'));
+      const err = error as { name?: string; message?: string };
+      if (err?.name !== 'AbortError') {
+        notifyError('Error saving portfolio: ' + (err?.message || 'Unknown error'));
       }
     } finally {
       setIsSaving(false);
@@ -329,11 +348,6 @@ const AddPortfolioModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
-};
-
-AddPortfolioModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
 };
 
 export default AddPortfolioModal;

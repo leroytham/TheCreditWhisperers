@@ -20,6 +20,13 @@ jest.mock('zustand/react/shallow', () => ({
 
 const mockUseAppStore = useAppStore as jest.MockedFunction<typeof useAppStore>;
 
+// Type for mock store state
+interface MockState {
+  selectedAccount: SelectedAccount | null;
+  selectAccount: jest.Mock;
+  clearSelectedAccount: jest.Mock;
+}
+
 describe('useSelectedAccount', () => {
   // Default mock actions
   const mockSelectAccount = jest.fn();
@@ -31,15 +38,15 @@ describe('useSelectedAccount', () => {
 
   // Helper to setup mock store state
   const setupMockStore = (selectedAccount: SelectedAccount | null = null) => {
-    const state = {
+    const state: MockState = {
       selectedAccount,
       selectAccount: mockSelectAccount,
       clearSelectedAccount: mockClearSelectedAccount,
     };
 
-    mockUseAppStore.mockImplementation((selector: (state: typeof state) => unknown) => {
+    mockUseAppStore.mockImplementation(((selector: (state: MockState) => unknown) => {
       return selector(state);
-    });
+    }) as typeof useAppStore);
   };
 
   describe('No Account Selected', () => {

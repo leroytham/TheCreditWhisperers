@@ -185,7 +185,41 @@ export interface CompanyOverview {
   MarketCapitalization?: string;
   PERatio?: string;
   DividendYield?: string;
-  [key: string]: unknown;
+  Exchange?: string;
+  Currency?: string;
+  Country?: string;
+  Address?: string;
+  OfficialSite?: string;
+  ForwardPE?: string;
+  PEGRatio?: string;
+  PriceToBookRatio?: string;
+  PriceToSalesRatioTTM?: string;
+  EPS?: string;
+  Beta?: string;
+  '52WeekHigh'?: string;
+  '52WeekLow'?: string;
+  '50DayMovingAverage'?: string;
+  RevenueTTM?: string;
+  GrossProfitTTM?: string;
+  EBITDA?: string;
+  ProfitMargin?: string;
+  OperatingMarginTTM?: string;
+  ReturnOnAssetsTTM?: string;
+  ReturnOnEquityTTM?: string;
+  QuarterlyRevenueGrowthYOY?: string;
+  AnalystTargetPrice?: string;
+  AnalystRatingStrongBuy?: string;
+  AnalystRatingBuy?: string;
+  AnalystRatingHold?: string;
+  AnalystRatingSell?: string;
+  AnalystRatingStrongSell?: string;
+  SharesOutstanding?: string;
+  SharesFloat?: string;
+  PercentInsiders?: string;
+  PercentInstitutions?: string;
+  DividendPerShare?: string;
+  ExDividendDate?: string;
+  [key: string]: string | undefined;
 }
 
 // =============================================================================
@@ -216,4 +250,165 @@ export interface HoldingsResponse {
 
 export interface AccountsResponse {
   accounts: Account[];
+}
+
+// =============================================================================
+// PRICE & CHART TYPES
+// =============================================================================
+
+export interface PriceDataPoint {
+  date: string;
+  time?: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  price?: number;
+  volume?: number;
+  adjClose?: number;
+}
+
+export interface PriceRange {
+  high: number;
+  low: number;
+  change: number;
+  changePercent: number;
+}
+
+// =============================================================================
+// EARNINGS TYPES
+// =============================================================================
+
+export interface EarningsEvent {
+  earnings_date: string;
+  days_until: number;
+  estimated_eps?: number;
+  reported_eps?: number;
+  surprise?: number;
+  surprise_percent?: number;
+  currency?: string;
+  fiscal_period_ending?: string;
+}
+
+export interface EarningsCalendarResponse {
+  ticker: string;
+  data: EarningsEvent[];
+  totalEvents?: number;
+  next_earnings?: EarningsEvent;
+}
+
+export interface TranscriptSegment {
+  speaker: string;
+  title?: string;
+  content: string;
+  sentiment: number;
+  word_count: number;
+}
+
+export interface EarningsTranscriptResponse {
+  ticker: string;
+  quarter: string;
+  transcript: TranscriptSegment[];
+  overall_sentiment?: number;
+  summary?: string;
+}
+
+// =============================================================================
+// SEARCH TYPES
+// =============================================================================
+
+export interface SearchResult {
+  symbol: string;
+  shortname?: string;
+  longname?: string;
+  quoteType: string;
+  exchange?: string;
+  sector?: string;
+  industry?: string;
+}
+
+// =============================================================================
+// DAILY SENTIMENT & EVENTS TYPES
+// =============================================================================
+
+export interface DailySentimentPoint {
+  date: string;
+  timestamp?: string;
+  label?: string;
+  volume: number;
+  sentiment: number;
+  score?: number;
+  count?: number;
+  headlines?: string[];
+}
+
+export interface SignificantEvent {
+  start_date: string;
+  end_date?: string;
+  trend: 'Upward' | 'Downward';
+  total_move_pct: number;
+  days?: number;
+  title?: string;
+  description?: string;
+  source?: string;
+  news?: NewsArticle[];
+  // Legacy fields for backward compatibility
+  date?: string;
+  type?: string;
+  impact?: number;
+  sentiment?: number;
+}
+
+// =============================================================================
+// API METADATA TYPES
+// =============================================================================
+
+export interface ApiMetadata {
+  source?: string;
+  cached?: boolean;
+  cache_ttl?: number;
+  last_updated?: string;
+  request_id?: string;
+  // News-related metadata
+  items?: number;
+  total_articles?: number;
+  sentiment_score_definition?: string;
+  relevance_score_definition?: string;
+  tickers_queried?: string[];
+  is_portfolio?: boolean;
+  // Sector-related metadata
+  sector_name?: string;
+}
+
+// =============================================================================
+// COMPONENT PROP TYPES
+// =============================================================================
+
+export interface SentimentCardProps {
+  loading?: boolean;
+  error?: Error | null;
+}
+
+export interface TopicWeights {
+  [topic: string]: number;
+}
+
+export interface SentimentByTopic {
+  [topic: string]: number;
+}
+
+// =============================================================================
+// UTILITY TYPES
+// =============================================================================
+
+export type TimeframeOption = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'YTD' | 'ALL';
+
+export type ChartType = 'line' | 'area' | 'candlestick' | 'bar';
+
+export interface DateFormatOptions {
+  month?: 'short' | 'long' | 'numeric' | '2-digit';
+  day?: 'numeric' | '2-digit';
+  year?: 'numeric' | '2-digit';
+  hour?: 'numeric' | '2-digit';
+  minute?: 'numeric' | '2-digit';
 }

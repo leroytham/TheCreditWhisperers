@@ -4,46 +4,66 @@ import { InlineError } from '../../../../components/ErrorDisplay';
 import { usePortfolioOverview } from '../../hooks/usePortfolioOverview';
 import { formatCurrency, formatPercentage, parseNumericString } from '../../../../utils/formatters';
 
+// Type definitions
+interface ApiHolding {
+  symbol: string;
+  averageCostPrice?: string;
+  marketPrice?: string;
+  position?: string;
+  quantity?: number;
+  sentiment?: string;
+  sector?: string;
+  day_change_percent?: number;
+  gainLossPercent?: number;
+  sentimentMomentum?: number;
+  range52week?: { low: number; high: number };
+}
+
+interface TransformedHolding {
+  ticker: string;
+  name: string;
+  sector: string;
+  shares: number;
+  avgCost: number | null;
+  currentPrice: number | null;
+  marketValue: number | null;
+  weight: number;
+  dayChange: number | null;
+  totalReturn: number | null;
+  sentiment: number;
+  sentimentMomentum: number | null;
+  priceRange52w: { low: number; high: number } | null;
+  [key: string]: unknown; // Index signature for dynamic sorting
+}
+
+interface SortIconProps {
+  field: string;
+}
+
+type SortDirection = 'asc' | 'desc';
+
 /**
  * PortfolioHoldingsDetail Component
  *
  * Comprehensive holdings table with sorting, filtering, and analytics.
- * Displays all portfolio holdings with cost basis, market value, returns, and sentiment.
- *
- * Key Features:
- * - Multi-column sorting (weight, symbol, gain/loss, sentiment, etc.)
- * - Sector filtering (requires backend implementation - see BACKEND_REQUIREMENTS.md #2)
- * - Summary statistics (total value, top sector, best/worst performers)
- * - Performance metrics for each holding
- * - AI sentiment scores integration
- *
- * Data Transformation:
- * - Parses numeric strings from API
- * - Calculates derived metrics (portfolio weight, gain/loss %)
- * - Memoized data processing for performance
- *
- * @returns {React.ReactElement} Rendered portfolio holdings detail view
- *
- * @example
- * // Used in Portfolio page "Holdings" tab
- * <PortfolioHoldingsDetail />
  */
-const PortfolioHoldingsDetail = () => {
-  const [sortField, setSortField] = useState('weight');
-  const [sortDirection, setSortDirection] = useState('desc');
-  const [filterSector, setFilterSector] = useState('all');
+const PortfolioHoldingsDetail: React.FC = () => {
+  const [sortField, setSortField] = useState<string>('weight');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [filterSector, setFilterSector] = useState<string>('all');
 
   // BUG FIX: Use React Query cache for single source of truth across Overview and Holdings tabs
   const { holdings: rawHoldings, holdingsLoading: loading, holdingsError: error, refetchHoldings: refetch } = usePortfolioOverview();
 
   // Transform and process holdings data with memoization
-  const holdings = useMemo(() => {
+  const holdings = useMemo<TransformedHolding[]>(() => {
     if (!rawHoldings) return [];
 
-    const apiHoldings = Array.isArray(rawHoldings) ? rawHoldings : rawHoldings.holdings || [];
+    const rawData = rawHoldings as { holdings?: ApiHolding[] } | ApiHolding[];
+    const apiHoldings: ApiHolding[] = Array.isArray(rawData) ? rawData : rawData.holdings || [];
 
     // Transform API response to component format
-    const transformedHoldings = apiHoldings.map(holding => {
+    const transformedHoldings = apiHoldings.map((holding: ApiHolding) => {
       // Parse numeric values from formatted strings
       // BUG FIX: Propagate null for missing cost basis instead of defaulting to 0
       const avgCost = holding.averageCostPrice ? parseNumericString(holding.averageCostPrice) : null;
@@ -72,16 +92,16 @@ const PortfolioHoldingsDetail = () => {
     });
 
     // Calculate weights (exclude holdings with missing market values)
-    const totalValue = transformedHoldings.reduce((sum, h) => {
+    const totalValue = transformedHoldings.reduce((sum: number, h: TransformedHolding) => {
       return h.marketValue !== null ? sum + h.marketValue : sum;
     }, 0);
-    return transformedHoldings.map(h => ({
+    return transformedHoldings.map((h: TransformedHolding) => ({
       ...h,
       weight: totalValue > 0 && h.marketValue !== null ? (h.marketValue / totalValue) * 100 : 0
     }));
   }, [rawHoldings]);
 
-  const handleSort = (field) => {
+  const handleSort = (field: string): void => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -93,13 +113,25 @@ const PortfolioHoldingsDetail = () => {
   // Memoize sorted and filtered holdings
   const sortedHoldings = useMemo(() => {
     return [...holdings].sort((a, b) => {
-      let aValue = a[sortField];
-      let bValue = b[sortField];
+      let aVal: unknown = a[sortField];
+      let bVal: unknown = b[sortField];
 
       if (sortField === 'name' || sortField === 'ticker' || sortField === 'sector') {
-        aValue = aValue.toLowerCase();
-        bValue = bValue.toLowerCase();
+        aVal = typeof aVal === 'string' ? aVal.toLowerCase() : '';
+        bVal = typeof bVal === 'string' ? bVal.toLowerCase() : '';
       }
+
+      // Handle null/undefined values by treating them as less than any non-null value
+      const aIsNullish = aVal === null || aVal === undefined;
+      const bIsNullish = bVal === null || bVal === undefined;
+
+      if (aIsNullish && bIsNullish) return 0;
+      if (aIsNullish) return sortDirection === 'asc' ? -1 : 1;
+      if (bIsNullish) return sortDirection === 'asc' ? 1 : -1;
+
+      // Safe comparison with type assertion after null checks
+      const aValue = aVal as string | number;
+      const bValue = bVal as string | number;
 
       if (sortDirection === 'asc') {
         return aValue > bValue ? 1 : -1;
@@ -109,22 +141,22 @@ const PortfolioHoldingsDetail = () => {
     });
   }, [holdings, sortField, sortDirection]);
 
-  const filteredHoldings = useMemo(() => {
+  const filteredHoldings = useMemo<TransformedHolding[]>(() => {
     return filterSector === 'all'
       ? sortedHoldings
-      : sortedHoldings.filter(h => h.sector === filterSector);
+      : sortedHoldings.filter((h: TransformedHolding) => h.sector === filterSector);
   }, [sortedHoldings, filterSector]);
 
-  const sectors = useMemo(() => [...new Set(holdings.map(h => h.sector))] as string[], [holdings]);
+  const sectors = useMemo<string[]>(() => [...new Set(holdings.map((h: TransformedHolding) => h.sector))], [holdings]);
 
   // Memoize summary calculations
   const summaryStats = useMemo(() => {
     // Exclude holdings with missing market values from calculations
-    const totalValue = holdings.reduce((sum, h) => {
+    const totalValue = holdings.reduce((sum: number, h: TransformedHolding) => {
       return h.marketValue !== null ? sum + h.marketValue : sum;
     }, 0);
     // BUG FIX: Only include holdings with valid cost basis in gain/loss calculation
-    const totalGainLoss = holdings.reduce((sum, h) => {
+    const totalGainLoss = holdings.reduce((sum: number, h: TransformedHolding) => {
       if (h.marketValue !== null && h.avgCost !== null) {
         return sum + (h.marketValue - (h.shares * h.avgCost));
       }
@@ -132,8 +164,8 @@ const PortfolioHoldingsDetail = () => {
     }, 0);
 
     // Calculate sector allocations by market value
-    const sectorAllocations = {};
-    holdings.forEach(h => {
+    const sectorAllocations: Record<string, number> = {};
+    holdings.forEach((h: TransformedHolding) => {
       if (h.sector !== 'N/A' && h.marketValue !== null) {
         sectorAllocations[h.sector] = (sectorAllocations[h.sector] || 0) + h.marketValue;
       }
@@ -142,7 +174,7 @@ const PortfolioHoldingsDetail = () => {
     // Find top sector by market value
     let topSector = 'Diversified';
     let maxValue = 0;
-    Object.entries(sectorAllocations).forEach(([sector, value]: [string, number]) => {
+    Object.entries(sectorAllocations).forEach(([sector, value]) => {
       if (value > maxValue) {
         maxValue = value;
         topSector = sector;
@@ -150,15 +182,15 @@ const PortfolioHoldingsDetail = () => {
     });
 
     // Guard against division by zero when holdings are empty or zero-weighted
-    const totalWeight = holdings.reduce((sum, h) => sum + h.weight, 0);
+    const totalWeight = holdings.reduce((sum: number, h: TransformedHolding) => sum + h.weight, 0);
     const avgSentiment = totalWeight > 0
-      ? holdings.reduce((sum, h) => sum + h.sentiment * h.weight, 0) / totalWeight
+      ? holdings.reduce((sum: number, h: TransformedHolding) => sum + h.sentiment * h.weight, 0) / totalWeight
       : 0;
 
     return { totalValue, totalGainLoss, avgSentiment, topSector };
   }, [holdings]);
 
-  const SortIcon = ({ field }) => {
+  const SortIcon: React.FC<SortIconProps> = ({ field }) => {
     if (sortField !== field) {
       return <span className="text-gray-400">↕</span>;
     }

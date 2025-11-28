@@ -1,4 +1,4 @@
-// src/features/sector/components/PerformanceView/PerformanceView.jsx
+// src/features/sector/components/PerformanceView/PerformanceView.tsx
 
 import React, { useState, useEffect } from 'react';
 import { resolveSectorTicker } from '../../utils/tickerResolver';
@@ -26,24 +26,55 @@ import {
   SentimentByTopicCard,
   TickerCoverageCard
 } from '../../../shared/components';
+import type { ViewModeType } from '../../../shared/components/ViewModeToggle';
 import { formatFullTimestamp } from '../../../shared/utils/formatters';
 import PerformanceHeader from './PerformanceHeader';
 import TopConstituents from './TopConstituents';
 
+// Type definitions
+interface Sector {
+  name?: string;
+  index?: string;
+  ticker?: string;
+  yfinanceKey?: string;
+  available?: boolean;
+}
+
+interface SectorContext {
+  countryCode?: string;
+  countryName?: string;
+  sector?: Sector | null;
+}
+
+type TabType = 'overview' | 'performance' | 'sentiment' | 'constituents' | 'news';
+// ViewModeType imported from ViewModeToggle
+
+interface PerformanceViewProps {
+  context?: SectorContext;
+  onBack?: () => void;
+  activeTab?: TabType;
+  setActiveTab?: (tab: string) => void;
+}
+
 /**
  * PerformanceView components - orchestrates the sector performance dashboard
  */
-const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab }) => {
+const PerformanceView: React.FC<PerformanceViewProps> = ({
+  context,
+  onBack,
+  activeTab = 'overview',
+  setActiveTab
+}) => {
   const countryCode = context?.countryCode || '';
   const countryName = context?.countryName || '';
   const sector = context?.sector || null;
   const sectorName = sector?.name || '';
   const indexName = sector?.index || '';
 
-  const [timeframe, setTimeframe] = useState('1M');
-  const [showEvents, setShowEvents] = useState(true);
-  const [sentimentTimeframe, setSentimentTimeframe] = useState('1M');
-  const [viewMode, setViewMode] = useState('rolling');
+  const [timeframe, setTimeframe] = useState<string>('1M');
+  const [showEvents, setShowEvents] = useState<boolean>(true);
+  const [sentimentTimeframe, setSentimentTimeframe] = useState<string>('1M');
+  const [viewMode, setViewMode] = useState<ViewModeType>('rolling');
 
   // Auto-switch view mode based on timeframe
   // For sectors, all timeframes (1D, 1W, 1M) support both rolling and daily modes
@@ -55,7 +86,7 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
   }, [sentimentTimeframe]);
 
   // Resolve ticker
-  const ticker = resolveSectorTicker(sector, countryCode);
+  const ticker = resolveSectorTicker(sector, countryCode || undefined);
 
   // Fetch all sector data
   const {
@@ -71,7 +102,7 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     lastFetched,
     sentiment,
     newsAggregationMetadata
-  } = useSectorData(ticker, timeframe, sector);
+  } = useSectorData(ticker, timeframe, sector ?? null);
 
   // Fetch rolling sentiment data for the combined chart
   const {
@@ -82,8 +113,8 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
   } = useRollingSentiment(ticker, sentimentTimeframe);
 
   // Map sentiment timeframe to days for existing charts
-  const getDaysToShow = (tf) => {
-    const map = { '1W': 7, '1M': 30 };
+  const getDaysToShow = (tf: string): number => {
+    const map: Record<string, number> = { '1W': 7, '1M': 30 };
     return map[tf] || 7;
   };
 
@@ -102,7 +133,7 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     priceData1Y: intradayPricesFromApi,
     prevClose: intradayPrevClose,
     exchange: intradayExchange
-  } = useEntityPriceData(ticker, '1D');
+  } = useEntityPriceData(ticker || '', '1D');
 
   // Dev logging to inspect chartData vs events for 1M (helps debug markers not lining up)
   useEffect(() => {
@@ -119,8 +150,9 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
     if (topEvents && topEvents.length > 0) {
       // eslint-disable-next-line no-console
       console.log('[PerformanceView] Sector topEvents:', topEvents);
+      const firstEvent = topEvents[0] as { news?: unknown[] };
       // eslint-disable-next-line no-console
-      console.log('[PerformanceView] First event has news?', topEvents[0].news ? `Yes (${topEvents[0].news.length} articles)` : 'No');
+      console.log('[PerformanceView] First event has news?', firstEvent.news ? `Yes (${firstEvent.news.length} articles)` : 'No');
     }
   }, [topEvents]);
 
@@ -170,10 +202,10 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               <div className="bg-white border border-gray-200 rounded-lg shadow p-6 lg:col-start-1 lg:row-start-1 h-full">
                 <h3 className="text-sm font-medium text-gray-600 mb-2">Current Price</h3>
                 <div className="text-3xl font-bold text-gray-900 mb-2">
-                  {currentPrice ? `${currency} ${currentPrice.toFixed(2)}` : '--'}
+                  {currentPrice ? `${currency} ${(currentPrice as number).toFixed(2)}` : '--'}
                 </div>
                 <div className={`text-sm font-medium ${priceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+                  {priceChange >= 0 ? '▲' : '▼'} {Math.abs(priceChange).toFixed(2)} ({(priceChangePercent ?? 0) >= 0 ? '+' : ''}{(priceChangePercent ?? 0).toFixed(2)}%)
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
                   As of {lastFetched ? formatFullTimestamp(lastFetched) : 'Loading...'}
@@ -183,9 +215,9 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               {/* Sentiment Score Card - Row 1, Col 2 */}
               <div className="lg:col-start-2 lg:row-start-1 h-full">
                 <SentimentScoreCard
-                  sentimentAvg={sentiment?.avg}
+                  sentimentAvg={sentiment?.avg ?? undefined}
                   newsCount={sentiment?.total_articles_analyzed || news?.length || 0}
-                  dataQuality={sentiment?.data_quality}
+                  dataQuality={sentiment?.data_quality ?? undefined}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full"
                 />
               </div>
@@ -244,13 +276,13 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                 {timeframe === '1D' ? (
                   <PriceChart
                     priceData={intradayPricesFromApi && intradayPricesFromApi.length > 0 ? intradayPricesFromApi : priceData}
-                    ticker={ticker}
+                    ticker={ticker || ''}
                     companyName={companyName}
                     currency={currency}
                     exchange={intradayExchange || undefined}
                     significantEvents={showEvents ? topEvents : []}
                     timeframe={timeframe}
-                    prevClose={intradayPrevClose ?? (chartData.length > 1 ? chartData[chartData.length - 2]?.y : null)}
+                    prevClose={intradayPrevClose ?? (chartData.length > 1 ? chartData[chartData.length - 2]?.y ?? undefined : undefined)}
                     showSignificantEvents={showEvents}
                   />
                 ) : (
@@ -259,11 +291,11 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                     priceRange={priceRange}
                     priceChange={priceChange}
                     companyName={companyName}
-                    ticker={ticker}
+                    ticker={ticker || ''}
                     topEvents={topEvents}
                     showEvents={showEvents}
                     timeframe={timeframe}
-                    prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                    prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y ?? undefined : undefined}
                   />
                 )}
               </div>
@@ -274,9 +306,9 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               <RelatedNews
                 news={news}
                 displayName={companyName}
-                error={error}
+                error={error ?? undefined}
                 isOverview={true}
-                onViewMore={() => setActiveTab('news')}
+                onViewMore={() => setActiveTab?.('news')}
               />
             </div>
 
@@ -331,13 +363,13 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             {timeframe === '1D' ? (
               <PriceChart
                 priceData={intradayPricesFromApi && intradayPricesFromApi.length > 0 ? intradayPricesFromApi : priceData}
-                ticker={ticker}
+                ticker={ticker || ''}
                 companyName={companyName}
                 currency={currency}
                 exchange={intradayExchange || undefined}
                 significantEvents={showEvents ? topEvents : []}
                 timeframe={timeframe}
-                prevClose={intradayPrevClose ?? (chartData.length > 1 ? chartData[chartData.length - 2]?.y : null)}
+                prevClose={intradayPrevClose ?? (chartData.length > 1 ? chartData[chartData.length - 2]?.y ?? undefined : undefined)}
                 showSignificantEvents={showEvents}
               />
             ) : (
@@ -346,11 +378,11 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
                 priceRange={priceRange}
                 priceChange={priceChange}
                 companyName={companyName}
-                ticker={ticker}
+                ticker={ticker || ''}
                 topEvents={topEvents}
                 showEvents={showEvents}
                 timeframe={timeframe}
-                prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y : null}
+                prevClose={chartData.length > 1 ? chartData[chartData.length - 2]?.y ?? undefined : undefined}
               />
             )}
           </div>
@@ -391,21 +423,21 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
               ) : (
                 <CombinedSentimentVolumeChart
                   data={viewMode === 'rolling' ? rollingData : Object.entries(dailySentiment).map(([date, data]) => {
-                    const d = data as { count?: number; score?: number; headlines?: any[] };
+                    const d = data as { count?: number; score?: number; headlines?: Array<{ title?: string }> };
                     return {
                       timestamp: date,
                       label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
                       volume: d.count || 0,
                       sentiment: d.score || 0,
-                      headlines: d.headlines || []
+                      headlines: (d.headlines || []).map(h => typeof h === 'string' ? { title: h } : h)
                     };
                   })}
                   timeframe={sentimentTimeframe}
                   viewMode={viewMode}
                   hasData={viewMode === 'rolling' ? hasRollingData : Object.keys(dailySentiment).length > 0}
-                  sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : null}
+                  sourceEarliestDates={viewMode === 'rolling' ? sourceEarliestDates : undefined}
                   exchange="NYSE"
-                  ticker={ticker}
+                  ticker={ticker || ''}
                 />
               )}
             </div>
@@ -413,32 +445,32 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             {/* Row 2: Core Metrics (4 columns) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               <SentimentScoreCard
-                sentimentAvg={sentiment?.avg}
+                sentimentAvg={sentiment?.avg ?? undefined}
                 newsCount={sentiment?.total_articles_analyzed || news?.length || 0}
-                dataQuality={sentiment?.data_quality}
+                dataQuality={sentiment?.data_quality ?? undefined}
                 context="sector"
               />
               <MomentumCard
-                sentimentMomentum={sentiment?.momentum}
-                momentumLabel={sentiment?.momentum_label}
-                momentumInterpretation={sentiment?.momentum_interpretation}
-                momentumQuality={sentiment?.momentum_quality}
-                fastScore={sentiment?.fast_score}
-                slowScore={sentiment?.slow_score}
-                halfLifeFastHours={sentiment?.half_life_fast_hours}
-                halfLifeSlowHours={sentiment?.half_life_slow_hours}
+                sentimentMomentum={sentiment?.momentum ?? undefined}
+                momentumLabel={sentiment?.momentum_label ?? undefined}
+                momentumInterpretation={sentiment?.momentum_interpretation ?? undefined}
+                momentumQuality={sentiment?.momentum_quality ?? undefined}
+                fastScore={sentiment?.fast_score ?? undefined}
+                slowScore={sentiment?.slow_score ?? undefined}
+                halfLifeFastHours={sentiment?.half_life_fast_hours ?? undefined}
+                halfLifeSlowHours={sentiment?.half_life_slow_hours ?? undefined}
                 context="sector"
               />
               <NewsCoverageCard
-                effectiveNewsVolume={sentiment?.effective_news_volume}
-                volumeInterpretation={sentiment?.volume_interpretation}
-                dataQuality={sentiment?.data_quality}
+                effectiveNewsVolume={sentiment?.effective_news_volume ?? undefined}
+                volumeInterpretation={sentiment?.volume_interpretation ?? undefined}
+                dataQuality={sentiment?.data_quality ?? undefined}
                 context="sector"
               />
               <SentimentConfidenceCard
-                sentimentVolatility={sentiment?.sentiment_volatility}
-                volatilityQuality={sentiment?.volatility_quality}
-                dataQuality={sentiment?.data_quality}
+                sentimentVolatility={sentiment?.sentiment_volatility ?? undefined}
+                volatilityQuality={sentiment?.volatility_quality ?? undefined}
+                dataQuality={sentiment?.data_quality ?? undefined}
                 context="sector"
               />
             </div>
@@ -446,23 +478,23 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             {/* Row 3: Advanced Analytics (2 columns) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <SentimentBreadthCard
-                sentimentBreadthScore={sentiment?.breadth_score}
+                sentimentBreadthScore={sentiment?.breadth_score ?? undefined}
                 numBullishArticles={sentiment?.num_bullish_mentions || 0}
                 numBearishArticles={sentiment?.num_bearish_mentions || 0}
                 totalDirectionalArticles={(sentiment?.num_bullish_mentions || 0) + (sentiment?.num_bearish_mentions || 0)}
-                breadthInterpretation={sentiment?.breadth_interpretation}
-                breadthQuality={sentiment?.data_quality}
-                avgScore={sentiment?.avg}
+                breadthInterpretation={sentiment?.breadth_interpretation ?? undefined}
+                breadthQuality={sentiment?.data_quality ?? undefined}
+                avgScore={sentiment?.avg ?? undefined}
                 context="sector"
               />
               <SentimentShockCard
-                sentimentZScore={sentiment?.z_score}
-                zScoreInterpretation={sentiment?.z_score_interpretation}
-                zScoreHistoricalMean={sentiment?.z_score_historical_mean}
-                zScoreHistoricalStd={sentiment?.z_score_historical_std}
-                zScoreDaysOfHistory={sentiment?.z_score_days_of_history}
-                zScoreQuality={sentiment?.z_score_quality}
-                currentScore={sentiment?.slow_score}
+                sentimentZScore={sentiment?.z_score ?? undefined}
+                zScoreInterpretation={sentiment?.z_score_interpretation ?? undefined}
+                zScoreHistoricalMean={sentiment?.z_score_historical_mean ?? undefined}
+                zScoreHistoricalStd={sentiment?.z_score_historical_std ?? undefined}
+                zScoreDaysOfHistory={sentiment?.z_score_days_of_history ?? undefined}
+                zScoreQuality={sentiment?.z_score_quality ?? undefined}
+                currentScore={sentiment?.slow_score ?? undefined}
                 context="sector"
               />
             </div>
@@ -470,26 +502,26 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             {/* Row 4: Source & Topic Analysis (2 columns) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <SourceConcentrationCard
-                sourceConcentrationHhi={sentiment?.source_concentration_hhi}
-                concentrationInterpretation={sentiment?.concentration_interpretation}
+                sourceConcentrationHhi={sentiment?.source_concentration_hhi ?? undefined}
+                concentrationInterpretation={sentiment?.concentration_interpretation ?? undefined}
                 topSources={sentiment?.top_sources || []}
                 context="sector"
               />
               <SentimentByTopicCard
-                dominantTopic={sentiment?.dominant_topic}
-                dominantTopicWeight={sentiment?.dominant_topic_weight}
-                dominantTopicPercentage={sentiment?.dominant_topic_percentage}
-                topicCount={sentiment?.topic_count}
-                sentimentByTopic={sentiment?.sentiment_by_topic}
-                topicWeights={sentiment?.topic_weights}
+                dominantTopic={sentiment?.dominant_topic ?? undefined}
+                dominantTopicWeight={sentiment?.dominant_topic_weight ?? undefined}
+                dominantTopicPercentage={sentiment?.dominant_topic_percentage ?? undefined}
+                topicCount={sentiment?.topic_count ?? undefined}
+                sentimentByTopic={sentiment?.sentiment_by_topic ?? undefined}
+                topicWeights={sentiment?.topic_weights ?? undefined}
                 context="sector"
               />
             </div>
 
             {/* Row 5: Ticker Coverage (Full Width) */}
             <TickerCoverageCard
-              tickerCoverage={sentiment?.ticker_coverage}
-              totalTickers={newsAggregationMetadata?.total_tickers}
+              tickerCoverage={sentiment?.ticker_coverage ?? undefined}
+              totalTickers={(newsAggregationMetadata as { total_tickers?: number } | null)?.total_tickers}
             />
           </div>
         );
@@ -503,10 +535,10 @@ const PerformanceView = ({ context, onBack, activeTab = 'overview', setActiveTab
             <DetailedRelatedNews
                 news={news}
                 displayName={companyName}
-                ticker={ticker}
+                ticker={ticker ?? undefined}
                 loading={loading}
                 error={error}
-                apiMetadata={newsAggregationMetadata}
+                apiMetadata={newsAggregationMetadata ?? undefined}
             />
           </div>
         );

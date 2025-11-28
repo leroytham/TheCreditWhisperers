@@ -34,11 +34,11 @@ export const useNotificationSocket = (clientId: string, options: NotificationSoc
   const [isConnected, setIsConnected] = useState(false);
   const [reconnectCount, setReconnectCount] = useState(0);
   const [hasError, setHasError] = useState(false);
-  const websocketRef = useRef(null);
-  const reconnectTimerRef = useRef(null);
-  const mountedRef = useRef(true); // Track if component is mounted
-  const connectionAttemptRef = useRef(0); // Track connection attempts
-  const keepaliveCleanupRef = useRef(null); // Store keepalive interval cleanup
+  const websocketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef<boolean>(true); // Track if component is mounted
+  const connectionAttemptRef = useRef<number>(0); // Track connection attempts
+  const keepaliveCleanupRef = useRef<(() => void) | null>(null); // Store keepalive interval cleanup
   const { addToast } = useAppStore();
 
   // Get WebSocket URL based on environment
@@ -218,7 +218,7 @@ export const useNotificationSocket = (clientId: string, options: NotificationSoc
     setIsConnected(false);
   };
 
-  const send = (message) => {
+  const send = (message: Record<string, unknown>): void => {
     if (websocketRef.current?.readyState === WebSocket.OPEN) {
       websocketRef.current.send(JSON.stringify(message));
     } else {
@@ -226,21 +226,21 @@ export const useNotificationSocket = (clientId: string, options: NotificationSoc
     }
   };
 
-  const subscribe = (ticker) => {
+  const subscribe = (ticker: string): void => {
     send({
       type: 'subscribe',
       ticker: ticker.toUpperCase(),
     });
   };
 
-  const unsubscribe = (ticker) => {
+  const unsubscribe = (ticker: string): void => {
     send({
       type: 'unsubscribe',
       ticker: ticker.toUpperCase(),
     });
   };
 
-  const startKeepalive = (ws) => {
+  const startKeepalive = (ws: WebSocket): (() => void) => {
     const interval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }));

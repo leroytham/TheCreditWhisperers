@@ -20,7 +20,41 @@ import NewsDetailModal from './NewsDetailModal';
  * @param {number} props.maxEvents - Maximum number of events to display (default from constants)
  * @param {string} props.selectedEventDate - Date of event to auto-expand (format: YYYY-MM-DD)
  */
-const SignificantEvents = ({
+interface NewsArticle {
+  title?: string;
+  sentiment_score?: number;
+  relevance_score?: number;
+  url?: string;
+  link?: string;
+  source?: string;
+  time_published?: string;
+  banner_image?: string;
+  image?: string;
+  summary?: string;
+  overall_sentiment_score?: number;
+  overall_sentiment_label?: string;
+}
+
+interface SignificantEvent {
+  start_date: string;
+  end_date?: string;
+  trend: 'Upward' | 'Downward';
+  total_move_pct: number;
+  news?: NewsArticle[];
+}
+
+interface SignificantEventsProps {
+  events?: SignificantEvent[];
+  loading?: boolean;
+  error?: string | null;
+  ticker?: string;
+  sectorName?: string;
+  className?: string;
+  maxEvents?: number;
+  selectedEventDate?: string;
+}
+
+const SignificantEvents: React.FC<SignificantEventsProps> = ({
   events,
   loading,
   error,
@@ -29,20 +63,11 @@ const SignificantEvents = ({
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6 flex flex-col h-full',
   maxEvents = MAX_EVENTS_DISPLAY,
   selectedEventDate
-}: {
-  events?: any;
-  loading?: any;
-  error?: any;
-  ticker?: any;
-  sectorName?: string;
-  className?: string;
-  maxEvents?: number;
-  selectedEventDate?: any;
 }) => {
   const displayName = sectorName || ticker;
-  const [expandedEvent, setExpandedEvent] = useState(0); // Default first event to be open
-  const [visibleNewsCount, setVisibleNewsCount] = useState({});
-  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [expandedEvent, setExpandedEvent] = useState<number | null>(0); // Default first event to be open
+  const [visibleNewsCount, setVisibleNewsCount] = useState<Record<number, number>>({});
+  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Auto-expand event when selectedEventDate changes
@@ -55,7 +80,7 @@ const SignificantEvents = ({
     }
   }, [selectedEventDate, events]);
 
-  const handleArticleClick = (article, e) => {
+  const handleArticleClick = (article: NewsArticle, e: React.MouseEvent) => {
     e.preventDefault();
     setSelectedArticle(article);
     setIsModalOpen(true);
@@ -66,7 +91,7 @@ const SignificantEvents = ({
     setSelectedArticle(null);
   };
 
-  const handleToggleNews = (eventIndex, totalNews) => {
+  const handleToggleNews = (eventIndex: number, totalNews: number) => {
     const currentCount = visibleNewsCount[eventIndex] || 2;
     setVisibleNewsCount({
       ...visibleNewsCount,
@@ -146,7 +171,7 @@ const SignificantEvents = ({
       </div>
 
       <div className="space-y-4 flex-1 overflow-y-auto pr-2 -mr-2" role="list" aria-label="Significant market events">
-        {events.slice(0, maxEvents).map((event, idx) => {
+        {events && events.slice(0, maxEvents).map((event: SignificantEvent, idx: number) => {
           const isExpanded = expandedEvent === idx;
           const newsCount = visibleNewsCount[idx] || 2;
 
@@ -189,7 +214,7 @@ const SignificantEvents = ({
                         Related News
                     </h5>
                     <ul className="space-y-2">
-                        {event.news.slice(0, newsCount).map((n, i) => (
+                        {event.news.slice(0, newsCount).map((n: NewsArticle, i: number) => (
                             <li key={i} className="group">
                                 <button
                                   onClick={(e) => handleArticleClick(n, e)}
@@ -214,9 +239,9 @@ const SignificantEvents = ({
                             </li>
                         ))}
                     </ul>
-                    {event.news.length > 2 && (
+                    {event.news && event.news.length > 2 && (
                         <button
-                            onClick={() => handleToggleNews(idx, event.news.length)}
+                            onClick={() => handleToggleNews(idx, event.news?.length || 0)}
                             className="text-sm font-medium text-blue-600 hover:underline mt-2"
                         >
                             {newsCount === 2 ? `View ${event.news.length - 2} More` : 'Show Less'}

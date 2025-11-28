@@ -1,16 +1,18 @@
-// frontend/src/components/ui/ErrorMessage.js
+// frontend/src/components/ui/ErrorMessage.tsx
 
 import React from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
+interface ErrorMessageProps {
+  title?: string;
+  message?: string;
+  onRetry?: () => void;
+}
+
 /**
  * Error Message Component
- *
- * @param {string} title - Error title
- * @param {string} message - Error message
- * @param {Function} onRetry - Optional retry callback
  */
-const ErrorMessage = ({ title = 'Error', message, onRetry }) => {
+const ErrorMessage: React.FC<ErrorMessageProps> = ({ title = 'Error', message, onRetry }) => {
   return (
     <div className="flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-red-50 border border-red-200 rounded-lg p-6">

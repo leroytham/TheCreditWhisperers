@@ -16,22 +16,82 @@ import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
 import { parseExchangeTimestamp, getExchangeTimezone } from '../../shared/utils/formatters';
 
+// Type definitions
+interface Holding {
+  ticker: string;
+  weight?: number;
+}
+
+interface SentimentHeadline {
+  title?: string;
+  sentiment_score?: number;
+  source?: string;
+}
+
+export interface RollingSentimentDataPoint {
+  timestamp: string;
+  date: string;
+  timezone: string | null;
+  label: string;
+  sentiment: number;
+  fast_sentiment: number;
+  slow_sentiment: number;
+  volume: number;
+  news_volume: number;
+  momentum: number;
+  confidence: number;
+  headlines: SentimentHeadline[];
+}
+
+interface SourceEarliestDates {
+  [source: string]: string;
+}
+
+interface RollingApiDataPoint {
+  timestamp?: string;
+  timezone?: string;
+  score?: number;
+  article_count?: number;
+  momentum?: number;
+  holdings_with_data?: number;
+  headlines?: SentimentHeadline[];
+}
+
+interface RollingApiResponse {
+  data?: RollingApiDataPoint[];
+  holdings_count?: number;
+  valid_holdings?: number;
+  source_earliest_dates?: SourceEarliestDates;
+}
+
+// Hook return type
+interface UsePortfolioRollingSentimentReturn {
+  data: RollingSentimentDataPoint[];
+  hasData: boolean;
+  loading: boolean;
+  error: string | null;
+  sourceEarliestDates: SourceEarliestDates | null;
+  failedHoldings: never[];
+  successCount: number;
+  totalCount: number;
+}
+
 // Default exchange for portfolio chart labels (portfolios can contain mixed exchanges)
 const DEFAULT_EXCHANGE = 'NYSE';
 
 export const usePortfolioRollingSentiment = (
-  username,
-  accountName,
-  holdings,
-  timeframe = '1D',
-  enabled = true,
-  exchange = DEFAULT_EXCHANGE
-) => {
-  const [data, setData] = useState([]);
-  const [hasData, setHasData] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [sourceEarliestDates, setSourceEarliestDates] = useState(null);
+  username: string | undefined,
+  accountName: string | undefined,
+  holdings: Holding[] | null,
+  timeframe: string = '1D',
+  enabled: boolean = true,
+  exchange: string = DEFAULT_EXCHANGE
+): UsePortfolioRollingSentimentReturn => {
+  const [data, setData] = useState<RollingSentimentDataPoint[]>([]);
+  const [hasData, setHasData] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sourceEarliestDates, setSourceEarliestDates] = useState<SourceEarliestDates | null>(null);
 
   const resolvedExchange = exchange || DEFAULT_EXCHANGE;
 
@@ -71,14 +131,14 @@ export const usePortfolioRollingSentiment = (
         const result = response.data;
 
         // Process the data from backend
-        const getDisplayTimezone = (pointTimezone) => {
+        const getDisplayTimezone = (pointTimezone: string | null | undefined): string => {
           if (pointTimezone && pointTimezone.toUpperCase() === 'UTC') {
             return 'UTC';
           }
           return getExchangeTimezone(resolvedExchange);
         };
 
-        const parseTimestampForDisplay = (timestamp, pointTimezone) => {
+        const parseTimestampForDisplay = (timestamp: string | undefined, pointTimezone: string | null | undefined): Date | null => {
           if (!timestamp) return null;
           if (pointTimezone && pointTimezone.toUpperCase() === 'UTC') {
             return new Date(timestamp);
@@ -86,7 +146,7 @@ export const usePortfolioRollingSentiment = (
           return parseExchangeTimestamp(timestamp, resolvedExchange);
         };
 
-        const processedData = (result.data || []).map(point => {
+        const processedData = (result.data || []).map((point: RollingApiDataPoint) => {
           const pointTimezone = point.timezone || null;
           const displayDate = parseTimestampForDisplay(point.timestamp, pointTimezone);
           const displayTimezone = getDisplayTimezone(pointTimezone);
@@ -119,7 +179,7 @@ export const usePortfolioRollingSentiment = (
 
         // Sort by timestamp to ensure ascending chronological order
         // Defensive: guards against backend changes and ensures consistency with chart expectations
-        const sortedData = processedData.sort((a: any, b: any) =>
+        const sortedData = processedData.sort((a: RollingSentimentDataPoint, b: RollingSentimentDataPoint) =>
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
 
@@ -132,8 +192,9 @@ export const usePortfolioRollingSentiment = (
         // Source earliest dates might be included in future backend updates
         setSourceEarliestDates(result.source_earliest_dates || null);
 
-      } catch (err) {
-        if (err.name === 'AbortError' || controller.signal.aborted) {
+      } catch (err: unknown) {
+        const error = err as { name?: string };
+        if (error?.name === 'AbortError' || controller.signal.aborted) {
           // Request was aborted, don't set error
           return;
         }

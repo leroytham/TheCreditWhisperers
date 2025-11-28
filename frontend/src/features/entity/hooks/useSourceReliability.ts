@@ -1,18 +1,25 @@
-// src/features/entity/hooks/useSourceReliability.js
+// src/features/entity/hooks/useSourceReliability.ts
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiService from '../../../services/api';
+
+interface SourceReliability {
+  source: string;
+  count: number;
+  avgSentiment?: number;
+  reliability?: number;
+}
 
 /**
  * Custom hook to fetch news source reliability and sentiment breakdown
  *
- * @param {string} ticker - Stock ticker symbol (e.g., 'AAPL')
- * @returns {Object} - { sources, loading, error, refetch }
+ * @param ticker - Stock ticker symbol (e.g., 'AAPL')
+ * @returns { sources, loading, error, refetch }
  */
-export const useSourceReliability = (ticker) => {
-  const [sources, setSources] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export const useSourceReliability = (ticker: string | null) => {
+  const [sources, setSources] = useState<SourceReliability[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchSources = async () => {
     if (!ticker) {
@@ -27,9 +34,10 @@ export const useSourceReliability = (ticker) => {
       const response = await apiService.getNewsSources(ticker);
       const data = response.data;
       setSources(data.sources || []);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error fetching source reliability:', err);
-      setError(err.message);
+      const error = err as { message?: string };
+      setError(error.message || 'Failed to fetch source reliability');
       setSources([]);
     } finally {
       setLoading(false);

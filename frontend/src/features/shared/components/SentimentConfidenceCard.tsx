@@ -33,7 +33,7 @@ const SentimentConfidenceCard = ({
   const isVolatilityInsufficient = volatilityQuality === 'insufficient_recent_data' || volatilityQuality === null;
 
   // Get volatility level and color
-  const getVolatilityDetails = (vol) => {
+  const getVolatilityDetails = (vol: number | null | undefined) => {
     if (vol === null || vol === undefined) return {
       label: 'N/A',
       color: 'text-gray-400',

@@ -4,6 +4,16 @@ import { Search } from 'lucide-react';
 import EntitySearch from '../../features/entity/components/EntitySearch/EntitySearch';
 import NotificationDropdown from '../../features/notifications/components/NotificationDropdown';
 import { useTickerSearch } from '../../features/entity/hooks/useTickerSearch';
+import type { SearchResult } from '../../types';
+
+type ActiveTab = 'portfolio' | 'sector' | 'entity';
+
+interface AppHeaderProps {
+  activeTab?: ActiveTab | string;
+  onLogout: () => void;
+  onTickerSelect?: (symbol: string) => void;
+  showEntitySearch?: boolean;
+}
 
 /**
  * AppHeader Component
@@ -11,23 +21,13 @@ import { useTickerSearch } from '../../features/entity/hooks/useTickerSearch';
  * Unified header for the entire application with two-tier structure:
  * 1. Top tier: App branding + search + user actions
  * 2. Bottom tier: Main navigation tabs
- *
- * @param {string} activeTab - Current active tab ('portfolio' | 'sector' | 'entity')
- * @param {function} onLogout - Logout handler
- * @param {function} onTickerSelect - Ticker selection handler (for Entity page)
- * @param {boolean} showEntitySearch - Whether to show entity-specific search design (default: false)
  */
-const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntitySearch = false }: {
-  activeTab?: string;
-  onLogout: any;
-  onTickerSelect?: any;
-  showEntitySearch?: boolean;
-}) => {
+const AppHeader: React.FC<AppHeaderProps> = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntitySearch = false }) => {
   const navigate = useNavigate();
   const { searchTerm, setSearchTerm, suggestions, loading, clearSearch } = useTickerSearch();
 
   // Handle ticker selection for general search
-  const handleGeneralTickerSelect = (symbol) => {
+  const handleGeneralTickerSelect = (symbol: string): void => {
     const ticker = symbol.toUpperCase().trim();
     clearSearch();
     // Navigate to entity page with the ticker as a query parameter
@@ -48,7 +48,7 @@ const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntityS
             {/* Right: Search bar and action icons */}
             <div className="flex items-center space-x-4">
               {/* Conditional Search: Entity-specific or General */}
-              {showEntitySearch ? (
+              {showEntitySearch && onTickerSelect ? (
                 <EntitySearch onTickerSelect={onTickerSelect} />
               ) : (
                 <div className="relative">
@@ -74,10 +74,10 @@ const AppHeader = ({ activeTab = 'entity', onLogout, onTickerSelect, showEntityS
                         Array.from(
                           new Map(
                             suggestions
-                              .filter(q => q.quoteType === 'EQUITY')
-                              .map(q => [q.symbol, q])
+                              .filter((q: SearchResult) => q.quoteType === 'EQUITY')
+                              .map((q: SearchResult): [string, SearchResult] => [q.symbol, q])
                           ).values()
-                        ).map((q, idx) => (
+                        ).map((q: SearchResult, idx: number) => (
                           <div
                             key={q.symbol + '-' + idx}
                             onClick={() => handleGeneralTickerSelect(q.symbol)}

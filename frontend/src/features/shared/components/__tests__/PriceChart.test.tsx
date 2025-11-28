@@ -168,19 +168,20 @@ jest.mock('../PriceChart', () => {
 import PriceChart from '../PriceChart';
 
 describe('PriceChart', () => {
-  // Sample test data
+  // Sample test data - include all required properties for PriceDataPoint
   const entityPriceData = [
-    { close: 150.5, date: '2024-01-10' },
-    { close: 152.0, date: '2024-01-11' },
-    { close: 151.25, date: '2024-01-12' },
-    { close: 155.0, date: '2024-01-15' },
+    { close: 150.5, date: '2024-01-10', open: 149.0, high: 151.0, low: 148.5 },
+    { close: 152.0, date: '2024-01-11', open: 150.5, high: 153.0, low: 150.0 },
+    { close: 151.25, date: '2024-01-12', open: 152.0, high: 152.5, low: 150.5 },
+    { close: 155.0, date: '2024-01-15', open: 151.25, high: 156.0, low: 151.0 },
   ];
 
+  // Sample test data - include all required properties for ChartDataPoint
   const sectorChartData = [
-    { y: 100, date: '2024-01-10' },
-    { y: 105, date: '2024-01-11' },
-    { y: 102, date: '2024-01-12' },
-    { y: 110, date: '2024-01-15' },
+    { y: 100, date: '2024-01-10', x: 0, volume: 1000000, index: 0 },
+    { y: 105, date: '2024-01-11', x: 1, volume: 1100000, index: 1 },
+    { y: 102, date: '2024-01-12', x: 2, volume: 900000, index: 2 },
+    { y: 110, date: '2024-01-15', x: 3, volume: 1200000, index: 3 },
   ];
 
   const defaultProps = {
@@ -396,7 +397,7 @@ describe('PriceChart', () => {
 
     it('accepts significantEvents prop', () => {
       const events = [
-        { date: '2024-01-11', title: 'Earnings Report' },
+        { date: '2024-01-11', title: 'Earnings Report', start_date: '2024-01-11', trend: 'up' as const },
       ];
 
       render(
@@ -415,7 +416,7 @@ describe('PriceChart', () => {
 
     it('accepts topEvents prop for sector mode', () => {
       const events = [
-        { date: '2024-01-12', title: 'Sector News' },
+        { date: '2024-01-12', title: 'Sector News', start_date: '2024-01-12', trend: 'up' as const },
       ];
 
       render(

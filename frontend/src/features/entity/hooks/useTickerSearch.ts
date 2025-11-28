@@ -7,11 +7,20 @@
 import { useState, useEffect } from 'react';
 import { SEARCH_DEBOUNCE_DELAY, MIN_SEARCH_LENGTH } from '../../shared/utils/constants';
 import apiService from '../../../services/api';
+import type { SearchResult } from '../../../types';
 
-export const useTickerSearch = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [loading, setLoading] = useState(false);
+interface UseTickerSearchReturn {
+  searchTerm: string;
+  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  suggestions: SearchResult[];
+  loading: boolean;
+  clearSearch: () => void;
+}
+
+export const useTickerSearch = (): UseTickerSearchReturn => {
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     console.log('[useTickerSearch] Search term changed:', searchTerm);
@@ -34,7 +43,7 @@ export const useTickerSearch = () => {
 
         console.log('[useTickerSearch] Response:', data);
         setSuggestions(data.quotes || []);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('[useTickerSearch] Error searching ticker:', err);
         setSuggestions([]);
       } finally {

@@ -1,4 +1,4 @@
-// frontend/src/features/notifications/hooks/useNotifications.js
+// frontend/src/features/notifications/hooks/useNotifications.ts
 /**
  * React Query hooks for notification management
  */
@@ -9,20 +9,61 @@ import { normalizeNotification, normalizeNotificationResponse } from '../utils/n
 import useAppStore from '../../../store/useAppStore';
 import { useCallback } from 'react';
 
+// Type definitions
+interface Notification {
+  id: string;
+  is_read?: boolean;
+  is_archived?: boolean;
+  show_as_toast?: boolean;
+  showAsToast?: boolean;
+  type?: string;
+  title?: string;
+  message?: string;
+  category?: string;
+  priority?: string;
+  duration?: number;
+  actionUrl?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface NotificationFilters {
+  is_read?: boolean;
+  is_archived?: boolean;
+  category?: string;
+  offset?: number;
+  limit?: number;
+}
+
+interface NotificationResponse {
+  notifications: Notification[];
+  total_count: number;
+  has_more: boolean;
+}
+
+interface PriceAlert {
+  id: string;
+  [key: string]: unknown;
+}
+
+interface PriceAlertResponse {
+  alerts: PriceAlert[];
+  total_count: number;
+}
+
 // Query Keys
 export const QUERY_KEYS = {
   notifications: ['notifications'],
-  notificationDetail: (id) => ['notifications', id],
+  notificationDetail: (id: string) => ['notifications', id],
   unreadCount: ['notifications', 'unread-count'],
   preferences: ['notifications', 'preferences'],
   priceAlerts: ['price-alerts'],
-  priceAlert: (id) => ['price-alerts', id],
+  priceAlert: (id: string) => ['price-alerts', id],
 };
 
 /**
  * Hook to fetch notifications with filtering and pagination
  */
-export const useNotifications = (filters = {}) => {
+export const useNotifications = (filters: NotificationFilters = {}) => {
   const queryClient = useQueryClient();
 
   const {
@@ -97,7 +138,7 @@ export const useNotifications = (filters = {}) => {
         if (!old) return old;
         return {
           ...old,
-          notifications: old.notifications.map((n) => ({ ...n, is_read: true })),
+          notifications: old.notifications.map((n: Notification) => ({ ...n, is_read: true })),
         };
       });
 
@@ -131,7 +172,7 @@ export const useNotifications = (filters = {}) => {
         if (!old) return old;
         return {
           ...old,
-          notifications: old.notifications.map((n) =>
+          notifications: old.notifications.map((n: Notification) =>
             n.id === notificationId ? { ...n, is_archived: true } : n
           ),
         };
@@ -166,7 +207,7 @@ export const useNotifications = (filters = {}) => {
         if (!old) return old;
         return {
           ...old,
-          notifications: old.notifications.filter((n) => n.id !== notificationId),
+          notifications: old.notifications.filter((n: Notification) => n.id !== notificationId),
           total_count: old.total_count - 1,
         };
       });
@@ -223,7 +264,7 @@ export const useNotifications = (filters = {}) => {
 /**
  * Hook to fetch notifications with infinite scrolling
  */
-export const useInfiniteNotifications = (filters = {}, limit = 50) => {
+export const useInfiniteNotifications = (filters: NotificationFilters = {}, limit: number = 50) => {
   const queryClient = useQueryClient();
 
   const {
@@ -336,7 +377,7 @@ export const useNotificationPreferences = () => {
 /**
  * Hook to manage price alerts
  */
-export const usePriceAlerts = (filters = {}) => {
+export const usePriceAlerts = (filters: Record<string, unknown> = {}) => {
   const queryClient = useQueryClient();
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -382,7 +423,7 @@ export const usePriceAlerts = (filters = {}) => {
         if (!old) return old;
         return {
           ...old,
-          alerts: old.alerts.map((alert) =>
+          alerts: old.alerts.map((alert: PriceAlert) =>
             alert.id === alertId ? { ...alert, ...updates } : alert
           ),
         };
@@ -414,7 +455,7 @@ export const usePriceAlerts = (filters = {}) => {
         if (!old) return old;
         return {
           ...old,
-          alerts: old.alerts.filter((alert) => alert.id !== alertId),
+          alerts: old.alerts.filter((alert: PriceAlert) => alert.id !== alertId),
           total_count: old.total_count - 1,
         };
       });
@@ -461,7 +502,7 @@ export const useNotificationSync = () => {
 
   // Listen for new notifications from WebSocket
   const handleNewNotification = useCallback(
-    (notification) => {
+    (notification: Record<string, unknown>) => {
       // Normalize the notification data
       const normalizedNotification = normalizeNotification(notification);
 

@@ -1,19 +1,88 @@
-// frontend/src/services/notificationApi.js
+// frontend/src/services/notificationApi.ts
 /**
  * API service for notification management
  */
 
 import axios from 'axios';
 
+// Type definitions
+interface Notification {
+  id?: string;
+  _id?: string;
+  is_read?: boolean;
+  isRead?: boolean;
+  is_archived?: boolean;
+  isArchived?: boolean;
+  created_at?: string;
+  timestamp?: string;
+  createdAt?: string;
+  portfolio_id?: string;
+  portfolioId?: string;
+  portfolio_name?: string;
+  portfolioName?: string;
+  is_global?: boolean;
+  isGlobal?: boolean;
+  affected_tickers?: string[];
+  affectedTickers?: string[];
+  signal_analysis?: Record<string, unknown>;
+  signalAnalysis?: Record<string, unknown>;
+  portfolio_impact?: Record<string, unknown>;
+  portfolioImpact?: Record<string, unknown>;
+  account_servicing?: Record<string, unknown>;
+  accountServicing?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface NotificationResponse {
+  notifications?: Notification[];
+  notification?: Notification;
+  id?: string;
+  _id?: string;
+  [key: string]: unknown;
+}
+
+interface NotificationParams {
+  is_archived?: boolean;
+  is_read?: boolean;
+  category?: string;
+  portfolio_id?: string;
+  include_global?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+interface NotificationPreferences {
+  [key: string]: unknown;
+}
+
+interface PriceAlert {
+  ticker?: string;
+  condition?: string;
+  target_price?: number;
+  base_price?: number;
+  percent_change?: number;
+  priority?: string;
+  notes?: string;
+  portfolio_id?: string;
+  portfolio_name?: string;
+  is_global?: boolean;
+  [key: string]: unknown;
+}
+
+interface Portfolio {
+  account_name?: string;
+  portfolio_name?: string;
+  account_no?: string;
+  [key: string]: unknown;
+}
+
 // Base API configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 /**
  * Normalize notification data from snake_case (backend) to camelCase (frontend)
- * @param {Object} notification - Raw notification from backend
- * @returns {Object} Normalized notification
  */
-const normalizeNotification = (notification) => {
+const normalizeNotification = (notification: Notification): Notification => {
   if (!notification) return notification;
 
   return {
@@ -46,10 +115,8 @@ const normalizeNotification = (notification) => {
 
 /**
  * Normalize API response data
- * @param {Object} data - API response data
- * @returns {Object} Normalized data
  */
-const normalizeResponse = (data) => {
+const normalizeResponse = (data: NotificationResponse): NotificationResponse => {
   if (!data) return data;
 
   // If response has notifications array, normalize each notification
@@ -153,23 +220,16 @@ export const notificationApi = {
 
   /**
    * Get notifications for a specific portfolio
-   * @param {string} portfolioId - Portfolio ID
-   * @param {Object} params - Query parameters
-   * @param {boolean} params.include_global - Include global notifications (default: true)
-   * @param {number} params.limit - Maximum number of results (default: 50)
-   * @param {number} params.offset - Number of results to skip (default: 0)
    */
-  getPortfolioNotifications: async (portfolioId, params = {}) => {
+  getPortfolioNotifications: async (portfolioId: string, params: NotificationParams = {}) => {
     const response = await apiClient.get(`/api/notifications/portfolio/${portfolioId}`, { params });
     return response.data;
   },
 
   /**
    * Get unread count for a specific portfolio
-   * @param {string} portfolioId - Portfolio ID
-   * @param {boolean} includeGlobal - Include global notifications (default: true)
    */
-  getPortfolioUnreadCount: async (portfolioId, includeGlobal = true) => {
+  getPortfolioUnreadCount: async (portfolioId: string, includeGlobal = true) => {
     const response = await apiClient.get(`/api/notifications/portfolio/${portfolioId}/unread-count`, {
       params: { include_global: includeGlobal },
     });
@@ -178,22 +238,16 @@ export const notificationApi = {
 
   /**
    * Get notifications for multiple portfolios
-   * @param {string[]} portfolioIds - Array of portfolio IDs
-   * @param {Object} params - Query parameters
-   * @param {boolean} params.include_global - Include global notifications (default: true)
-   * @param {number} params.limit - Maximum number of results (default: 50)
-   * @param {number} params.offset - Number of results to skip (default: 0)
    */
-  getMultiPortfolioNotifications: async (portfolioIds, params = {}) => {
+  getMultiPortfolioNotifications: async (portfolioIds: string[], params: NotificationParams = {}) => {
     const response = await apiClient.post('/api/notifications/multi-portfolio', portfolioIds, { params });
     return response.data;
   },
 
   /**
    * Create a new notification
-   * @param {Object} notification - Notification data
    */
-  createNotification: async (notification) => {
+  createNotification: async (notification: Notification) => {
     const response = await apiClient.post('/api/notifications/', notification);
     return response.data;
   },
@@ -208,9 +262,8 @@ export const notificationApi = {
 
   /**
    * Mark a notification as read
-   * @param {string} notificationId - Notification ID
    */
-  markAsRead: async (notificationId) => {
+  markAsRead: async (notificationId: string) => {
     const response = await apiClient.patch(`/api/notifications/${notificationId}/read`);
     return response.data;
   },
@@ -225,18 +278,16 @@ export const notificationApi = {
 
   /**
    * Archive a notification
-   * @param {string} notificationId - Notification ID
    */
-  archiveNotification: async (notificationId) => {
+  archiveNotification: async (notificationId: string) => {
     const response = await apiClient.patch(`/api/notifications/${notificationId}/archive`);
     return response.data;
   },
 
   /**
    * Delete a notification
-   * @param {string} notificationId - Notification ID
    */
-  deleteNotification: async (notificationId) => {
+  deleteNotification: async (notificationId: string) => {
     const response = await apiClient.delete(`/api/notifications/${notificationId}`);
     return response.data;
   },
@@ -274,9 +325,8 @@ export const preferencesApi = {
 
   /**
    * Update user notification preferences
-   * @param {Object} preferences - Preference updates
    */
-  updatePreferences: async (preferences) => {
+  updatePreferences: async (preferences: NotificationPreferences) => {
     const response = await apiClient.put('/api/notifications/preferences', preferences);
     return response.data;
   },
@@ -301,47 +351,32 @@ export const priceAlertApi = {
 
   /**
    * Create a new price alert
-   * @param {Object} alert - Alert data
-   * @param {string} alert.ticker - Stock ticker symbol
-   * @param {string} alert.condition - Alert condition (above, below, percent_increase, percent_decrease)
-   * @param {number} alert.target_price - Target price for above/below conditions
-   * @param {number} alert.base_price - Base price for percentage conditions
-   * @param {number} alert.percent_change - Percentage change for percentage conditions
-   * @param {string} alert.priority - Alert priority (low, medium, high, critical)
-   * @param {string} alert.notes - Optional notes
-   * @param {string} alert.portfolio_id - Portfolio ID (optional)
-   * @param {string} alert.portfolio_name - Portfolio name for display (optional)
-   * @param {boolean} alert.is_global - Whether alert applies to all portfolios (default: false)
    */
-  createAlert: async (alert) => {
+  createAlert: async (alert: PriceAlert) => {
     const response = await apiClient.post('/api/notifications/alerts', alert);
     return response.data;
   },
 
   /**
    * Update a price alert
-   * @param {string} alertId - Alert ID
-   * @param {Object} updates - Alert updates
    */
-  updateAlert: async (alertId, updates) => {
+  updateAlert: async (alertId: string, updates: Partial<PriceAlert>) => {
     const response = await apiClient.patch(`/api/notifications/alerts/${alertId}`, updates);
     return response.data;
   },
 
   /**
    * Delete a price alert
-   * @param {string} alertId - Alert ID
    */
-  deleteAlert: async (alertId) => {
+  deleteAlert: async (alertId: string) => {
     const response = await apiClient.delete(`/api/notifications/alerts/${alertId}`);
     return response.data;
   },
 
   /**
    * Get alerts for a specific ticker
-   * @param {string} ticker - Stock ticker symbol
    */
-  getAlertsForTicker: async (ticker) => {
+  getAlertsForTicker: async (ticker: string) => {
     const response = await apiClient.get(`/api/notifications/alerts/ticker/${ticker}`);
     return response.data;
   },
@@ -372,57 +407,48 @@ export const portfolioApi = {
 
   /**
    * Get a specific portfolio by ID
-   * @param {string} portfolioId - Portfolio ID
    */
-  getPortfolio: async (portfolioId) => {
+  getPortfolio: async (portfolioId: string) => {
     const response = await apiClient.get(`/api/portfolios/${portfolioId}`);
     return response.data;
   },
 
   /**
    * Get holdings for a specific portfolio
-   * @param {string} portfolioId - Portfolio ID
    */
-  getPortfolioHoldings: async (portfolioId) => {
+  getPortfolioHoldings: async (portfolioId: string) => {
     const response = await apiClient.get(`/api/portfolios/${portfolioId}/holdings`);
     return response.data;
   },
 
   /**
    * Set a portfolio as primary
-   * @param {string} portfolioId - Portfolio ID
    */
-  setPrimary: async (portfolioId) => {
+  setPrimary: async (portfolioId: string) => {
     const response = await apiClient.post(`/api/portfolios/${portfolioId}/set-primary`);
     return response.data;
   },
 
   /**
    * Refresh portfolio holdings cache
-   * @param {string} portfolioId - Portfolio ID
    */
-  refreshCache: async (portfolioId) => {
+  refreshCache: async (portfolioId: string) => {
     const response = await apiClient.post(`/api/portfolios/${portfolioId}/refresh-cache`);
     return response.data;
   },
 
   /**
    * Get portfolio by account name (backward compatibility)
-   * @param {string} accountName - Account name
    */
-  getByAccountName: async (accountName) => {
+  getByAccountName: async (accountName: string) => {
     const response = await apiClient.get(`/api/portfolios/by-account/${accountName}`);
     return response.data;
   },
 
   /**
    * Create a new portfolio
-   * @param {Object} portfolio - Portfolio data
-   * @param {string} portfolio.account_name - Account name
-   * @param {string} portfolio.portfolio_name - Portfolio display name (optional)
-   * @param {string} portfolio.account_no - Account number (optional)
    */
-  createPortfolio: async (portfolio) => {
+  createPortfolio: async (portfolio: Portfolio) => {
     const response = await apiClient.post('/api/portfolios/create', portfolio);
     return response.data;
   },

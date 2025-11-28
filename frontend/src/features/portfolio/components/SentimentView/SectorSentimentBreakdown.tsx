@@ -1,5 +1,20 @@
 import React from 'react';
 
+// Type definitions
+interface SectorData {
+  sector: string;
+  sentiment: number;
+  sentimentLabel: string;
+  weight: number;
+  holdingsCount: number;
+}
+
+interface SectorSentimentBreakdownProps {
+  sectors: SectorData[] | null | undefined;
+  loading: boolean;
+  error: string | null;
+}
+
 /**
  * SectorSentimentBreakdown Component
  *
@@ -10,9 +25,9 @@ import React from 'react';
  * @param {string} error - Error message if any
  * @returns {React.ReactElement} Rendered sector breakdown component
  */
-const SectorSentimentBreakdown = ({ sectors, loading, error }) => {
+const SectorSentimentBreakdown: React.FC<SectorSentimentBreakdownProps> = ({ sectors, loading, error }) => {
   // Helper function to get sentiment color
-  const getSentimentColor = (score) => {
+  const getSentimentColor = (score: number): string => {
     if (score > 0.15) return 'text-green-600 bg-green-50';
     if (score > 0.05) return 'text-green-500 bg-green-50';
     if (score > -0.05) return 'text-gray-600 bg-gray-50';
@@ -21,7 +36,7 @@ const SectorSentimentBreakdown = ({ sectors, loading, error }) => {
   };
 
   // Helper function to get sentiment bar width and color
-  const getSentimentBarStyle = (score) => {
+  const getSentimentBarStyle = (score: number): { width: string; bgColor: string } => {
     const maxScore = 0.5; // Maximum expected score for scaling
     const normalizedScore = Math.min(Math.abs(score), maxScore) / maxScore;
     const width = normalizedScore * 100;
@@ -86,7 +101,7 @@ const SectorSentimentBreakdown = ({ sectors, loading, error }) => {
         <h4 className="text-sm font-semibold text-gray-900 mb-4">Sentiment by Sector</h4>
 
         <div className="space-y-4">
-          {sectors.map((sector) => {
+          {sectors.map((sector: SectorData) => {
             const barStyle = getSentimentBarStyle(sector.sentiment);
 
             return (
@@ -134,7 +149,7 @@ const SectorSentimentBreakdown = ({ sectors, loading, error }) => {
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-500">Portfolio Weight Coverage</span>
               <span className="text-xs font-medium text-gray-900">
-                {sectors.reduce((sum, s) => sum + s.weight, 0).toFixed(1)}%
+                {sectors.reduce((sum: number, s: SectorData) => sum + s.weight, 0).toFixed(1)}%
               </span>
             </div>
           </div>

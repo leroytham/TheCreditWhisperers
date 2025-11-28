@@ -26,6 +26,16 @@ const mockUseUser = useUser as jest.MockedFunction<typeof useUser>;
 const mockUseSelectedAccount = useSelectedAccount as jest.MockedFunction<typeof useSelectedAccount>;
 const mockApiService = apiService as jest.Mocked<typeof apiService>;
 
+// Type for query configuration - used for mock call assertions
+interface MockQueryConfig {
+  queries: Array<{
+    queryKey: unknown[];
+    queryFn: () => Promise<unknown>;
+    enabled?: boolean;
+    staleTime?: number;
+  }>;
+}
+
 describe('usePortfolioOverview', () => {
   // Default mock data
   const defaultUserState = {
@@ -89,7 +99,7 @@ describe('usePortfolioOverview', () => {
       renderHook(() => usePortfolioOverview());
 
       expect(mockUseQueries).toHaveBeenCalledTimes(1);
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries).toHaveLength(3);
     });
 
@@ -98,7 +108,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[0].queryKey).toEqual([
         'portfolio',
         'holdings',
@@ -112,7 +122,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[1].queryKey).toEqual([
         'portfolio',
         'performance',
@@ -126,7 +136,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[2].queryKey).toEqual(['accounts', 'testuser']);
     });
 
@@ -135,7 +145,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[0].enabled).toBe(true);
       expect(config.queries[1].enabled).toBe(true);
     });
@@ -151,7 +161,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[0].enabled).toBe(false);
       expect(config.queries[1].enabled).toBe(false);
     });
@@ -167,7 +177,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       // Accounts query doesn't have enabled property, so it defaults to true
       expect(config.queries[2].enabled).toBeUndefined();
     });
@@ -177,7 +187,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[0].staleTime).toBe(5 * 60 * 1000); // Holdings: 5 min
       expect(config.queries[1].staleTime).toBe(5 * 60 * 1000); // Performance: 5 min
       expect(config.queries[2].staleTime).toBe(10 * 60 * 1000); // Accounts: 10 min
@@ -199,7 +209,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[0].queryKey[2]).toBe('account-user');
     });
 
@@ -213,7 +223,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[2].queryKey[1]).toBe('testuser');
     });
 
@@ -233,7 +243,7 @@ describe('usePortfolioOverview', () => {
 
       renderHook(() => usePortfolioOverview());
 
-      const config = mockUseQueries.mock.calls[0][0];
+      const config = mockUseQueries.mock.calls[0][0] as MockQueryConfig;
       expect(config.queries[2].queryKey[1]).toBe('TestUser');
     });
   });

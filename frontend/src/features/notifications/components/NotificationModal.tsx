@@ -1,20 +1,60 @@
 import React, { useEffect } from 'react';
 import { X, Archive, Trash2 } from 'lucide-react';
 
+// Type definitions
+interface SignalAnalysis {
+  triggerRule?: string;
+  sentimentScore?: number;
+  volumeChange?: string;
+}
+
+interface PortfolioImpact {
+  ticker?: string;
+  price?: string;
+  change?: string;
+}
+
+interface AccountServicing {
+  rejectedDoc?: string;
+  rejectionReason?: string;
+  instructions?: string[];
+}
+
+interface Notification {
+  id: string | number;
+  title?: string;
+  modalTitle?: string;
+  category?: string;
+  subject?: string;
+  body?: string;
+  message?: string;
+  timestamp?: string;
+  is_global?: boolean;
+  portfolio_name?: string;
+  affected_tickers?: string[];
+  isArchived?: boolean;
+  is_archived?: boolean;
+  signalAnalysis?: SignalAnalysis;
+  portfolioImpact?: PortfolioImpact;
+  accountServicing?: AccountServicing;
+}
+
+interface NotificationModalProps {
+  notification: Notification;
+  onClose: () => void;
+  onArchive?: (id: string | number) => void;
+  onDelete?: (id: string | number) => void;
+}
+
 /**
  * NotificationModal Component
  *
  * Slide-out modal panel from the right showing full notification details
  */
-const NotificationModal = ({ notification, onClose, onArchive, onDelete }: {
-  notification: any;
-  onClose: any;
-  onArchive?: any;
-  onDelete?: any;
-}) => {
+const NotificationModal: React.FC<NotificationModalProps> = ({ notification, onClose, onArchive, onDelete }) => {
   // Close on Escape key
   useEffect(() => {
-    const handleEscape = (e) => {
+    const handleEscape = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         onClose();
       }
@@ -33,13 +73,13 @@ const NotificationModal = ({ notification, onClose, onArchive, onDelete }: {
 
     const { triggerRule, sentimentScore, volumeChange } = notification.signalAnalysis;
 
-    const getSentimentColor = (score) => {
+    const getSentimentColor = (score: number): string => {
       if (score > 0) return 'text-green-600';
       if (score < 0) return 'text-red-600';
       return 'text-gray-600';
     };
 
-    const getVolumeColor = (change) => {
+    const getVolumeColor = (change: string): string => {
       const value = parseInt(change);
       return value > 0 ? 'text-green-600' : 'text-gray-600';
     };
@@ -78,7 +118,8 @@ const NotificationModal = ({ notification, onClose, onArchive, onDelete }: {
 
     const { ticker, price, change } = notification.portfolioImpact;
 
-    const getChangeColor = (changeStr) => {
+    const getChangeColor = (changeStr: string | undefined): string => {
+      if (!changeStr) return 'text-gray-600';
       if (changeStr.startsWith('-')) return 'text-red-600';
       if (changeStr.startsWith('+')) return 'text-green-600';
       return 'text-gray-600';
@@ -117,7 +158,7 @@ const NotificationModal = ({ notification, onClose, onArchive, onDelete }: {
         {instructions && instructions.length > 0 && (
           <div className="mt-4">
             <h4 className="text-sm font-semibold text-gray-800">Instructions</h4>
-            {instructions.map((instruction, idx) => (
+            {instructions.map((instruction: string, idx: number) => (
               <p key={idx} className="text-gray-600 mt-1">
                 {instruction}
               </p>
@@ -213,7 +254,7 @@ const NotificationModal = ({ notification, onClose, onArchive, onDelete }: {
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
               <h4 className="text-sm font-semibold text-blue-900 mb-2">Affected Tickers</h4>
               <div className="flex flex-wrap gap-2">
-                {notification.affected_tickers.map((ticker) => (
+                {notification.affected_tickers.map((ticker: string) => (
                   <span
                     key={ticker}
                     className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-mono font-semibold bg-white text-gray-800 border border-blue-300 hover:bg-blue-100 cursor-pointer transition-colors"

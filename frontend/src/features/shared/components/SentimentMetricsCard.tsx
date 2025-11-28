@@ -16,7 +16,21 @@ import { TrendingUp, TrendingDown, Minus, Info } from 'lucide-react';
  * @param {boolean} props.showOnlyAnalytics - If true, only show Distribution and Volatility cards
  * @param {string} props.className - Additional CSS classes
  */
-const SentimentMetricsCard = ({
+type TooltipType = 'overall' | 'momentum' | 'distribution' | 'volatility' | null;
+type TrendType = 'up' | 'down' | 'stable';
+type ColorType = 'green' | 'red' | 'yellow' | 'gray' | 'blue';
+type VolatilityLevel = 'Low' | 'Medium' | 'High';
+
+interface SentimentMetricsCardProps {
+  overall?: { label: string; value: number; color: ColorType };
+  momentum?: { value: number; trend: TrendType; period: string };
+  distribution?: { bullish: number; somewhatBullish: number; neutral: number; somewhatBearish: number; bearish: number };
+  volatility?: { level: VolatilityLevel; score: number };
+  showOnlyAnalytics?: boolean;
+  className?: string;
+}
+
+const SentimentMetricsCard: React.FC<SentimentMetricsCardProps> = ({
   overall = { label: 'Neutral', value: 0, color: 'gray' },
   momentum = { value: 0, trend: 'stable', period: '7d' },
   distribution = { bullish: 20, somewhatBullish: 20, neutral: 20, somewhatBearish: 20, bearish: 20 },
@@ -24,7 +38,7 @@ const SentimentMetricsCard = ({
   showOnlyAnalytics = false,
   className = ''
 }) => {
-  const [showTooltip, setShowTooltip] = useState(null);
+  const [showTooltip, setShowTooltip] = useState<TooltipType>(null);
 
   // Color mappings
   const sentimentColorMap = {
@@ -49,7 +63,7 @@ const SentimentMetricsCard = ({
     'High': { bg: 'bg-red-100', text: 'text-red-800', score: 'text-red-900' }
   };
 
-  const getTrendIcon = (trend) => {
+  const getTrendIcon = (trend: TrendType) => {
     switch (trend) {
       case 'up': return <TrendingUp className="w-4 h-4 text-green-600" />;
       case 'down': return <TrendingDown className="w-4 h-4 text-red-600" />;
@@ -57,7 +71,7 @@ const SentimentMetricsCard = ({
     }
   };
 
-  const getTrendColor = (trend, value) => {
+  const getTrendColor = (trend: TrendType, value: number) => {
     if (trend === 'up') return 'text-green-600 font-semibold';
     if (trend === 'down') return 'text-red-600 font-semibold';
     return 'text-gray-600';

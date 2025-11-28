@@ -5,32 +5,41 @@ import { useUser } from '../../../../hooks/useUser';
 import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 
+// Type definitions
+interface Account {
+  account_name: string;
+  account_number: string;
+}
+
+interface SelectedAccountParams {
+  user: { username: string; displayName: string };
+  account: Account;
+}
+
+interface AccountSelectorProps {
+  onAccountSelect: (params: SelectedAccountParams) => void;
+  onAddPortfolio?: () => void;
+}
+
+interface ApiAccount {
+  client_account_name: string;
+  account_no: string;
+}
+
 /**
  * AccountSelector Component
  *
  * Displays a selectable list of accounts for the logged-in user.
  * Fetches accounts from API and manages account selection state.
  * Integrates with Zustand store via useSelectedAccount hook.
- *
- * @param {Object} props - Component props
- * @param {Function} props.onAccountSelect - Callback function when an account is selected
- * @param {Object} props.onAccountSelect.account - The selected account object
- * @param {Function} props.onAddPortfolio - Callback function to trigger add portfolio modal
- * @returns {React.ReactElement} Rendered account selector component
- *
- * @example
- * <AccountSelector
- *   onAccountSelect={(account) => handleAccountChange(account)}
- *   onAddPortfolio={() => setIsAddPortfolioModalOpen(true)}
- * />
  */
-const AccountSelector = ({ onAccountSelect, onAddPortfolio }) => {
+const AccountSelector: React.FC<AccountSelectorProps> = ({ onAccountSelect, onAddPortfolio }) => {
   const navigate = useNavigate();
   const { username } = useUser();
   const { selectedAccount } = useSelectedAccount();
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (username) {
@@ -41,16 +50,16 @@ const AccountSelector = ({ onAccountSelect, onAddPortfolio }) => {
     }
   }, [username]);
 
-  const fetchAccounts = async (user) => {
+  const fetchAccounts = async (user: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       // Use apiService instead of direct fetch
       const response = await apiService.getPortfolioAccounts(user);
-      const data = response.data;
+      const data = response.data as { accounts?: ApiAccount[] };
 
       // Transform the response to match our component structure
-      const transformedAccounts = (data.accounts || []).map(account => ({
+      const transformedAccounts: Account[] = (data.accounts || []).map((account: ApiAccount) => ({
         account_name: account.client_account_name,
         account_number: account.account_no,
         // Future enhancement: Fetch analytics from GET /portfolio/summary/{username}/{account_name}
@@ -60,15 +69,16 @@ const AccountSelector = ({ onAccountSelect, onAddPortfolio }) => {
       setAccounts(transformedAccounts);
     } catch (err) {
       // Error already handled by apiService interceptor
-      setError(err.message || 'Failed to load accounts. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load accounts. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAccountSelect = (account) => {
+  const handleAccountSelect = (account: Account): void => {
     onAccountSelect({
-      user: { username, displayName: username },
+      user: { username: username || '', displayName: username || '' },
       account
     });
   };

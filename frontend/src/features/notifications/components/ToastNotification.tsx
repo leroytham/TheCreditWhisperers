@@ -1,5 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Info, X, LucideIcon } from 'lucide-react';
+
+// Type definitions
+type NotificationType = 'success' | 'error' | 'warning' | 'info' | 'critical';
+
+interface ToastNotificationData {
+  id: string | number;
+  type?: NotificationType;
+  title?: string;
+  message?: string;
+  duration?: number;
+  category?: string;
+  timestamp?: string | number | Date;
+  actionUrl?: string;
+}
+
+interface ToastNotificationProps {
+  notification: ToastNotificationData;
+  onRemind?: () => void;
+  onAcknowledge?: () => void;
+  onDismiss?: () => void;
+}
+
+interface TypeConfig {
+  icon: LucideIcon;
+  bgColor: string;
+  borderColor: string;
+  iconColor: string;
+  titleColor: string;
+  textColor: string;
+}
 
 /**
  * ToastNotification Component
@@ -8,8 +38,13 @@ import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
  * Supports multiple types: success, error, warning, info, critical
  * Auto-dismisses based on type unless it's an error or critical notification
  */
-const ToastNotification = ({ notification, onRemind, onAcknowledge, onDismiss }) => {
-  const [isVisible, setIsVisible] = useState(false);
+const ToastNotification: React.FC<ToastNotificationProps> = ({
+  notification,
+  onRemind,
+  onAcknowledge,
+  onDismiss
+}) => {
+  const [isVisible, setIsVisible] = useState<boolean>(false);
 
   useEffect(() => {
     if (notification) {

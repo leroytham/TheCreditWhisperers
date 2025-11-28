@@ -1,4 +1,4 @@
-// frontend/src/features/shared/components/NewsCard.jsx
+// frontend/src/features/shared/components/NewsCard.tsx
 
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
@@ -6,25 +6,27 @@ import SentimentBadge from './SentimentBadge';
 import { formatRelativeTime } from '../utils/dateFormatters';
 import { getRelevanceDetails } from '../utils/sentimentHelpers';
 
+interface NewsCardProps {
+  title: string;
+  link: string;
+  provider: string;
+  publish_date: string;
+  sentiment_score?: number | null;
+  sentiment_label?: string;
+  image?: string | null;
+  summary?: string;
+  tickers?: string[];
+  relevance_score?: number | null;
+  recency_weight?: number | null;
+  combined_weight?: number | null;
+  age_hours?: number | null;
+}
+
 /**
  * A card component to display a single news article with modern UX/UI.
  * Now includes exponential decay weighting visualization.
- * @param {object} props
- * @param {string} props.title
- * @param {string} props.link
- * @param {string} props.provider
- * @param {string} props.publish_date
- * @param {number} props.sentiment_score
- * @param {string} props.sentiment_label
- * @param {string|null} props.image
- * @param {string} [props.summary] - The article summary.
- * @param {string[]} [props.tickers] - An array of related tickers.
- * @param {number} [props.relevance_score] - Relevance score (0 < x <= 1) if available.
- * @param {number} [props.recency_weight] - Recency weight from exponential decay (0 to 1).
- * @param {number} [props.combined_weight] - Combined weight (recency × relevance).
- * @param {number} [props.age_hours] - Age of the article in hours.
  */
-const NewsCard = ({
+const NewsCard: React.FC<NewsCardProps> = ({
   title,
   link,
   provider,
@@ -43,7 +45,7 @@ const NewsCard = ({
   const relevanceDetails = getRelevanceDetails(relevance_score);
 
   // Format age hours for display
-  const formatAgeHours = (hours) => {
+  const formatAgeHours = (hours: number | null | undefined): string | null => {
     if (hours === undefined || hours === null) return null;
     if (hours < 1) return `${Math.round(hours * 60)}m ago`;
     if (hours < 24) return `${Math.round(hours)}h ago`;
@@ -53,24 +55,24 @@ const NewsCard = ({
 
   const ageDisplay = formatAgeHours(age_hours);
   // Use a ref for the fallback div to control its display
-  const fallbackRef = React.useRef(null);
+  const fallbackRef = React.useRef<HTMLDivElement>(null);
 
-  const handleCardClick = (e) => {
+  const handleCardClick = (e: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => {
     // Prevent default if the click is on an interactive element inside the card
-    if (e.target.closest('a')) {
+    if ((e.target as HTMLElement).closest('a')) {
       return;
     }
     window.open(link, '_blank', 'noopener,noreferrer');
   };
 
-  const handleImageError = (e) => {
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     e.currentTarget.style.display = 'none';
     if (fallbackRef.current) {
       fallbackRef.current.style.display = 'flex';
     }
   };
 
-  const TickerTag = ({ symbol }) => (
+  const TickerTag = ({ symbol }: { symbol: string }) => (
     <span className="inline-block bg-gray-100 text-gray-800 text-xs font-medium mr-2 px-2.5 py-0.5 rounded-full">{symbol}</span>
   );
 

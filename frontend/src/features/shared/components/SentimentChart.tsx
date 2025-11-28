@@ -1,31 +1,44 @@
 import React, { useState } from 'react';
-import { generateDailySentimentBars } from '../utils/chartHelpers';
+import { generateDailySentimentBars, DailySentimentBar, SentimentHeadline } from '../utils/chartHelpers';
 import { getBarColor } from '../utils/formatters';
 import { SENTIMENT_CHART_CONFIG, DEFAULT_VISIBLE_HEADLINES } from '../utils/constants';
+
+interface DailySentimentData {
+  [date: string]: {
+    score?: number;
+    count?: number;
+    headlines?: SentimentHeadline[];
+  };
+}
+
+interface SentimentChartProps {
+  dailySentiment?: DailySentimentData | null;
+  sentimentBars?: DailySentimentBar[];
+  daysToShow?: number;
+  className?: string;
+}
 
 /**
  * Shared SentimentChart Component
  *
  * Bar chart displaying daily sentiment with headline tooltips
  * Used by both Entity and Sector features
- *
- * @param {Object} props
- * @param {Object} props.dailySentiment - Daily sentiment data object (keyed by date)
- * @param {Array} props.sentimentBars - Pre-processed sentiment bars (optional, overrides dailySentiment)
- * @param {number} props.daysToShow - Number of days to display (default: 7)
- * @param {string} props.className - Additional CSS classes for wrapper
  */
-const SentimentChart = ({
+const SentimentChart: React.FC<SentimentChartProps> = ({
   dailySentiment,
   sentimentBars: preProcesedBars,
   daysToShow = SENTIMENT_CHART_CONFIG.daysToShow,
   className = 'px-6 pb-6'
 }) => {
-  const [hoveredBar, setHoveredBar] = useState(null);
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null);
   const [visibleHeadlines, setVisibleHeadlines] = useState(DEFAULT_VISIBLE_HEADLINES);
 
   // Use pre-processed bars if provided, otherwise generate from dailySentiment
-  const dailySentimentBars = preProcesedBars || generateDailySentimentBars(dailySentiment, daysToShow);
+  // Type assertion needed because generateDailySentimentBars expects DailySentimentPoint but only uses score/count/headlines
+  const dailySentimentBars = preProcesedBars || generateDailySentimentBars(
+    (dailySentiment || {}) as Parameters<typeof generateDailySentimentBars>[0],
+    daysToShow
+  );
 
   // Static Y-axis range from 1.0 to -1.0 for consistent visualization
   const yAxisValues = [1.0, 0.5, 0, -0.5, -1.0];
@@ -134,7 +147,7 @@ const SentimentChart = ({
           </g>
 
           {/* Bars with score labels */}
-          {dailySentimentBars.map((bar, i) => {
+          {dailySentimentBars.map((bar: DailySentimentBar, i: number) => {
             const barWidth = SENTIMENT_CHART_CONFIG.barWidth;
             const barSpacing = 680 / dailySentimentBars.length;
             const x = 70 + i * barSpacing + (barSpacing - barWidth) / 2;
@@ -250,7 +263,7 @@ const SentimentChart = ({
                   <div className="space-y-3">
                     {dailySentimentBars[hoveredBar].headlines
                       .slice(0, visibleHeadlines)
-                      .map((headline, idx) => (
+                      .map((headline: SentimentHeadline, idx: number) => (
                         <div key={idx} className="border-l-2 border-blue-300 pl-2 py-1">
                           <a
                             href={headline.link}
@@ -269,14 +282,16 @@ const SentimentChart = ({
                           </a>
                           <div className="flex items-center justify-between mt-1">
                             <span className="text-xs text-gray-500">{headline.provider}</span>
-                            <span
-                              className={`text-xs font-semibold ${
-                                headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
-                              }`}
-                            >
-                              {headline.sentiment_score >= 0 ? '+' : ''}
-                              {headline.sentiment_score.toFixed(2)}
-                            </span>
+                            {headline.sentiment_score !== undefined && (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
+                                }`}
+                              >
+                                {headline.sentiment_score >= 0 ? '+' : ''}
+                                {headline.sentiment_score.toFixed(2)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

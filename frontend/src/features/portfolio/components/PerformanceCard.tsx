@@ -1,19 +1,31 @@
 import React, { useState } from 'react';
-import PropTypes from 'prop-types';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import { InlineError } from '../../../components/ErrorDisplay';
 import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
+
+// Type definitions
+interface PerformanceCardProps {
+  onViewPerformance: () => void;
+}
+
+interface PerformanceDataPoint {
+  period: string;
+  return: number;
+  sp500: number;
+  isPositive?: boolean;
+  outperformance: number;
+  holdings_count: number;
+  portfolio_value_current?: number;
+}
 
 // Chart display constants
 const MIN_BAR_HEIGHT_PX = 10; // Minimum visible bar height in pixels
 
 /**
  * Format benchmark label with correct sign prefix
- * @param {number} value - The percentage value
- * @returns {string} Formatted label (e.g., "+5.23%", "0%", or "-3.45%")
  */
-const formatBenchmarkLabel = (value) => {
+const formatBenchmarkLabel = (value: number): string => {
   if (value === 0) return '0%'; // Plain zero without sign
   if (value > 0) return `+${value}%`;
   return `${value}%`; // Already has minus sign
@@ -21,10 +33,8 @@ const formatBenchmarkLabel = (value) => {
 
 /**
  * Get color class based on value sign
- * @param {number} value - The percentage value
- * @returns {string} Tailwind color class
  */
-const getBenchmarkColorClass = (value) => {
+const getBenchmarkColorClass = (value: number): string => {
   if (value === 0) return 'text-gray-600'; // Neutral color for zero
   return value > 0 ? 'text-green-600' : 'text-red-600';
 };
@@ -32,10 +42,8 @@ const getBenchmarkColorClass = (value) => {
 /**
  * Calculate adaptive Y-axis maximum based on data range
  * Uses smaller rounding increments for small values to prevent misleading scales
- * @param {number} maxAbsValue - Maximum absolute value in dataset
- * @returns {number} Rounded Y-axis maximum
  */
-const getAdaptiveYAxisMax = (maxAbsValue) => {
+const getAdaptiveYAxisMax = (maxAbsValue: number): number => {
   if (maxAbsValue === 0) return 10; // Default scale
   if (maxAbsValue <= 1) return Math.ceil(maxAbsValue); // Round to nearest 1%
   if (maxAbsValue <= 5) return Math.ceil(maxAbsValue / 5) * 5; // Round to nearest 5%
@@ -44,12 +52,8 @@ const getAdaptiveYAxisMax = (maxAbsValue) => {
 
 /**
  * Calculate dynamic bar height based on data range
- * @param {number} value - The percentage value
- * @param {number} yAxisMax - Y-axis maximum (scale) for consistent visual representation
- * @param {number} containerHeight - Height of half the chart container in px
- * @returns {number} Bar height in pixels
  */
-const calculateBarHeight = (value, yAxisMax, containerHeight = 85) => {
+const calculateBarHeight = (value: number, yAxisMax: number, containerHeight: number = 85): number => {
   if (yAxisMax === 0) return MIN_BAR_HEIGHT_PX;
 
   const percentage = Math.abs(value) / yAxisMax;
@@ -72,7 +76,7 @@ const calculateBarHeight = (value, yAxisMax, containerHeight = 85) => {
  *    - Shows the % gain/loss
  * 3. Compares your portfolio performance to S&P 500 for same period
  */
-const PerformanceCard = ({ onViewPerformance }) => {
+const PerformanceCard: React.FC<PerformanceCardProps> = ({ onViewPerformance }) => {
   const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'list'
   const [showSP500, setShowSP500] = useState(true); // Toggle S&P 500 visibility
 
@@ -84,7 +88,7 @@ const PerformanceCard = ({ onViewPerformance }) => {
   const error = performanceError;
   const refetch = refetchPerformance;
 
-  const performanceData = performance?.performance || [];
+  const performanceData: PerformanceDataPoint[] = performance?.performance || [];
   const portfolioInfo = performance ? {
     account_name: performance.account_name,
     calculation_date: performance.calculation_date
@@ -519,10 +523,6 @@ const PerformanceCard = ({ onViewPerformance }) => {
       `}</style>
     </div>
   );
-};
-
-PerformanceCard.propTypes = {
-  onViewPerformance: PropTypes.func.isRequired,
 };
 
 export default PerformanceCard;

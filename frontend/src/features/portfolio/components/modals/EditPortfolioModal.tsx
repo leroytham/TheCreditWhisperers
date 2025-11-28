@@ -1,30 +1,64 @@
 import React, { useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
 import apiService from '../../../../services/api';
 import useAppStore from '../../../../store/useAppStore';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 
+// Type definitions
+interface EditPortfolioModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+interface AccountDetails {
+  accountName: string;
+  accountNumber: string;
+  openDate: string;
+}
+
+interface HoldingInput {
+  symbol: string;
+  quantity: string;
+  purchasePrice: string;
+  purchaseDate: string;
+}
+
+interface HoldingResponse {
+  symbol?: string;
+  quantity?: number;
+  purchase_price?: number;
+  purchase_date?: string;
+}
+
+interface PortfolioResponse {
+  account?: {
+    client_account_name?: string;
+    account_no?: string;
+    open_date?: string;
+  };
+  holdings?: HoldingResponse[];
+}
+
 /**
  * EditPortfolioModal Component
  *
  * Dynamically loads and edits an existing portfolio (account + holdings)
  */
-const EditPortfolioModal = ({ isOpen, onClose }) => {
+const EditPortfolioModal: React.FC<EditPortfolioModalProps> = ({ isOpen, onClose }) => {
   const { selectedAccount } = useSelectedAccount();
   const { notifyError, notifyWarning } = useAppStore();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [accountDetails, setAccountDetails] = useState({
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [accountDetails, setAccountDetails] = useState<AccountDetails>({
     accountName: '',
     accountNumber: '',
     openDate: '',
   });
-  const [holdings, setHoldings] = useState([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [holdings, setHoldings] = useState<HoldingInput[]>([]);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const updateAccountDetails = (field, value) => {
+  const updateAccountDetails = (field: keyof AccountDetails, value: string): void => {
     setAccountDetails(prev => ({
       ...prev,
       [field]: value
@@ -52,11 +86,13 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
         notifyWarning(`Please enter a symbol for holding ${i + 1}.`, { category: 'Portfolio' });
         return false;
       }
-      if (!holding.quantity || holding.quantity <= 0) {
+      const quantity = parseFloat(holding.quantity);
+      if (!holding.quantity || isNaN(quantity) || quantity <= 0) {
         notifyWarning(`Please enter a valid quantity for holding ${i + 1}.`, { category: 'Portfolio' });
         return false;
       }
-      if (!holding.purchasePrice || holding.purchasePrice <= 0) {
+      const purchasePrice = parseFloat(holding.purchasePrice);
+      if (!holding.purchasePrice || isNaN(purchasePrice) || purchasePrice <= 0) {
         notifyWarning(`Please enter a valid purchase price for holding ${i + 1}.`, { category: 'Portfolio' });
         return false;
       }
@@ -81,7 +117,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
           `/portfolio/${selectedAccount.username}/${encodeURIComponent(selectedAccount.accountName)}`
         );
 
-        const data = response.data as any;
+        const data = response.data as PortfolioResponse;
 
         if (!data.account) {
           notifyError('No portfolio data found for the selected account.', { category: 'Portfolio' });
@@ -98,7 +134,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
 
         // Pre-fill holdings
         setHoldings(
-          (data.holdings || []).map((h) => ({
+          (data.holdings || []).map((h: HoldingResponse) => ({
             symbol: h.symbol || '',
             quantity: h.quantity ? h.quantity.toString() : '',
             purchasePrice: h.purchase_price ? h.purchase_price.toString() : '',
@@ -135,13 +171,13 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
     ]);
   };
 
-  const removeHolding = (index) => {
+  const removeHolding = (index: number): void => {
     setHoldings(holdings.filter((_, i) => i !== index));
   };
 
-  const updateHolding = (index, field, value) => {
+  const updateHolding = (index: number, field: keyof HoldingInput, value: string): void => {
     const updated = [...holdings];
-    
+
     // Handle numeric fields
     if (field === 'quantity' || field === 'purchasePrice') {
       // Allow empty string for editing, but store as string for input control
@@ -150,7 +186,7 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       // For symbol field, convert to uppercase
       updated[index][field] = field === 'symbol' ? value.toUpperCase() : value;
     }
-    
+
     setHoldings(updated);
   };
 
@@ -399,11 +435,6 @@ const EditPortfolioModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
-};
-
-EditPortfolioModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
 };
 
 export default EditPortfolioModal;

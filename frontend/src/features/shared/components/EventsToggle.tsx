@@ -1,16 +1,17 @@
 import React from 'react';
 
+interface EventsToggleProps {
+  showEvents?: boolean;
+  onToggle: (value: boolean) => void;
+  className?: string;
+}
+
 /**
  * EventsToggle Component
  *
  * Toggle switch for showing/hiding significant events on price chart
- *
- * @param {Object} props
- * @param {boolean} props.showEvents - Whether events are currently shown
- * @param {function} props.onToggle - Callback when toggle is changed
- * @param {string} props.className - Additional CSS classes for wrapper
  */
-const EventsToggle = ({
+const EventsToggle: React.FC<EventsToggleProps> = ({
   showEvents = true,
   onToggle,
   className = ''

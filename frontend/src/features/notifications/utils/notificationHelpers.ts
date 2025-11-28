@@ -4,6 +4,35 @@
  * Centralized logic for triggering notifications across the application
  */
 
+// Type definitions
+interface ApiError {
+  response?: {
+    status: number;
+    data?: {
+      error_id?: string;
+      detail?: string | object;
+      message?: string;
+    };
+  };
+  config?: {
+    suppressNotification?: boolean;
+  };
+}
+
+interface ApiConfig {
+  method?: string;
+  url?: string;
+  suppressNotification?: boolean;
+}
+
+interface ApiResponse {
+  data?: {
+    message?: string;
+  };
+}
+
+type StatusCode = 400 | 401 | 403 | 404 | 408 | 429 | 500 | 502 | 503 | 504;
+
 /**
  * Get user-friendly error message from API error
  *
@@ -11,7 +40,7 @@
  * Instead, we show a generic message with an error_id for support reference.
  * This prevents leaking internal implementation details.
  */
-export const getErrorMessage = (error) => {
+export const getErrorMessage = (error: ApiError): string => {
   if (!error.response) {
     return 'Network error. Please check your connection.';
   }
@@ -39,7 +68,7 @@ export const getErrorMessage = (error) => {
   }
 
   // Default messages by status code
-  const statusMessages = {
+  const statusMessages: Record<number, string> = {
     400: 'Invalid request. Please check your input.',
     401: 'Session expired. Please login again.',
     403: 'You do not have permission to perform this action.',
@@ -58,16 +87,16 @@ export const getErrorMessage = (error) => {
 /**
  * Determine if API response should trigger a success notification
  */
-export const shouldShowSuccessNotification = (config) => {
+export const shouldShowSuccessNotification = (config: ApiConfig): boolean => {
   // Only show for mutations (POST, PUT, PATCH, DELETE)
   const mutationMethods = ['post', 'put', 'patch', 'delete'];
-  return mutationMethods.includes(config.method?.toLowerCase());
+  return mutationMethods.includes(config.method?.toLowerCase() || '');
 };
 
 /**
  * Get success message from API response
  */
-export const getSuccessMessage = (config, response) => {
+export const getSuccessMessage = (config: ApiConfig, response: ApiResponse): string => {
   const method = config.method?.toLowerCase();
   const url = config.url || '';
 
@@ -92,20 +121,20 @@ export const getSuccessMessage = (config, response) => {
   }
 
   // Default messages by method
-  const defaultMessages = {
+  const defaultMessages: Record<string, string> = {
     post: 'Created successfully',
     put: 'Updated successfully',
     patch: 'Updated successfully',
     delete: 'Deleted successfully',
   };
 
-  return defaultMessages[method] || 'Operation completed successfully';
+  return (method && defaultMessages[method]) || 'Operation completed successfully';
 };
 
 /**
  * Determine notification category from API endpoint
  */
-export const getCategoryFromUrl = (url) => {
+export const getCategoryFromUrl = (url: string | undefined): string => {
   if (!url) return 'System';
 
   if (url.includes('/portfolio')) return 'Portfolio';
@@ -118,7 +147,7 @@ export const getCategoryFromUrl = (url) => {
 /**
  * Check if error should be suppressed (not shown as notification)
  */
-export const shouldSuppressError = (error) => {
+export const shouldSuppressError = (error: ApiError): boolean => {
   // Suppress 401 errors as they trigger redirect
   if (error.response?.status === 401) {
     return true;
@@ -135,7 +164,7 @@ export const shouldSuppressError = (error) => {
 /**
  * Check if success notification should be suppressed
  */
-export const shouldSuppressSuccess = (config) => {
+export const shouldSuppressSuccess = (config: ApiConfig): boolean => {
   // Suppress GET requests
   if (config.method?.toLowerCase() === 'get') {
     return true;

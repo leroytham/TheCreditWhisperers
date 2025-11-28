@@ -1,18 +1,22 @@
-// src/features/entity/hooks/useCompanyOverview.js
+// src/features/entity/hooks/useCompanyOverview.ts
 
 import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
+import type { CompanyOverview } from '../../../types';
+
+interface UseCompanyOverviewReturn {
+  overview: CompanyOverview | null;
+  loading: boolean;
+  error: string | null;
+}
 
 /**
  * Custom hook to fetch company overview data from Alpha Vantage API
- * 
- * @param {string} ticker - Stock ticker symbol
- * @returns {Object} - { overview, loading, error }
  */
-export const useCompanyOverview = (ticker) => {
-  const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export const useCompanyOverview = (ticker: string): UseCompanyOverviewReturn => {
+  const [overview, setOverview] = useState<CompanyOverview | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ticker) {
@@ -32,9 +36,12 @@ export const useCompanyOverview = (ticker) => {
         } else {
           setOverview(null);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error(`Error fetching company overview for ${ticker}:`, err);
-        setError(err.response?.data?.detail || 'Failed to fetch company overview');
+        const errorMessage = err instanceof Error
+          ? err.message
+          : (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to fetch company overview';
+        setError(errorMessage);
         setOverview(null);
       } finally {
         setLoading(false);

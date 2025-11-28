@@ -13,6 +13,38 @@ import {
   useNotificationSync
 } from '../features/notifications/hooks/useNotifications';
 
+type NotificationCategory = 'Portfolio' | 'Market' | 'News' | 'System';
+
+interface NotificationItem {
+  id: string;
+  category?: NotificationCategory;
+  is_read?: boolean;
+  isRead?: boolean;
+  is_archived?: boolean;
+  isArchived?: boolean;
+  title?: string;
+  message?: string;
+  preview?: string;
+  timestamp?: string;
+  created_at?: string;
+  type?: string;
+  priority?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+  // Fields required by NotificationList component
+  subcategory?: string;
+  is_global?: boolean;
+  portfolio_name?: string;
+  affected_tickers?: string[];
+}
+
+interface CategoryFilters {
+  Portfolio: boolean;
+  Market: boolean;
+  News: boolean;
+  System: boolean;
+}
+
 /**
  * NotificationPageEnhanced - Server-backed Notification Center
  *
@@ -25,7 +57,7 @@ import {
 const NotificationPageEnhanced = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('active');
-  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
 
   // Server-backed notifications
   const serverFilters = {
@@ -86,19 +118,19 @@ const NotificationPageEnhanced = () => {
   }, [preferences]);
 
   // Filter notifications based on category filters
-  const filterNotifications = (notificationsList) => {
-    return notificationsList.filter((notif) => {
-      const category = notif.category || 'System';
+  const filterNotifications = (notificationsList: NotificationItem[]) => {
+    return notificationsList.filter((notif: NotificationItem) => {
+      const category = (notif.category || 'System') as NotificationCategory;
       return categoryFilters[category] !== false;
     });
   };
 
   // Apply filters
   const activeNotifications = filterNotifications(
-    notifications.filter(n => !n.is_archived && !n.isArchived)
+    (notifications as NotificationItem[]).filter((n: NotificationItem) => !n.is_archived && !n.isArchived)
   );
   const archivedNotifications = filterNotifications(
-    notifications.filter(n => n.is_archived || n.isArchived)
+    (notifications as NotificationItem[]).filter((n: NotificationItem) => n.is_archived || n.isArchived)
   );
 
   const displayedNotifications = activeTab === 'active'
@@ -110,7 +142,7 @@ const NotificationPageEnhanced = () => {
   const newCount = unreadCount;
 
   // Handlers
-  const handleNotificationClick = async (notification) => {
+  const handleNotificationClick = async (notification: NotificationItem) => {
     setSelectedNotification(notification);
 
     // Mark as read when clicked
@@ -127,12 +159,12 @@ const NotificationPageEnhanced = () => {
     await markAllAsRead();
   };
 
-  const handleArchive = async (notificationId) => {
+  const handleArchive = async (notificationId: string) => {
     await archive(notificationId);
     setSelectedNotification(null);
   };
 
-  const handleDelete = async (notificationId) => {
+  const handleDelete = async (notificationId: string) => {
     const confirm = window.confirm('Are you sure you want to delete this notification?');
     if (confirm) {
       await deleteNotification(notificationId);
@@ -148,7 +180,7 @@ const NotificationPageEnhanced = () => {
     }
   };
 
-  const handleCategoryFilterChange = async (category, enabled) => {
+  const handleCategoryFilterChange = async (category: NotificationCategory, enabled: boolean) => {
     // Update local state immediately
     const newFilters = { ...categoryFilters, [category]: enabled };
     setCategoryFilters(newFilters);
@@ -161,7 +193,7 @@ const NotificationPageEnhanced = () => {
   const handleGenerateTestNotification = async () => {
     try {
       const response = await apiService.post('/notifications/test/create-sample');
-      handleNewNotification(response.data);
+      handleNewNotification(response.data as Record<string, unknown>);
     } catch (error) {
       console.error('Failed to create test notification:', error);
       // Fallback: show a local toast
@@ -338,7 +370,7 @@ const NotificationPageEnhanced = () => {
                 <div>
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Category Filters</h3>
                   <div className="space-y-3">
-                    {Object.entries(categoryFilters).map(([category, enabled]) => (
+                    {(Object.entries(categoryFilters) as [NotificationCategory, boolean][]).map(([category, enabled]) => (
                       <label key={category} className="flex items-center">
                         <input
                           type="checkbox"
@@ -413,7 +445,7 @@ const NotificationPageEnhanced = () => {
                 <div className="bg-white p-6 rounded-lg shadow">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter by Category</h3>
                   <div className="space-y-3">
-                    {Object.entries(categoryFilters).map(([category, enabled]) => (
+                    {(Object.entries(categoryFilters) as [NotificationCategory, boolean][]).map(([category, enabled]) => (
                       <label key={category} className="flex items-center">
                         <input
                           type="checkbox"

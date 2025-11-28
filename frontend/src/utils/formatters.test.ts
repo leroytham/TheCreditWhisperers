@@ -3,7 +3,7 @@
  * Tests zero-baseline handling by keeping percentage returns at 0%
  */
 
-import { normalizeToPercentageReturn, normalizeToHybridReturn } from './formatters';
+import { normalizeToPercentageReturn, normalizeToHybridReturn, DataPoint } from './formatters';
 
 describe('formatters', () => {
   describe('normalizeToPercentageReturn', () => {
@@ -145,8 +145,9 @@ describe('formatters', () => {
 
     it('should handle empty data', () => {
       expect(normalizeToPercentageReturn([])).toEqual([]);
-      expect(normalizeToPercentageReturn(null)).toEqual([]);
-      expect(normalizeToPercentageReturn(undefined)).toEqual([]);
+      // Test null/undefined handling - function should handle these gracefully
+      expect(normalizeToPercentageReturn(null as unknown as DataPoint[])).toEqual([]);
+      expect(normalizeToPercentageReturn(undefined as unknown as DataPoint[])).toEqual([]);
     });
 
     it('should preserve all other fields except price', () => {

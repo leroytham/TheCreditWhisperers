@@ -57,8 +57,9 @@ const EntityPage = () => {
       try {
         const { default: apiService } = await import('../services/api');
         await apiService.get('/auth/me');
-      } catch (error) {
-        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+      } catch (error: unknown) {
+        const err = error as { response?: { status?: number }; message?: string };
+        if (err.response?.status === 401 || err.message?.includes('Session expired')) {
           navigate('/login');
         }
       }
@@ -91,7 +92,7 @@ const EntityPage = () => {
   };
 
   // Ticker selection handler
-  const handleTickerSelect = (symbol) => {
+  const handleTickerSelect = (symbol: string) => {
     const newTicker = symbol.toUpperCase().trim();
     setTicker(newTicker);
     setSearchParams({ ticker: newTicker });

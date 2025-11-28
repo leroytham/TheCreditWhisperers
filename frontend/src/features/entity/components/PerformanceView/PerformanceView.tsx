@@ -1,4 +1,4 @@
-// src/features/entity/components/PerformanceView/PerformanceView.jsx
+// src/features/entity/components/PerformanceView/PerformanceView.tsx
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
@@ -20,12 +20,45 @@ import {
   NewsCoverageCard,
   SentimentConfidenceCard
 } from '../../../shared/components';
+import type { ViewModeType } from '../../../shared/components/ViewModeToggle';
 import CompanyOverview from '../CompanyOverview';
 import { useRollingSentiment } from '../../hooks/useRollingSentiment';
 import { TIMEFRAMES } from '../../../shared/utils/constants';
 import { filterPriceDataByTimeframe } from '../../../shared/utils/chartHelpers';
 import { formatPrice, getPriceChangeColor, getPriceChangeArrow, formatFullTimestamp } from '../../../shared/utils/formatters';
 import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
+import type {
+  PriceDataPoint,
+  DailySentimentPoint,
+  NewsArticle,
+  SignificantEvent,
+  ApiMetadata,
+  TimeframeOption
+} from '../../../../types';
+
+// DisplayEvent type expected by PriceChart
+interface DisplayEvent {
+  start_date: string;
+  trend: string;
+  total_move_pct?: number;
+  link?: string;
+  url?: string;
+  news?: NewsArticle[];
+  title?: string;
+  description?: string;
+}
+
+// Map SignificantEvent to DisplayEvent for PriceChart compatibility
+const mapToDisplayEvents = (events: SignificantEvent[] | null): DisplayEvent[] => {
+  if (!events) return [];
+  return events.map(event => ({
+    start_date: event.start_date,
+    trend: event.trend,
+    total_move_pct: event.total_move_pct,
+    title: event.title,
+    description: event.description,
+  }));
+};
 
 /**
  * PerformanceView Component
@@ -33,7 +66,80 @@ import { calculatePriceChange } from '../../../shared/utils/chartHelpers';
  * Main performance display container with charts and controls
  */
 
-const PerformanceView = ({
+interface SentimentData {
+  avg_score?: number;
+  sentiment_momentum?: number;
+  fast_score?: number;
+  slow_score?: number;
+  momentum_label?: string;
+  momentum_interpretation?: string;
+  momentum_quality?: string;
+  momentum_direction?: string;
+  momentum_strength?: number;
+  half_life_fast_hours?: number;
+  half_life_slow_hours?: number;
+  sentiment_volatility?: number;
+  volatility_quality?: string;
+  effective_news_volume?: number;
+  volume_interpretation?: string;
+  sentiment_breadth_score?: number;
+  num_bullish_articles?: number;
+  num_bearish_articles?: number;
+  total_directional_articles?: number;
+  breadth_interpretation?: string;
+  breadth_quality?: string;
+  sentiment_z_score?: number;
+  z_score_interpretation?: string;
+  z_score_historical_mean?: number;
+  z_score_historical_std?: number;
+  z_score_days_of_history?: number;
+  z_score_quality?: string;
+  sourceConcentrationHhi?: number;
+  concentrationInterpretation?: string;
+  topSources?: Array<{ source: string; count: number }>;
+  dominantTopic?: string;
+  dominantTopicWeight?: number;
+  dominantTopicPercentage?: number;
+  topicCount?: number;
+  sentimentByTopic?: Record<string, number>;
+  topicWeights?: Record<string, number>;
+  data_quality?: string;
+}
+
+interface PerformanceViewProps {
+  ticker: string;
+  companyName: string;
+  currency: string;
+  exchange: string;
+  priceData1Y: PriceDataPoint[] | null;
+  priceData1D: PriceDataPoint[] | null;
+  priceLoading1Y: boolean;
+  priceError1Y: string | null;
+  priceLoading1D: boolean;
+  priceError1D: string | null;
+  lastFetched?: Date | null;
+  dailySentiment: Record<string, DailySentimentPoint> | null;
+  dailySentimentLoading: boolean;
+  dailySentimentError: string | null;
+  sentiment: SentimentData | null;
+  news: NewsArticle[] | null;
+  newsLoading: boolean;
+  newsError: string | null;
+  apiMetadata?: ApiMetadata;
+  significantEvents: SignificantEvent[] | null;
+  significantEventsLoading: boolean;
+  significantEventsError: string | null;
+  prevClose?: number | null;
+  prevClose1D?: number | null;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
+  sentimentTimeframe: TimeframeOption | string;
+  setSentimentTimeframe: (tf: TimeframeOption | string) => void;
+  priceTimeframe: TimeframeOption | string;
+  setPriceTimeframe: (tf: TimeframeOption | string) => void;
+}
+
+const PerformanceView: React.FC<PerformanceViewProps> = ({
   ticker,
   companyName,
   currency,
@@ -64,49 +170,22 @@ const PerformanceView = ({
   setSentimentTimeframe,
   priceTimeframe,
   setPriceTimeframe,
-}: {
-  ticker: any;
-  companyName: any;
-  currency: any;
-  exchange: any;
-  priceData1Y: any;
-  priceData1D: any;
-  priceLoading1Y: any;
-  priceError1Y: any;
-  priceLoading1D: any;
-  priceError1D: any;
-  lastFetched?: any;
-  dailySentiment: any;
-  dailySentimentLoading: any;
-  dailySentimentError: any;
-  sentiment: any;
-  news: any;
-  newsLoading: any;
-  newsError: any;
-  apiMetadata: any;
-  significantEvents: any;
-  significantEventsLoading: any;
-  significantEventsError: any;
-  prevClose?: any;
-  prevClose1D?: any;
-  activeTab?: any;
-  setActiveTab?: any;
-  sentimentTimeframe: any;
-  setSentimentTimeframe: any;
-  priceTimeframe: any;
-  setPriceTimeframe: any;
 }) => {
   const timeframe = priceTimeframe; // Use prop instead of local state
   const setTimeframe = setPriceTimeframe; // Use prop setter instead of local state
-  const [viewMode, setViewMode] = useState('rolling');
-  const [priceData, setPriceData] = useState([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [showSignificantEvents, setShowSignificantEvents] = useState(true);
-  const [selectedEventDate, setSelectedEventDate] = useState(null);
+  const [viewMode, setViewMode] = useState<ViewModeType>('rolling');
+  const [priceData, setPriceData] = useState<PriceDataPoint[]>([]);
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+  const [showSignificantEvents, setShowSignificantEvents] = useState<boolean>(true);
+  const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
 
   // Handle event click from PriceChart
-  const handleEventClick = (event) => {
-    setSelectedEventDate(event.start_date);
+  const handleEventClick = (event: SignificantEvent | { start_date?: string }) => {
+    if ('start_date' in event && event.start_date) {
+      setSelectedEventDate(event.start_date);
+    } else if ('date' in event && (event as SignificantEvent).date) {
+      setSelectedEventDate((event as SignificantEvent).date ?? null);
+    }
   };
 
   // Auto-switch view mode based on timeframe
@@ -176,14 +255,16 @@ const PerformanceView = ({
   // Create chart data from price data
   const chartData = priceData.map((point, i) => {
     // Use explicit checks with NaN handling to correctly handle 0 values
-    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(point.close) : NaN;
-    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(point.price) : NaN;
+    const closeValue = point.close !== undefined && point.close !== null ? Number(point.close) : NaN;
+    const priceValue = point.price !== undefined && point.price !== null ? Number(point.price) : NaN;
 
     return {
       x: i,
       y: !isNaN(closeValue) ? closeValue : (!isNaN(priceValue) ? priceValue : 0),
       date: point.date,
-      time: point.time
+      time: point.time,
+      volume: point.volume ?? 0,
+      index: i
     };
   });
 
@@ -193,8 +274,8 @@ const PerformanceView = ({
   // Get current price from real-time 1D data (always use latest intraday price)
   const realtimeChartData = priceData1D ? priceData1D.map((point, i) => {
     // Use explicit checks with NaN handling to correctly handle 0 values
-    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(point.close) : NaN;
-    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(point.price) : NaN;
+    const closeValue = point.close !== undefined && point.close !== null ? Number(point.close) : NaN;
+    const priceValue = point.price !== undefined && point.price !== null ? Number(point.price) : NaN;
 
     return {
       x: i,
@@ -219,7 +300,7 @@ const PerformanceView = ({
       const lastClose = priceData1Y[priceData1Y.length - 1];
       return {
         x: priceData1Y.length - 1,
-        y: parseFloat(lastClose.close) || parseFloat(lastClose.price) || 0,
+        y: Number(lastClose.close) || Number(lastClose.price) || 0,
         date: lastClose.date,
         time: lastClose.time,
         isRealtime: false,
@@ -237,7 +318,7 @@ const PerformanceView = ({
     // Split error detection for graceful degradation
     const hasPrice1YError = priceError1Y && !priceLoading1Y;
     const hasPrice1DError = priceError1D && !priceLoading1D;
-    const hasPartialPriceData = (priceData1Y?.length > 0) || (priceData1D?.length > 0);
+    const hasPartialPriceData = ((priceData1Y?.length ?? 0) > 0) || ((priceData1D?.length ?? 0) > 0);
 
     // Show full error only when BOTH feeds fail AND no partial data available
     if ((hasPrice1YError && hasPrice1DError) && !hasPartialPriceData) {
@@ -328,7 +409,7 @@ const PerformanceView = ({
                   <span className="text-lg font-medium text-gray-500">{currency}</span>
                 </div>
                 <div className={`text-sm font-medium ${getPriceChangeColor(priceChange)}`}>
-                  {getPriceChangeArrow(priceChange)} {Math.abs(priceChange).toFixed(2)} ({priceChangePercent >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%)
+                  {getPriceChangeArrow(priceChange)} {Math.abs(priceChange).toFixed(2)} ({priceChangePercent != null && priceChangePercent >= 0 ? '+' : ''}{priceChangePercent?.toFixed(2) ?? '0.00'}%)
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
                   As of {currentPrice ? formatFullTimestamp(currentPrice.date) : 'Loading...'}
@@ -348,12 +429,12 @@ const PerformanceView = ({
               {/* Significant Events - Spans 2 rows, Col 3 */}
               <div className="lg:col-start-3 lg:row-start-1 lg:row-span-2 h-full">
                 <SignificantEvents
-                  events={significantEvents}
+                  events={significantEvents ?? undefined}
                   loading={significantEventsLoading}
                   error={significantEventsError}
                   ticker={ticker}
                   className="bg-white border border-gray-200 rounded-lg shadow p-6 h-full flex flex-col"
-                  selectedEventDate={selectedEventDate}
+                  selectedEventDate={selectedEventDate ?? undefined}
                 />
               </div>
 
@@ -404,7 +485,7 @@ const PerformanceView = ({
                   ticker={ticker}
                   currency={currency}
                   exchange={exchange}
-                  significantEvents={showSignificantEvents ? significantEvents : []}
+                  significantEvents={showSignificantEvents ? mapToDisplayEvents(significantEvents) : []}
                   timeframe={timeframe}
                   prevClose={activePrevClose}
                   onEventClick={handleEventClick}
@@ -420,7 +501,7 @@ const PerformanceView = ({
                 loading={newsLoading}
                 error={newsError}
                 isOverview={true}
-                onViewMore={() => setActiveTab('news')}
+                onViewMore={setActiveTab ? () => setActiveTab('news') : undefined}
               />
             </div>
           </>
@@ -474,7 +555,7 @@ const PerformanceView = ({
               ticker={ticker}
               currency={currency}
               exchange={exchange}
-              significantEvents={showSignificantEvents ? significantEvents : []}
+              significantEvents={showSignificantEvents ? mapToDisplayEvents(significantEvents) : []}
               timeframe={timeframe}
               prevClose={activePrevClose}
               onEventClick={handleEventClick}
@@ -656,12 +737,12 @@ const PerformanceView = ({
         return (
           <div className="">
             <DetailedRelatedNews
-                news={news}
+                news={news as Parameters<typeof DetailedRelatedNews>[0]['news']}
                 displayName={companyName}
                 ticker={ticker}
                 loading={newsLoading}
                 error={newsError}
-                apiMetadata={apiMetadata}
+                apiMetadata={apiMetadata as Parameters<typeof DetailedRelatedNews>[0]['apiMetadata']}
             />
           </div>
         );

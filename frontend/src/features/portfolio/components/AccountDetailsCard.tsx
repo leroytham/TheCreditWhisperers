@@ -3,7 +3,21 @@ import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import LoadingSpinner from '../../../components/LoadingSpinner';
 import { InlineError } from '../../../components/ErrorDisplay';
-import { formatCurrency, parseNumericString } from '../../../utils/formatters';
+import { parseNumericString } from '../../../utils/formatters';
+
+// Type definitions
+interface Holding {
+  position?: string | number;
+  [key: string]: unknown;
+}
+
+interface HoldingsData {
+  holdings?: Holding[];
+}
+
+interface AccountDetailsCardProps {
+  onViewDetails?: () => void;
+}
 
 /**
  * AccountDetailsCard Component (Refactored)
@@ -16,7 +30,7 @@ import { formatCurrency, parseNumericString } from '../../../utils/formatters';
  * - Shared LoadingSpinner and ErrorDisplay components
  * - Centralized formatters
  */
-const AccountDetailsCard = ({ onViewDetails }: { onViewDetails?: () => void } = {}) => {
+const AccountDetailsCard: React.FC<AccountDetailsCardProps> = ({ onViewDetails }) => {
   const { selectedAccount } = useSelectedAccount();
   const { holdings, holdingsLoading, holdingsError, refetchHoldings } = usePortfolioOverview();
 
@@ -25,12 +39,13 @@ const AccountDetailsCard = ({ onViewDetails }: { onViewDetails?: () => void } = 
   const refetch = refetchHoldings;
 
   // Calculate total market value from holdings
-  const totalValue = useMemo(() => {
+  const totalValue = useMemo<number>(() => {
     if (!holdings) return 0;
 
-    const holdingsArray = Array.isArray(holdings) ? holdings : holdings.holdings || [];
+    const holdingsData = holdings as HoldingsData | Holding[];
+    const holdingsArray: Holding[] = Array.isArray(holdingsData) ? holdingsData : holdingsData.holdings || [];
 
-    return holdingsArray.reduce((total, holding) => {
+    return holdingsArray.reduce((total: number, holding: Holding) => {
       const numericValue = parseNumericString(holding.position);
       return total + numericValue;
     }, 0);

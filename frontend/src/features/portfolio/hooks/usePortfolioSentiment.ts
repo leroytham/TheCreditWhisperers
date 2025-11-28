@@ -16,14 +16,141 @@ import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
 import { parseExchangeDate, getExchangeTimezone } from '../../shared/utils/formatters';
 
+// Type definitions
+interface Holding {
+  ticker: string;
+  weight?: number;
+}
+
+interface SentimentHeadline {
+  symbol?: string;
+  title?: string;
+  sentiment_score?: number;
+  relevance_score?: number;
+  source?: string;
+  weight?: number;
+}
+
+interface TimeSeriesPoint {
+  date: string;
+  timestamp: string;
+  label: string;
+  avg_sentiment: number;
+  sentiment: number;
+  fast_sentiment: number;
+  slow_sentiment: number;
+  news_volume: number;
+  volume: number;
+  confidence: number;
+  headlines: SentimentHeadline[];
+}
+
+interface AggregateMetrics {
+  avg_sentiment: number;
+  slow_score: number;
+  fast_score?: number;
+  fast_sentiment: number;
+  slow_sentiment: number;
+  sentiment_momentum?: number;
+  momentum: number;
+  momentum_label: string;
+  momentum_interpretation?: string;
+  momentum_quality?: string;
+  half_life_fast_hours?: number;
+  half_life_slow_hours?: number;
+  news_coverage: number;
+  effective_news_volume?: number;
+  volume_interpretation?: string;
+  sentiment_breadth_score?: number;
+  breadth_score: number;
+  num_bullish_articles?: number;
+  num_bearish_articles?: number;
+  total_directional_articles?: number;
+  breadth_interpretation?: string;
+  breadth_quality?: string;
+  avg_score?: number;
+  sentiment_z_score?: number;
+  shock_score: number;
+  z_score_interpretation?: string;
+  z_score_historical_mean?: number;
+  z_score_historical_std?: number;
+  z_score_days_of_history?: number;
+  z_score_quality?: string;
+  sentiment_volatility?: number;
+  volatility_quality?: string;
+  data_quality?: string;
+  confidence_score: number;
+  holdings_coverage: number;
+  total_articles_analyzed: number;
+}
+
+interface SourceInfo {
+  source: string;
+  percentage: number;
+}
+
+interface HoldingsCoverageDetails {
+  holdings_with_data?: number;
+  total_holdings?: number;
+  coverage_percentage?: number;
+  holdings_list?: string[];
+}
+
+interface SentimentMetadata {
+  sourceConcentrationHhi?: number;
+  concentrationInterpretation?: string;
+  topSources: SourceInfo[];
+  dominantTopic?: string;
+  dominantTopicWeight?: number;
+  dominantTopicPercentage?: number;
+  topicCount: number;
+  sentimentByTopic: Record<string, number>;
+  topicWeights: Record<string, number>;
+  holdingsCoverageDetails?: HoldingsCoverageDetails | null;
+}
+
+export interface PortfolioSentimentData {
+  timeSeries: TimeSeriesPoint[];
+  aggregate: AggregateMetrics;
+  metadata: SentimentMetadata;
+}
+
+interface HoldingSentimentData {
+  ticker: string;
+  name: string;
+  weight: number;
+  sentiment: number;
+  momentum: number;
+  coverage: number;
+  hasData?: boolean;
+}
+
+// Hook return type
+interface UsePortfolioSentimentReturn {
+  sentimentData: PortfolioSentimentData | null;
+  holdingsSentiment: HoldingSentimentData[];
+  loading: boolean;
+  error: string | null;
+  failedHoldings: never[];
+  successCount: number;
+  totalCount: number;
+}
+
 // Default exchange for portfolio chart labels (portfolios can contain mixed exchanges)
 const DEFAULT_EXCHANGE = 'NYSE';
 
-export const usePortfolioSentiment = (username, accountName, holdings, timeframe = '1W', enabled = true, exchange = 'US') => {
-  const [sentimentData, setSentimentData] = useState(null);
-  const [holdingsSentiment, setHoldingsSentiment] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export const usePortfolioSentiment = (
+  username: string | undefined,
+  accountName: string | undefined,
+  holdings: Holding[] | null,
+  timeframe: string = '1W',
+  enabled: boolean = true,
+  exchange: string = 'US'
+): UsePortfolioSentimentReturn => {
+  const [sentimentData, setSentimentData] = useState<PortfolioSentimentData | null>(null);
+  const [holdingsSentiment, setHoldingsSentiment] = useState<HoldingSentimentData[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // If not enabled (lazy loading - tab not active), set loading to false
@@ -90,10 +217,11 @@ export const usePortfolioSentiment = (username, accountName, holdings, timeframe
           const slow30Days = sortedDays.slice(slowStartIndex, index + 1);
           const slowAvg = slow30Days.reduce((sum, d) => sum + d.avg_sentiment, 0) / slow30Days.length;
 
+          const parsedDate = parseExchangeDate(day.date, exchange) || new Date(day.date);
           return {
             date: day.date,
             timestamp: day.date,
-            label: parseExchangeDate(day.date, exchange).toLocaleDateString('en-US', {
+            label: parsedDate.toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
               timeZone: getExchangeTimezone(exchange)
@@ -243,7 +371,7 @@ export const usePortfolioSentiment = (username, accountName, holdings, timeframe
         }
 
         // Determine momentum label
-        const getMomentumLabel = (mom) => {
+        const getMomentumLabel = (mom: number): string => {
           if (mom > 0.1) return 'Strongly Improving';
           if (mom > 0.05) return 'Improving';
           if (mom > -0.05) return 'Stable';

@@ -1,6 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// Type definitions
+interface HoldingSentiment {
+  ticker: string;
+  name?: string;
+  weight?: number;
+  sentiment?: number;
+  momentum?: number;
+  coverage?: number;
+  hasData?: boolean;
+}
+
+interface SortConfig {
+  key: string;
+  direction: 'asc' | 'desc';
+}
+
+interface HoldingsSentimentTableProps {
+  holdings: HoldingSentiment[] | null;
+  loading: boolean;
+  error: string | null;
+}
+
 /**
  * Enhanced Holdings Sentiment Table Component
  *
@@ -12,18 +34,13 @@ import { useNavigate } from 'react-router-dom';
  * - Trend sparklines
  * - Sortable columns
  * - Clickable rows for navigation
- *
- * @param {Array} holdings - Array of holdings with sentiment data
- * @param {boolean} loading - Loading state
- * @param {string} error - Error message if any
- * @returns {React.ReactElement} Rendered holdings table component
  */
-const HoldingsSentimentTable = ({ holdings, loading, error }) => {
+const HoldingsSentimentTable: React.FC<HoldingsSentimentTableProps> = ({ holdings, loading, error }) => {
   const navigate = useNavigate();
-  const [sortConfig, setSortConfig] = useState({ key: 'weight', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'weight', direction: 'desc' });
 
   // Helper function to get sentiment color
-  const getSentimentColor = (score) => {
+  const getSentimentColor = (score: number): string => {
     if (score > 0.5) return 'text-green-600';
     if (score > 0.1) return 'text-green-500';
     if (score > -0.1) return 'text-gray-600';
@@ -32,7 +49,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   };
 
   // Helper function to get sentiment label
-  const getSentimentLabel = (score) => {
+  const getSentimentLabel = (score: number): string => {
     if (score > 0.5) return 'Very Bullish';
     if (score > 0.1) return 'Bullish';
     if (score > -0.1) return 'Neutral';
@@ -41,7 +58,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   };
 
   // Helper function to get confidence level
-  const getConfidenceLevel = (coverage) => {
+  const getConfidenceLevel = (coverage: number): { label: string; color: string } => {
     if (coverage >= 20) return { label: 'High', color: 'text-green-600' };
     if (coverage >= 10) return { label: 'Medium', color: 'text-yellow-600' };
     if (coverage >= 5) return { label: 'Low', color: 'text-orange-600' };
@@ -49,7 +66,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   };
 
   // Helper function to get data quality indicator
-  const getDataQuality = (coverage, sentiment, momentum) => {
+  const getDataQuality = (coverage: number, sentiment: number, momentum: number): { quality: string; color: string } => {
     const hasGoodCoverage = coverage >= 10;
     const hasConsistentSignal = Math.sign(sentiment) === Math.sign(momentum);
     const hasStrongSignal = Math.abs(sentiment) > 0.1;
@@ -66,7 +83,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   };
 
   // Generate simple sparkline data (mock for now - should come from backend)
-  const generateSparkline = (sentiment, momentum) => {
+  const generateSparkline = (sentiment: number, momentum: number): number[] => {
     // Create a simple 7-point trend line
     const points = [];
     const baseValue = sentiment - momentum;
@@ -79,7 +96,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   };
 
   // Render sparkline SVG
-  const renderSparkline = (points) => {
+  const renderSparkline = (points: number[]): React.ReactElement => {
     const width = 60;
     const height = 20;
     const padding = 2;
@@ -90,7 +107,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
     const range = max - min || 1;
 
     // Create path data
-    const pathData = points.map((value, i) => {
+    const pathData = points.map((value: number, i: number) => {
       const x = padding + (i * (width - 2 * padding) / (points.length - 1));
       const y = height - padding - ((value - min) / range) * (height - 2 * padding);
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
@@ -111,11 +128,23 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   };
 
   // Handle sorting
-  const handleSort = (key) => {
+  const handleSort = (key: string): void => {
     setSortConfig(prev => ({
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
+  };
+
+  // Helper to get sortable value from holding
+  const getSortValue = (holding: HoldingSentiment, key: string): number | string => {
+    switch (key) {
+      case 'ticker': return holding.ticker || '';
+      case 'weight': return holding.weight ?? 0;
+      case 'sentiment': return holding.sentiment ?? 0;
+      case 'momentum': return holding.momentum ?? 0;
+      case 'coverage': return holding.coverage ?? 0;
+      default: return 0;
+    }
   };
 
   // Sort holdings
@@ -123,8 +152,8 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
     if (!holdings || holdings.length === 0) return [];
 
     const sorted = [...holdings].sort((a, b) => {
-      const aValue = a[sortConfig.key] || 0;
-      const bValue = b[sortConfig.key] || 0;
+      const aValue = getSortValue(a, sortConfig.key);
+      const bValue = getSortValue(b, sortConfig.key);
 
       if (sortConfig.direction === 'asc') {
         return aValue > bValue ? 1 : -1;
@@ -136,7 +165,7 @@ const HoldingsSentimentTable = ({ holdings, loading, error }) => {
   }, [holdings, sortConfig]);
 
   // Handle row click
-  const handleRowClick = (ticker) => {
+  const handleRowClick = (ticker: string): void => {
     // EntityPage expects ticker as a query param (?ticker=) not a path segment
     navigate({
       pathname: '/entity',

@@ -1,22 +1,50 @@
 import React, { useMemo } from 'react';
 import { Tag, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+type TopicWeightsMap = Record<string, number>;
+type SentimentByTopicMap = Record<string, number>;
+
+interface SentimentDetails {
+  label: string;
+  color: string;
+  bgColor: string;
+  icon: LucideIcon;
+}
+
+interface TopicData {
+  topic: string;
+  sentiment: number;
+  weight: number;
+  percentage: number;
+}
+
+interface SentimentByTopicCardProps {
+  dominantTopic?: string;
+  dominant_topic?: string;
+  dominantTopicWeight?: number;
+  dominant_topic_weight?: number;
+  dominantTopicPercentage?: number;
+  dominant_topic_percentage?: number;
+  topicCount?: number;
+  topic_count?: number;
+  sentimentByTopic?: SentimentByTopicMap;
+  sentiment_by_topic?: SentimentByTopicMap;
+  topicWeights?: TopicWeightsMap;
+  topic_weights?: TopicWeightsMap;
+  className?: string;
+  context?: string;
+  loading?: boolean;
+  error?: string | null;
+}
 
 /**
  * SentimentByTopicCard Component
  *
  * Displays dominant topic and sentiment breakdown by topic category
  * Shows weighted sentiment for each topic (e.g., technology, earnings, blockchain)
- *
- * @param {Object} props
- * @param {string} props.dominantTopic - Most prominent topic by weight
- * @param {number} props.dominantTopicWeight - Combined weight of dominant topic
- * @param {number} props.dominantTopicPercentage - Percentage of total weight
- * @param {number} props.topicCount - Total number of unique topics
- * @param {Object} props.sentimentByTopic - Object mapping topic to avg sentiment
- * @param {Object} props.topicWeights - Object mapping topic to total weight
- * @param {string} props.className - Additional CSS classes
  */
-const SentimentByTopicCard = ({
+const SentimentByTopicCard: React.FC<SentimentByTopicCardProps> = ({
   dominantTopic: dominantTopicProp,
   dominant_topic,
   dominantTopicWeight: dominantTopicWeightProp,
@@ -32,23 +60,6 @@ const SentimentByTopicCard = ({
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6',
   loading,
   error
-}: {
-  dominantTopic?: any;
-  dominant_topic?: any;
-  dominantTopicWeight?: any;
-  dominant_topic_weight?: any;
-  dominantTopicPercentage?: any;
-  dominant_topic_percentage?: any;
-  topicCount?: any;
-  topic_count?: any;
-  sentimentByTopic?: any;
-  sentiment_by_topic?: any;
-  topicWeights?: any;
-  topic_weights?: any;
-  className?: string;
-  context?: string;
-  loading?: boolean;
-  error?: any;
 }) => {
   // Support both camelCase and snake_case prop names
   const dominantTopic = dominantTopicProp ?? dominant_topic;
@@ -61,15 +72,24 @@ const SentimentByTopicCard = ({
   // Check if we have data
   const hasData = dominantTopic || (topicCount > 0 && Object.keys(sentimentByTopic).length > 0);
 
+  // Format topic names (convert snake_case to Title Case)
+  function formatTopicName(topic: string): string {
+    if (!topic) return 'Unknown';
+    return topic
+      .split('_')
+      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
   // Sort topics by weight (descending)
-  const sortedTopics = useMemo(() => {
+  const sortedTopics = useMemo((): TopicData[] => {
     if (!sentimentByTopic || Object.keys(sentimentByTopic).length === 0) return [];
 
     // Calculate total weight once, with guard against zero
-    const totalWeight = Object.values(topicWeights).reduce((a: any, b: any) => a + b, 0) as number;
+    const totalWeight = Object.values(topicWeights).reduce((a: number, b: number) => a + b, 0);
 
     return Object.entries(sentimentByTopic)
-      .map(([topic, sentiment]: [string, any]) => ({
+      .map(([topic, sentiment]: [string, number]): TopicData => ({
         topic: formatTopicName(topic),
         sentiment: sentiment,
         weight: topicWeights[topic] || 0,
@@ -77,20 +97,11 @@ const SentimentByTopicCard = ({
           ? (topicWeights[topic] / totalWeight) * 100
           : 0
       }))
-      .sort((a, b) => b.weight - a.weight);
+      .sort((a: TopicData, b: TopicData) => b.weight - a.weight);
   }, [sentimentByTopic, topicWeights]);
 
-  // Format topic names (convert snake_case to Title Case)
-  function formatTopicName(topic) {
-    if (!topic) return 'Unknown';
-    return topic
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
-
   // Get sentiment details for a score
-  const getSentimentDetails = (score) => {
+  const getSentimentDetails = (score: number | null | undefined): SentimentDetails => {
     if (score === null || score === undefined) {
       return {
         label: 'Neutral',
@@ -141,7 +152,7 @@ const SentimentByTopicCard = ({
   };
 
   // Get color for topic bar based on percentage
-  const getTopicBarColor = (percentage) => {
+  const getTopicBarColor = (percentage: number): string => {
     if (percentage >= 40) return 'bg-purple-600'; // Dominant
     if (percentage >= 25) return 'bg-purple-500'; // Major
     if (percentage >= 15) return 'bg-purple-400'; // Moderate
@@ -149,7 +160,7 @@ const SentimentByTopicCard = ({
   };
 
   // Format sentiment score
-  const formatSentiment = (score) => {
+  const formatSentiment = (score: number | null | undefined): string => {
     if (score === null || score === undefined) return '0.00';
     return score.toFixed(2);
   };
@@ -234,12 +245,12 @@ const SentimentByTopicCard = ({
 
               {/* Scrollable container for topics list */}
               <div className="max-h-64 overflow-y-auto pr-2 space-y-4">
-                {sortedTopics.map((topicData, index) => {
+                {sortedTopics.map((topicData: TopicData, index: number) => {
                   const sentimentDetails = getSentimentDetails(topicData.sentiment);
                   const SentimentIcon = sentimentDetails.icon;
 
                   return (
-                    <div key={index} className="space-y-2">
+                    <div key={`${topicData.topic}-${index}`} className="space-y-2">
                       {/* Topic Header */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">

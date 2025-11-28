@@ -10,56 +10,73 @@ import {
   formatTooltipDateTime,
   calculateTradingDayElapsed
 } from '../utils/chartHelpers';
+import type { ChartDataPoint, PriceRange, ChartEvent } from '../utils/chartHelpers';
 import {
   formatPrice,
   getChartLineColor
 } from '../utils/formatters';
 import { SECTOR_CHART_CONFIG } from '../utils/constants';
 import NewsDetailModal from './NewsDetailModal';
+import type { PriceDataPoint, NewsArticle } from '../../../types';
 
-/**
- * Shared PriceChart Component
- *
- * Interactive price chart with timeline and event markers
- * Fully responsive - automatically fills container width while maintaining aspect ratio
- *
- * @param {Object} props
- * @param {Array} props.priceData - Raw price data (entity mode)
- * @param {Array} props.chartData - Pre-processed chart data (sector mode)
- * @param {Object} props.priceRange - Pre-calculated price range (sector mode)
- * @param {number} props.priceChange - Pre-calculated price change (sector mode)
- * @param {string} props.ticker - Ticker symbol
- * @param {string} props.companyName - Company/sector name
- * @param {string} props.currency - Currency code
- * @param {Array} props.significantEvents - Events for entity mode
- * @param {Array} props.topEvents - Events for sector mode
- * @param {boolean} props.showEvents - Whether to show event markers (sector mode)
- * @param {boolean} props.showSignificantEvents - Whether to show significant events with news icons (entity mode)
- * @param {string} props.mode - 'entity' or 'sector' (auto-detected if not specified)
- * @param {string} props.timeframe - Current timeframe (1D, 5D, 1M, 6M, YTD, 1Y, 5Y)
- * @param {number} props.prevClose - Previous close price (for 1D view)
- * @param {string} props.exchange - Exchange code (for market hours calculation)
- * @param {Function} props.onEventClick - Callback when an event icon is clicked (receives event object)
- */
+// Extended event type with additional display properties
+interface DisplayEvent {
+  start_date: string;
+  trend: string;
+  total_move_pct?: number;
+  link?: string;
+  url?: string;
+  news?: NewsArticle[];
+}
+
+// Hovered point state
+interface HoveredPointState {
+  x: number;
+  y: number;
+  xIndex: number;
+  index: number;
+  price: number;
+  date: string;
+  time?: string;
+}
+
+// Hovered event state
+interface HoveredEventState extends DisplayEvent {
+  xPos: number;
+  iconY: number;
+  chartWidth: number;
+  paddingLeft: number;
+}
+
+// Event position with display coordinates
+interface EventPositionWithDisplay {
+  event: DisplayEvent;
+  xPos: number;
+  originalXPos?: number;
+  iconY: number;
+  dataY: number;
+  index: number;
+}
+
 interface PriceChartProps {
-  priceData?: any;
-  chartData?: any;
-  priceRange?: any;
-  priceChange?: any;
+  priceData?: PriceDataPoint[];
+  chartData?: ChartDataPoint[];
+  priceRange?: PriceRange;
+  priceChange?: number;
   ticker: string;
   companyName?: string;
   currency?: string;
-  significantEvents?: any[];
-  topEvents?: any[];
+  significantEvents?: DisplayEvent[];
+  topEvents?: DisplayEvent[];
   showEvents?: boolean;
   showSignificantEvents?: boolean;
-  mode?: string;
+  mode?: 'entity' | 'sector';
   timeframe?: string;
   prevClose?: number | null;
   exchange?: string;
-  onEventClick?: (event: any) => void;
+  onEventClick?: (event: DisplayEvent) => void;
   // Portfolio-specific props (passed but not yet implemented)
-  benchmarkData?: any[];
+  benchmarkData?: PriceDataPoint[];
   showBenchmark?: boolean;
   displayMode?: string;
 }
@@ -82,17 +99,17 @@ const PriceChart = ({
   exchange = '',
   onEventClick
 }: PriceChartProps) => {
-  const [hoveredPoint, setHoveredPoint] = useState(null);
-  const [hoveredEvent, setHoveredEvent] = useState(null);
-  const [selectedArticle, setSelectedArticle] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const chartContainerRef = useRef(null);
-  const [dynamicChartWidth, setDynamicChartWidth] = useState(SECTOR_CHART_CONFIG.DEFAULT_WIDTH);
+  const [hoveredPoint, setHoveredPoint] = useState<HoveredPointState | null>(null);
+  const [hoveredEvent, setHoveredEvent] = useState<HoveredEventState | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [dynamicChartWidth, setDynamicChartWidth] = useState<number>(SECTOR_CHART_CONFIG.DEFAULT_WIDTH);
 
   // Auto-detect mode if not specified
-  const detectedMode = mode || (priceData ? 'entity' : 'sector');
+  const detectedMode: 'entity' | 'sector' = mode || (priceData ? 'entity' : 'sector');
 
-  const handleArticleClick = (article, e) => {
+  const handleArticleClick = (article: NewsArticle, e: React.MouseEvent): void => {
     e.preventDefault();
     e.stopPropagation();
     setSelectedArticle(article);
@@ -106,7 +123,7 @@ const PriceChart = ({
 
   // Close tooltip when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e) => {
+    const handleClickOutside = (): void => {
       if (hoveredEvent) {
         setHoveredEvent(null);
       }
@@ -126,7 +143,7 @@ const PriceChart = ({
 
   // Close tooltip when pressing Escape key
   useEffect(() => {
-    const handleEscape = (e) => {
+    const handleEscape = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && hoveredEvent) {
         setHoveredEvent(null);
       }
@@ -178,7 +195,7 @@ const PriceChart = ({
   }, []);
 
   // Calculate chart data based on mode
-  const chartData = preProcessedChartData || generateChartData(priceData);
+  const chartData = preProcessedChartData || generateChartData(priceData || []);
   let priceRange = preProcessedPriceRange || getPriceRange(chartData);
 
   // For 1D timeframe, expand price range to include prevClose if needed
@@ -221,7 +238,7 @@ const PriceChart = ({
   }
 
   // Responsive number of x-axis points based on chart width
-  const getNumXAxisPoints = (width) => {
+  const getNumXAxisPoints = (width: number): number => {
     if (width < 400) return 4;
     if (width < 600) return 5;
     if (width < 800) return 6;
@@ -278,9 +295,9 @@ const PriceChart = ({
     const rawTop = hoveredPoint.y - 100;
     const top = Math.max(8, rawTop);
     const idx = hoveredPoint.xIndex;
-    const prev = (idx > 0 && chartData[idx - 1]) ? chartData[idx - 1].y : hoveredPoint.price;
+    const prev = (idx > 0 && chartData[idx - 1]) ? (chartData[idx - 1].y ?? hoveredPoint.price) : hoveredPoint.price;
     const change = hoveredPoint.price - prev;
-    const changePct = prev ? (change / prev) * 100 : 0;
+    const changePct = prev !== 0 ? (change / prev) * 100 : 0;
     const dateStr = hoveredPoint.date ? formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time) : '';
     return { left, top, change, changePct, dateStr };
   })() : null;
@@ -320,7 +337,7 @@ const PriceChart = ({
 
         {/* Grid lines and labels */}
         <g className="text-gray-400 text-xs">
-          {[...Array(5)].map((_, i) => {
+          {[...Array(5)].map((_: undefined, i: number) => {
             const yPos = paddingTop + (i * ((chartHeight - 40) / 4));
             const price = priceRange.max - ((priceRange.max - priceRange.min) * i / 4);
             const labelX = timeframe === '1D' ? paddingLeft + fullChartWidth + 10 : paddingLeft + chartWidth + 10;
@@ -382,9 +399,9 @@ const PriceChart = ({
         {detectedMode === 'sector' && chartData.length > 0 && (
           <path
             d={`M ${paddingLeft} ${paddingTop + chartHeight} ${chartData
-              .map((point, i) => {
+              .map((point: ChartDataPoint, i: number) => {
                 const x = paddingLeft + (i * (chartWidth / Math.max(1, chartData.length - 1)));
-                const y = (paddingTop + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+                const y = (paddingTop + chartHeight) - (((point.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
                 return `L ${x} ${y}`;
               })
               .join(' ')} L ${paddingLeft + ((chartData.length - 1) * (chartWidth / Math.max(1, chartData.length - 1)))} ${paddingTop + chartHeight} Z`}
@@ -403,11 +420,11 @@ const PriceChart = ({
         )}
         {detectedMode === 'sector' && chartData.length > 0 && (
           <path
-            d={`M ${paddingLeft} ${(paddingTop + chartHeight) - ((chartData[0].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)} ${chartData
+            d={`M ${paddingLeft} ${(paddingTop + chartHeight) - (((chartData[0].y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)} ${chartData
               .slice(1)
-              .map((point, i) => {
+              .map((point: ChartDataPoint, i: number) => {
                 const x = paddingLeft + ((i + 1) * (chartWidth / Math.max(1, chartData.length - 1)));
-                const y = (paddingTop + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+                const y = (paddingTop + chartHeight) - (((point.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
                 return `L ${x} ${y}`;
               })
               .join(' ')}`}
@@ -418,9 +435,9 @@ const PriceChart = ({
         )}
 
         {/* Interactive hover areas and points */}
-        {chartData.map((point, i) => {
+        {chartData.map((point: ChartDataPoint, i: number) => {
           const x = paddingLeft + (i * (chartWidth / Math.max(1, chartData.length - 1)));
-          const y = (paddingTop + chartHeight) - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+          const y = (paddingTop + chartHeight) - (((point.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
           const isHovered = hoveredPoint?.xIndex === i || hoveredPoint?.index === i;
 
           return (
@@ -433,7 +450,7 @@ const PriceChart = ({
                 fill="transparent"
                 className="cursor-crosshair"
                 onMouseEnter={() =>
-                  setHoveredPoint({ ...point, x, y, xIndex: i, index: i, price: point.y })
+                  setHoveredPoint({ ...point, x, y, xIndex: i, index: i, price: point.y ?? 0 })
                 }
                 onMouseLeave={() => setHoveredPoint(null)}
               />
@@ -469,7 +486,7 @@ const PriceChart = ({
         />
 
         {/* Timeline - Bloomberg style tick marks */}
-        {timelinePoints.map((point, i) => (
+        {timelinePoints.map((point: { x: number; label: string; dataIndex?: number }, i: number) => (
           <g key={`timeline-${i}`}>
             {/* Tick mark extending down from baseline */}
             <line
@@ -496,29 +513,29 @@ const PriceChart = ({
         {/* Entity mode: Significant Event Markers - Bloomberg style */}
         {detectedMode === 'entity' && (() => {
           // Calculate positions and detect collisions
-          const eventPositions = [];
-          significantEvents.forEach((event, i) => {
-            const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
+          const eventPositions: EventPositionWithDisplay[] = [];
+          significantEvents.forEach((event: DisplayEvent, i: number) => {
+            const eventPos = findEventPosition({ start_date: event.start_date, trend: event.trend, total_move_pct: event.total_move_pct }, chartData, chartWidth, paddingLeft);
             if (eventPos) {
               // Use the matched pricePoint/index from findEventPosition when available
-              let dataPoint = eventPos.pricePoint || null;
+              let dataPoint: ChartDataPoint | null = eventPos.pricePoint || null;
               if ((!dataPoint || dataPoint.index === undefined) && chartData && chartData.length) {
                 // Fallback: find by YYYY-MM-DD comparison
-                const matchedIndex = chartData.findIndex(d => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
+                const matchedIndex = chartData.findIndex((d: ChartDataPoint) => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
                 const displayIndex = matchedIndex > 0 ? matchedIndex - 1 : matchedIndex;
                 dataPoint = displayIndex >= 0 ? chartData[displayIndex] : null;
               }
-              
+
               const dataY = dataPoint
-                ? (paddingTop + chartHeight) - ((dataPoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
+                ? (paddingTop + chartHeight) - (((dataPoint.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
                 : paddingTop;
 
-              eventPositions.push({ event, ...eventPos, dataY, index: i });
+              eventPositions.push({ event, ...eventPos, dataY, index: i, iconY: 0 });
             }
           });
 
           // Sort by xPos for collision detection
-          eventPositions.sort((a, b) => a.xPos - b.xPos);
+          eventPositions.sort((a: EventPositionWithDisplay, b: EventPositionWithDisplay) => a.xPos - b.xPos);
 
           // All icons at same vertical level - no stacking
           const baseIconY = paddingTop + chartHeight - 15;
@@ -526,13 +543,13 @@ const PriceChart = ({
           const SPREAD_SPACING = 18; // Horizontal spacing between overlapping icons
 
           // Apply horizontal spreading for overlapping icons
-          eventPositions.forEach((pos, i) => {
+          eventPositions.forEach((pos: EventPositionWithDisplay, i: number) => {
             pos.iconY = baseIconY;
             // Store original xPos BEFORE spreading for dotted line positioning
             pos.originalXPos = pos.xPos;
 
             // Find all previous icons that overlap with this one
-            const overlappingGroup = [];
+            const overlappingGroup: EventPositionWithDisplay[] = [];
             for (let j = 0; j < i; j++) {
               if (Math.abs(pos.xPos - eventPositions[j].xPos) < OVERLAP_THRESHOLD) {
                 overlappingGroup.push(eventPositions[j]);
@@ -546,7 +563,7 @@ const PriceChart = ({
               const startX = pos.xPos - (totalWidth / 2);
 
               // Adjust positions of all icons in the overlapping group
-              overlappingGroup.forEach((overlapped, idx) => {
+              overlappingGroup.forEach((overlapped: EventPositionWithDisplay, idx: number) => {
                 overlapped.xPos = startX + (idx * SPREAD_SPACING);
               });
 
@@ -555,7 +572,7 @@ const PriceChart = ({
             }
           });
 
-          return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }) => {
+          return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }: EventPositionWithDisplay) => {
             const handleClick = () => {
               const url = event.link || event.url;
               if (url) {
@@ -567,7 +584,7 @@ const PriceChart = ({
               <g
                 key={`event-${index}`}
                 className="cursor-pointer group"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
                   // Toggle tooltip: if clicking same icon, close it; otherwise open new one
                   if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
@@ -586,7 +603,7 @@ const PriceChart = ({
                   cx={originalXPos}
                   cy={dataY}
                   r="6"
-                  fill={priceChangePercent >= 0 ? '#00a850' : '#ef4444'}
+                  fill={(priceChangePercent ?? 0) >= 0 ? '#00a850' : '#ef4444'}
                   stroke="white"
                   strokeWidth="2"
                 />
@@ -677,36 +694,36 @@ const PriceChart = ({
         {/* Sector mode: Event markers - Bloomberg style (same structure as entity mode) */}
         {detectedMode === 'sector' && showEvents && topEvents && topEvents.length > 0 && (() => {
           // Calculate positions and detect collisions (same logic as entity mode)
-          const eventPositions = [];
-          topEvents.forEach((event, i) => {
-            const eventPos = findEventPosition(event, chartData, chartWidth, paddingLeft);
+          const eventPositions: EventPositionWithDisplay[] = [];
+          topEvents.forEach((event: DisplayEvent, i: number) => {
+            const eventPos = findEventPosition({ start_date: event.start_date, trend: event.trend, total_move_pct: event.total_move_pct }, chartData, chartWidth, paddingLeft);
             if (eventPos) {
               // Prefer the matched pricePoint/index from findEventPosition
-              let dataPoint = eventPos.pricePoint || null;
+              let dataPoint: ChartDataPoint | null = eventPos.pricePoint || null;
               if ((!dataPoint || dataPoint.index === undefined) && chartData && chartData.length) {
-                const matchedIndex = chartData.findIndex(d => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
+                const matchedIndex = chartData.findIndex((d: ChartDataPoint) => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
                 dataPoint = matchedIndex >= 0 ? chartData[matchedIndex] : null;
               }
 
               const dataY = dataPoint
-                ? (paddingTop + chartHeight) - ((dataPoint.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
+                ? (paddingTop + chartHeight) - (((dataPoint.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
                 : paddingTop;
 
-              eventPositions.push({ event, ...eventPos, dataY, index: i });
+              eventPositions.push({ event, ...eventPos, dataY, index: i, iconY: 0 });
             }
           });
 
-          eventPositions.sort((a, b) => a.xPos - b.xPos);
+          eventPositions.sort((a: EventPositionWithDisplay, b: EventPositionWithDisplay) => a.xPos - b.xPos);
 
           const baseIconY = paddingTop + chartHeight - 15;
           const OVERLAP_THRESHOLD = 25;
           const SPREAD_SPACING = 18;
 
-          eventPositions.forEach((pos, i) => {
+          eventPositions.forEach((pos: EventPositionWithDisplay, i: number) => {
             pos.iconY = baseIconY;
             pos.originalXPos = pos.xPos;
 
-            const overlappingGroup = [];
+            const overlappingGroup: EventPositionWithDisplay[] = [];
             for (let j = 0; j < i; j++) {
               if (Math.abs(pos.xPos - eventPositions[j].xPos) < OVERLAP_THRESHOLD) {
                 overlappingGroup.push(eventPositions[j]);
@@ -718,7 +735,7 @@ const PriceChart = ({
               const totalWidth = (groupSize - 1) * SPREAD_SPACING;
               const startX = pos.xPos - (totalWidth / 2);
 
-              overlappingGroup.forEach((overlapped, idx) => {
+              overlappingGroup.forEach((overlapped: EventPositionWithDisplay, idx: number) => {
                 overlapped.xPos = startX + (idx * SPREAD_SPACING);
               });
 
@@ -726,8 +743,8 @@ const PriceChart = ({
             }
           });
 
-          return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }) => {
-            const handleClick = () => {
+          return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }: EventPositionWithDisplay) => {
+            const handleClick = (): void => {
               const url = event.link || event.url;
               if (url) {
                 window.open(url, '_blank', 'noopener,noreferrer');
@@ -738,7 +755,7 @@ const PriceChart = ({
               <g
                 key={`event-${index}`}
                 className="cursor-pointer group"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
                   if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
                     setHoveredEvent(null);
@@ -752,7 +769,7 @@ const PriceChart = ({
                   cx={originalXPos}
                   cy={dataY}
                   r="6"
-                  fill={priceChangePercent >= 0 ? '#00a850' : '#ef4444'}
+                  fill={(priceChangePercent ?? 0) >= 0 ? '#00a850' : '#ef4444'}
                   stroke="white"
                   strokeWidth="2"
                 />
@@ -932,7 +949,7 @@ const PriceChart = ({
               color: hoveredEvent.trend === 'Downward' ? '#dc2626' : '#00a850'
             }}
           >
-            {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct).toFixed(2)}% {hoveredEvent.trend}
+            {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct ?? 0).toFixed(2)}% {hoveredEvent.trend}
           </div>
 
           {/* Divider line */}
@@ -941,12 +958,12 @@ const PriceChart = ({
           {/* Article List - Bloomberg style with article dates */}
           {hoveredEvent.news && hoveredEvent.news.length > 0 ? (
             <div>
-              {hoveredEvent.news.map((article, i) => (
+              {hoveredEvent.news.map((article: NewsArticle, i: number) => (
                 <div key={i}>
                   {/* Article publish date */}
-                  {(article.publish_date || article.date) && (
+                  {article.publish_date && (
                     <div className="text-xs text-gray-500 mb-0.5">
-                      {new Date(article.publish_date || article.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {new Date(article.publish_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
                   )}
                   {/* Article title button */}
@@ -957,13 +974,13 @@ const PriceChart = ({
                     {article.title || 'View Article'}
                   </button>
                   {/* Divider line (not for last article) */}
-                  {i < hoveredEvent.news.length - 1 && (
+                  {hoveredEvent.news && i < hoveredEvent.news.length - 1 && (
                     <div className="border-t border-gray-200 my-3"></div>
                   )}
                 </div>
               ))}
               <div className="text-xs text-gray-500 mt-1">
-                {hoveredEvent.news.length} related article{hoveredEvent.news.length !== 1 ? 's' : ''}
+                {hoveredEvent.news?.length ?? 0} related article{(hoveredEvent.news?.length ?? 0) !== 1 ? 's' : ''}
               </div>
             </div>
           ) : hoveredEvent.link || hoveredEvent.url ? (

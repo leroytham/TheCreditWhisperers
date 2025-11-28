@@ -13,10 +13,46 @@
 import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
 
-export const usePortfolioSectorSentiment = (username, accountName, enabled = true) => {
-  const [sectorData, setSectorData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+// Type definitions
+interface SectorInfo {
+  sector: string;
+  sentiment: number;
+  holdingsCount: number;
+  totalValue: number;
+  weight: number;
+  sentimentLabel: string;
+}
+
+export interface SectorSentimentData {
+  sectors: SectorInfo[];
+  overallSentiment: number;
+  totalValue: number;
+}
+
+interface SectorApiInfo {
+  sentiment_score?: number;
+  holdings_count?: number;
+  total_value?: number;
+  weight_in_portfolio?: number;
+}
+
+// Helper function to get sentiment label
+function getSentimentLabel(score: number): string {
+  if (score > 0.15) return 'Very Bullish';
+  if (score > 0.05) return 'Bullish';
+  if (score > -0.05) return 'Neutral';
+  if (score > -0.15) return 'Bearish';
+  return 'Very Bearish';
+}
+
+export const usePortfolioSectorSentiment = (
+  username: string | undefined,
+  accountName: string | undefined,
+  enabled: boolean = true
+) => {
+  const [sectorData, setSectorData] = useState<SectorSentimentData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // If not enabled (lazy loading - tab not active), set loading to false
@@ -48,21 +84,24 @@ export const usePortfolioSectorSentiment = (username, accountName, enabled = tru
         const data = response.data;
 
         // Process sector breakdown data
-        const sectors = Object.entries(data.sentiment_by_sector || {}).map(([sector, info]: [string, any]) => ({
-          sector,
-          sentiment: info.sentiment_score || 0,
-          holdingsCount: info.holdings_count || 0,
-          totalValue: info.total_value || 0,
-          weight: (info.weight_in_portfolio || 0) * 100, // Convert to percentage
-          sentimentLabel: getSentimentLabel(info.sentiment_score || 0)
-        })).sort((a, b) => b.weight - a.weight); // Sort by weight descending
+        const sectors: SectorInfo[] = Object.entries(data.sentiment_by_sector || {}).map(([sector, info]: [string, unknown]) => {
+          const sectorInfo = info as SectorApiInfo;
+          return {
+            sector,
+            sentiment: sectorInfo.sentiment_score || 0,
+            holdingsCount: sectorInfo.holdings_count || 0,
+            totalValue: sectorInfo.total_value || 0,
+            weight: (sectorInfo.weight_in_portfolio || 0) * 100, // Convert to percentage
+            sentimentLabel: getSentimentLabel(sectorInfo.sentiment_score || 0)
+          };
+        }).sort((a, b) => b.weight - a.weight); // Sort by weight descending
 
         setSectorData({
           sectors,
           overallSentiment: data.overall_sentiment || 0,
           totalValue: data.total_portfolio_value || 0
         });
-      } catch (err) {
+      } catch (err: unknown) {
         if (!controller.signal.aborted) {
           console.error('Error fetching portfolio sector sentiment:', err);
           setError('Failed to load sector sentiment data');
@@ -88,12 +127,3 @@ export const usePortfolioSectorSentiment = (username, accountName, enabled = tru
     error
   };
 };
-
-// Helper function to get sentiment label
-function getSentimentLabel(score) {
-  if (score > 0.15) return 'Very Bullish';
-  if (score > 0.05) return 'Bullish';
-  if (score > -0.05) return 'Neutral';
-  if (score > -0.15) return 'Bearish';
-  return 'Very Bearish';
-}

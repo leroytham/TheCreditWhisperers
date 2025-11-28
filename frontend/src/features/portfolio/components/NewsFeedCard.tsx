@@ -4,6 +4,17 @@ import { useSelectedAccount } from "../../../hooks/useSelectedAccount";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import { formatDate } from "../../../utils/formatters";
 
+// Type definitions
+interface NewsItem {
+  ticker?: string;
+  title?: string;
+  publish_timestamp?: string;
+  publish_date?: string;
+  provider?: string;
+  sentiment_label?: string;
+  link?: string;
+}
+
 /**
  * NewsFeedCard Component
  *
@@ -23,14 +34,14 @@ import { formatDate } from "../../../utils/formatters";
  * // Used in portfolio overview page
  * <NewsFeedCard />
  */
-const NewsFeedCard = () => {
-  const [newsItems, setNewsItems] = useState([]);
-  const [tickers, setTickers] = useState([]);
-  const [selectedTicker, setSelectedTicker] = useState("all");
-  const [dateRange, setDateRange] = useState(7); // Days to show (7 = last 7 days)
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const abortControllerRef = useRef(null);
+const NewsFeedCard: React.FC = () => {
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [tickers, setTickers] = useState<string[]>([]);
+  const [selectedTicker, setSelectedTicker] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<number | null>(7); // Days to show (7 = last 7 days)
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+  const abortControllerRef = useRef<AbortController | null>(null);
   const { selectedAccount } = useSelectedAccount();
 
   // Fetch portfolio news using optimized endpoint
@@ -62,21 +73,22 @@ const NewsFeedCard = () => {
       const data = response.data;
 
       // Extract tickers and news items from response
-      const newsData = data.news || [];
-      const uniqueTickers = [...new Set(newsData.map(n => n.ticker))].filter(Boolean);
+      const newsData: NewsItem[] = data.news || [];
+      const uniqueTickers = [...new Set(newsData.map((n: NewsItem) => n.ticker))].filter((t): t is string => Boolean(t));
 
       // Note: Empty newsData is valid - component will show empty state
       setTickers(uniqueTickers);
 
       // Sort news by date (newest first)
       const sortedNews = newsData.sort(
-        (a: any, b: any) => new Date(b.publish_date || b.publish_timestamp).getTime() - new Date(a.publish_date || a.publish_timestamp).getTime()
+        (a: NewsItem, b: NewsItem) => new Date(b.publish_date || b.publish_timestamp || '').getTime() - new Date(a.publish_date || a.publish_timestamp || '').getTime()
       );
 
       setNewsItems(sortedNews);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Ignore aborted requests
-      if (err?.name === 'AbortError') {
+      const error = err as { name?: string };
+      if (error?.name === 'AbortError') {
         return;
       }
 
@@ -108,10 +120,10 @@ const NewsFeedCard = () => {
       : newsItems.filter((n) => n.ticker === selectedTicker);
 
   // Group news by date, filtered by selected date range
-  const groupedNews = Object.entries(
-    filteredNews.reduce((acc, item) => {
+  const groupedNews: [string, NewsItem[]][] = Object.entries(
+    filteredNews.reduce<Record<string, NewsItem[]>>((acc, item) => {
       // Use publish_timestamp if available, otherwise fall back to publish_date
-      const dateStr = item.publish_timestamp || item.publish_date;
+      const dateStr = item.publish_timestamp || item.publish_date || '';
       const date = new Date(dateStr);
       const now = new Date();
 
@@ -130,7 +142,7 @@ const NewsFeedCard = () => {
       const daysDiff = Math.floor((today.getTime() - itemDate.getTime()) / (1000 * 60 * 60 * 24));
 
       // Determine label
-      let label;
+      let label: string;
       if (daysDiff === 0) {
         label = "Today";
       } else if (daysDiff === 1) {
@@ -145,15 +157,15 @@ const NewsFeedCard = () => {
       acc[label].push(item);
       return acc;
     }, {})
-  ).map(([label, items]: [string, any[]]) => [
+  ).map(([label, items]: [string, NewsItem[]]) => [
     label,
     // Sort items by timestamp, newest first
-    items.sort((a: any, b: any) => {
-      const dateA = new Date(a.publish_timestamp || a.publish_date);
-      const dateB = new Date(b.publish_timestamp || b.publish_date);
+    items.sort((a: NewsItem, b: NewsItem) => {
+      const dateA = new Date(a.publish_timestamp || a.publish_date || '');
+      const dateB = new Date(b.publish_timestamp || b.publish_date || '');
       return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
     })
-  ] as [string, any[]]);
+  ] as [string, NewsItem[]]);
 
   return (
     <div
@@ -171,7 +183,7 @@ const NewsFeedCard = () => {
         <div className="flex items-center space-x-2">
           {/* Date Range Selector */}
           <select
-            value={dateRange}
+            value={dateRange === null ? 'null' : dateRange}
             onChange={(e) => setDateRange(e.target.value === 'null' ? null : Number(e.target.value))}
             className="text-xs border border-gray-300 rounded-md px-2 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400"
             aria-label="Select date range"

@@ -1,4 +1,4 @@
-// src/pages/SectorPage.jsx
+// src/pages/SectorPage.tsx
 
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -7,6 +7,28 @@ import SectorSelector from "../features/sector/components/SectorSelector/SectorS
 import PerformanceView from "../features/sector/components/PerformanceView/PerformanceView";
 import { resolveDisplayTicker } from "../features/sector/utils/tickerResolver";
 import useAppStore from "../store/useAppStore";
+
+interface Sector {
+  name: string;
+  index?: string;
+  ticker?: string;
+  available: boolean;
+}
+
+interface SectorContext {
+  countryCode: string;
+  countryName: string;
+  sector: Sector;
+}
+
+type TabType = 'overview' | 'performance' | 'sentiment' | 'constituents' | 'news';
+
+interface ApiError {
+  response?: {
+    status?: number;
+  };
+  message?: string;
+}
 
 /**
  * SectorPage - Main sector analysis page
@@ -27,9 +49,9 @@ import useAppStore from "../store/useAppStore";
 const SectorPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [view, setView] = useState('filter'); // 'filter' | 'performance'
-  const [performanceContext, setPerformanceContext] = useState(null);
-  const [activeSubTab, setActiveSubTab] = useState('overview');
+  const [view, setView] = useState<'filter' | 'performance'>('filter');
+  const [performanceContext, setPerformanceContext] = useState<SectorContext | null>(null);
+  const [activeSubTab, setActiveSubTab] = useState<TabType>('overview');
   const setUser = useAppStore((state) => state.setUser);
   const zustandLogout = useAppStore((state) => state.logout);
 
@@ -46,7 +68,8 @@ const SectorPage = () => {
         const { default: apiService } = await import('../services/api');
         await apiService.get('/auth/me');
       } catch (error) {
-        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+        const apiError = error as ApiError;
+        if (apiError.response?.status === 401 || apiError.message?.includes('Session expired')) {
           navigate("/login");
         }
       }
@@ -71,7 +94,7 @@ const SectorPage = () => {
   };
 
   // Sector selection handler
-  const handleSectorSelect = (context) => {
+  const handleSectorSelect = (context: SectorContext) => {
     setPerformanceContext(context);
     setView('performance');
     setActiveSubTab('overview'); // Reset to overview when sector is selected
@@ -84,7 +107,7 @@ const SectorPage = () => {
   };
 
   // Sub-navigation items
-  const subNavItems = [
+  const subNavItems: { id: TabType; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'performance', label: 'Performance' },
     { id: 'sentiment', label: 'Sentiment' },
@@ -166,10 +189,10 @@ const SectorPage = () => {
 
         {view === 'performance' && (
           <PerformanceView
-            context={performanceContext}
+            context={performanceContext ?? undefined}
             onBack={handleBack}
             activeTab={activeSubTab}
-            setActiveTab={setActiveSubTab} // Pass the setter function
+            setActiveTab={(tab: string) => setActiveSubTab(tab as TabType)}
           />
         )}
       </main>

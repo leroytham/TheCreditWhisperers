@@ -13,7 +13,16 @@ import React from 'react';
  * @param {string} props.timeframe - Current timeframe (affects which modes are available)
  * @param {string} props.className - Additional CSS classes for wrapper
  */
-const ViewModeToggle = ({
+export type ViewModeType = 'rolling' | 'daily' | 'weekly' | 'monthly';
+
+interface ViewModeToggleProps {
+  activeMode?: ViewModeType;
+  onModeChange: (mode: ViewModeType) => void;
+  timeframe?: string;
+  className?: string;
+}
+
+const ViewModeToggle: React.FC<ViewModeToggleProps> = ({
   activeMode = 'rolling',
   onModeChange,
   timeframe = '1W',
@@ -37,7 +46,7 @@ const ViewModeToggle = ({
   }
 
   // For 1D, 1W, 1M: show toggle between rolling and daily
-  const modes = [
+  const modes: { id: ViewModeType; label: string }[] = [
     { id: 'rolling', label: 'Rolling 24h Windows' },
     { id: 'daily', label: 'Daily Average' }
   ];

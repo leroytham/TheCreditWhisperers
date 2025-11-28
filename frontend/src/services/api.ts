@@ -99,7 +99,7 @@ api.interceptors.response.use(
     if (shouldShowSuccessNotification(response.config) && !shouldSuppressSuccess(response.config)) {
       const { notifySuccess } = useAppStore.getState();
       const message = getSuccessMessage(response.config, response);
-      const category = getCategoryFromUrl(response.config.url || '');
+      const category = getCategoryFromUrl(response.config.url || '') as 'Portfolio' | 'Market' | 'News' | 'System';
 
       notifySuccess(message, {
         category,
@@ -168,7 +168,7 @@ api.interceptors.response.use(
     if (!shouldSuppressError(error)) {
       const { notifyError } = useAppStore.getState();
       const message = getErrorMessage(error);
-      const category = getCategoryFromUrl(originalRequest.url || '');
+      const category = getCategoryFromUrl(originalRequest.url || '') as 'Portfolio' | 'Market' | 'News' | 'System';
 
       notifyError(message, {
         category,

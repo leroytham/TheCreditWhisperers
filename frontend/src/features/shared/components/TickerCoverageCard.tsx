@@ -12,7 +12,20 @@ import { BarChart3, AlertTriangle, CheckCircle, Info } from 'lucide-react';
  * @param {number} props.totalTickers - Total tickers in sector (alternative to tickerCoverage.total_tickers_in_sector)
  * @param {string} props.className - Additional CSS classes
  */
-const TickerCoverageCard = ({
+interface TickerCoverage {
+  tickers_mentioned?: number;
+  total_tickers_in_sector?: number;
+  coverage_percentage?: number;
+  mentioned_ticker_list?: string[];
+}
+
+interface TickerCoverageCardProps {
+  tickerCoverage?: TickerCoverage | null;
+  totalTickers?: number;
+  className?: string;
+}
+
+const TickerCoverageCard: React.FC<TickerCoverageCardProps> = ({
   tickerCoverage,
   totalTickers,
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
@@ -201,7 +214,7 @@ const TickerCoverageCard = ({
                 </div>
                 <div className="max-h-40 overflow-y-auto bg-gray-50 rounded-lg p-3">
                   <div className="flex flex-wrap gap-2">
-                    {tickerCoverage.mentioned_ticker_list.map((ticker, idx) => (
+                    {tickerCoverage.mentioned_ticker_list.map((ticker: string, idx: number) => (
                       <span
                         key={idx}
                         className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200"

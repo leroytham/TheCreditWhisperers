@@ -1,4 +1,8 @@
 import { parseExchangeDate, parseExchangeTimestamp } from './formatters';
+import type { PriceDataPoint, DailySentimentPoint, SignificantEvent } from '../../../types';
+
+// Re-export types that are used by hooks
+export type { PriceDataPoint };
 
 /**
  * Shared Chart Helper Functions
@@ -7,13 +11,77 @@ import { parseExchangeDate, parseExchangeTimestamp } from './formatters';
  * Used by both Entity and Sector features
  */
 
+export interface ChartDataPoint {
+  x: number;
+  y: number | null;
+  date: string;
+  time?: string;
+  volume: number;
+  index: number;
+}
+
+export interface PriceRange {
+  min: number;
+  max: number;
+}
+
+export interface TimelinePoint {
+  label: string;
+  x: number;
+  dataIndex?: number;
+}
+
+export interface MarketHours {
+  marketOpen: string;
+  marketClose: string;
+}
+
+export interface PriceChangeResult {
+  currentPrice: number | null;
+  startPrice: number | null;
+  priceChange: number;
+  priceChangePercent: number | null;
+  isValidPercentage: boolean;
+}
+
+// Allow assigning null to priceChangePercent
+type MutablePriceChangePercent = number | null;
+
+export interface EventPosition {
+  xPos: number;
+  pricePoint: ChartDataPoint;
+  isUpward: boolean;
+}
+
+export interface EventMarker {
+  x: number;
+  y: number;
+  trend: string;
+  pct: number;
+  date: string;
+  news: string[];
+}
+
+export interface SentimentHeadline {
+  title?: string;
+  link?: string;
+  provider?: string;
+  sentiment_score?: number;
+}
+
+export interface DailySentimentBar {
+  date: string;
+  label: string;
+  score: number;
+  count: number;
+  headlines: SentimentHeadline[];
+  index: number;
+}
+
 /**
  * Filters price data based on selected timeframe
- * @param {Array} priceData1Y - Full year of price data
- * @param {string} timeframe - Selected timeframe ('1D', '1M', '6M', 'YTD', '1Y')
- * @returns {Array} Filtered price data
  */
-export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
+export const filterPriceDataByTimeframe = (priceData1Y: PriceDataPoint[], timeframe: string): PriceDataPoint[] => {
   if (!priceData1Y || priceData1Y.length === 0) {
     return [];
   }
@@ -116,18 +184,16 @@ export const filterPriceDataByTimeframe = (priceData1Y, timeframe) => {
 
 /**
  * Generate chart coordinates from backend price data
- * @param {Array} priceData - Price data points
- * @returns {Array} Chart data with x, y, date, time, volume, index
  */
-export const generateChartData = (priceData) => {
+export const generateChartData = (priceData: PriceDataPoint[]): ChartDataPoint[] => {
   if (!priceData || priceData.length === 0) {
     return [];
   }
 
   return priceData.map((point, i) => {
     // Use nullish coalescing with NaN check to handle 0 correctly
-    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(point.close) : NaN;
-    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(point.price) : NaN;
+    const closeValue = point.close !== undefined && point.close !== null ? parseFloat(String(point.close)) : NaN;
+    const priceValue = point.price !== undefined && point.price !== null ? parseFloat(String(point.price)) : NaN;
 
     return {
       x: i,
@@ -143,14 +209,14 @@ export const generateChartData = (priceData) => {
 
 /**
  * Calculate price range for chart scaling with padding
- * @param {Array} chartData - Chart data points
- * @param {number} paddingPercent - Padding percentage (default 0.1)
- * @returns {Object} Object with min and max values
  */
-export const getPriceRange = (chartData, paddingPercent = 0.1) => {
+export const getPriceRange = (chartData: ChartDataPoint[], paddingPercent: number = 0.1): PriceRange => {
   if (chartData.length === 0) return { min: 0, max: 100 };
 
-  const prices = chartData.map(d => d.y);
+  // Filter out null values before calculating min/max
+  const prices = chartData.map(d => d.y).filter((y): y is number => y !== null);
+  if (prices.length === 0) return { min: 0, max: 100 };
+
   const min = Math.min(...prices);
   const max = Math.max(...prices);
 
@@ -168,17 +234,15 @@ export const getPriceRange = (chartData, paddingPercent = 0.1) => {
 
 /**
  * Format X-axis label based on timeframe
- * @param {Date|string} date - Date object or string
- * @param {string} timeframe - Timeframe (1D, 1M, 6M, YTD, 1Y, 5Y)
- * @param {string} time - Time string (for intraday)
- * @param {string} exchange - Exchange code for timezone-aware parsing (default: 'NASDAQ')
- * @returns {string} Formatted label
  */
-export const formatXAxisLabel = (date, timeframe, time = null, exchange = 'NASDAQ') => {
+export const formatXAxisLabel = (date: Date | string, timeframe: string, time: string | null = null, exchange: string = 'NASDAQ'): string => {
   // Use parseExchangeTimestamp for 1D to preserve time, parseExchangeDate for others
-  const dateObj = typeof date === 'string'
+  const parsed = typeof date === 'string'
     ? (timeframe === '1D' ? parseExchangeTimestamp(date, exchange) : parseExchangeDate(date, exchange))
     : date;
+
+  // Handle null result from parseExchangeTimestamp/parseExchangeDate
+  const dateObj = parsed || new Date();
 
   switch (timeframe) {
     case '1D':
@@ -200,10 +264,8 @@ export const formatXAxisLabel = (date, timeframe, time = null, exchange = 'NASDA
 
 /**
  * Get market open and close times based on exchange
- * @param {string} exchange - Exchange code
- * @returns {Object} Object with marketOpen and marketClose in "HH:MM" format
  */
-export const getMarketOpenClose = (exchange) => {
+export const getMarketOpenClose = (exchange: string): MarketHours => {
   const exchangeUpper = (exchange || '').toUpperCase();
 
   // US Markets
@@ -242,11 +304,8 @@ export const getMarketOpenClose = (exchange) => {
 
 /**
  * Calculate trading day elapsed percentage based on last data point time
- * @param {Array} chartData - Chart data with time property
- * @param {string} exchange - Exchange code
- * @returns {number} Percentage of trading day elapsed (0-1), or 1 if market closed
  */
-export const calculateTradingDayElapsed = (chartData, exchange) => {
+export const calculateTradingDayElapsed = (chartData: ChartDataPoint[], exchange: string): number => {
   if (!chartData || chartData.length === 0) return 1;
 
   const lastPoint = chartData[chartData.length - 1];
@@ -255,10 +314,11 @@ export const calculateTradingDayElapsed = (chartData, exchange) => {
   const { marketOpen, marketClose } = getMarketOpenClose(exchange);
 
   // Parse times into minutes since midnight
-  const parseTime = (timeStr) => {
+  const parseTime = (timeStr: string): number => {
     // Handle formats like "09:45 AM" or "09:45"
     let timeOnly = timeStr.trim();
-    let hours, minutes;
+    let hours: number;
+    let minutes: number;
 
     // Check if it has AM/PM
     if (timeOnly.includes('AM') || timeOnly.includes('PM')) {
@@ -292,10 +352,8 @@ export const calculateTradingDayElapsed = (chartData, exchange) => {
 
 /**
  * Get market hours based on exchange
- * @param {string} exchange - Exchange code (e.g., "NMS", "NYQ", "LSE", "JPX")
- * @returns {Array} Array of time strings for market hours
  */
-export const getMarketHours = (exchange) => {
+export const getMarketHours = (exchange: string): string[] => {
   // Normalize exchange string
   const exchangeUpper = (exchange || '').toUpperCase();
 
@@ -344,17 +402,15 @@ export const getMarketHours = (exchange) => {
 
 /**
  * Format tooltip date/time based on timeframe
- * @param {Date|string} date - Date object or string
- * @param {string} timeframe - Timeframe
- * @param {string} time - Time string (for intraday)
- * @param {string} exchange - Exchange code for timezone-aware parsing (default: 'NASDAQ')
- * @returns {string} Formatted tooltip string
  */
-export const formatTooltipDateTime = (date, timeframe, time = null, exchange = 'NASDAQ') => {
+export const formatTooltipDateTime = (date: Date | string, timeframe: string, time: string | null = null, exchange: string = 'NASDAQ'): string => {
   // Use parseExchangeTimestamp for 1D to preserve time, parseExchangeDate for others
-  const dateObj = typeof date === 'string'
+  const parsed = typeof date === 'string'
     ? (timeframe === '1D' ? parseExchangeTimestamp(date, exchange) : parseExchangeDate(date, exchange))
     : date;
+
+  // Handle null result from parseExchangeTimestamp/parseExchangeDate
+  const dateObj = parsed || new Date();
   const currentYear = new Date().getFullYear();
   const dateYear = dateObj.getFullYear();
 
@@ -367,7 +423,9 @@ export const formatTooltipDateTime = (date, timeframe, time = null, exchange = '
           // Convert from 12-hour to 24-hour format
           const isPM = time.includes('PM');
           const timeOnly = time.replace(/\s*(AM|PM)\s*/i, '').trim();
-          let [hours, minutes] = timeOnly.split(':').map(Number);
+          const timeParts = timeOnly.split(':').map(Number);
+          let hours: number = timeParts[0];
+          const minutes: number = timeParts[1];
 
           if (isPM && hours !== 12) {
             hours += 12;
@@ -397,15 +455,8 @@ export const formatTooltipDateTime = (date, timeframe, time = null, exchange = '
 
 /**
  * Generate timeline points for x-axis labels
- * @param {Array} chartData - Chart data points
- * @param {number} chartWidth - Width of chart in pixels (optional, for responsive mode)
- * @param {number} numPoints - Number of timeline points to generate (default 6)
- * @param {number} paddingLeft - Left padding in pixels (default 60)
- * @param {string} timeframe - Current timeframe for label formatting
- * @param {string} exchange - Exchange code for determining market hours and timezone (default: 'NASDAQ')
- * @returns {Array} Timeline points with label and x position
  */
-export const generateTimelinePoints = (chartData, chartWidth = null, numPoints = 6, paddingLeft = 60, timeframe = '1Y', exchange = 'NASDAQ') => {
+export const generateTimelinePoints = (chartData: ChartDataPoint[], chartWidth: number | null = null, numPoints: number = 6, paddingLeft: number = 60, timeframe: string = '1Y', exchange: string = 'NASDAQ'): TimelinePoint[] => {
   if (chartData.length === 0) return [];
 
   const effectiveWidth = chartWidth || 660; // Default width for entity
@@ -468,7 +519,7 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
     // Get market hours for the specific exchange
     const targetTimes = getMarketHours(exchange);
     const { marketOpen, marketClose } = getMarketOpenClose(exchange);
-    const timelinePoints = [];
+    const timelinePoints: TimelinePoint[] = [];
 
     // Parse market open/close times into minutes since midnight
     const [openHours, openMinutes] = marketOpen.split(':').map(Number);
@@ -479,7 +530,7 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 
     const totalTradingMinutes = closeMinutesSinceMidnight - openMinutesSinceMidnight;
 
-    targetTimes.forEach((targetTime, index) => {
+    targetTimes.forEach((targetTime) => {
       // Parse target time into minutes since midnight
       const [hours, minutes] = targetTime.split(':').map(Number);
       const targetMinutes = hours * 60 + minutes;
@@ -567,10 +618,8 @@ export const generateTimelinePoints = (chartData, chartWidth = null, numPoints =
 
 /**
  * Calculate price change metrics
- * @param {Array} chartData - Chart data points
- * @returns {Object} Object with currentPrice, startPrice, priceChange, priceChangePercent, isValidPercentage
  */
-export const calculatePriceChange = (chartData) => {
+export const calculatePriceChange = (chartData: ChartDataPoint[]): PriceChangeResult => {
   if (chartData.length === 0) {
     return {
       currentPrice: null,
@@ -584,8 +633,8 @@ export const calculatePriceChange = (chartData) => {
   const currentPoint = chartData[chartData.length - 1];
   const startPoint = chartData[0];
 
-  // Early check for NaN values
-  if (!isFinite(startPoint.y) || !isFinite(currentPoint.y)) {
+  // Early check for null or NaN values
+  if (startPoint.y === null || currentPoint.y === null || !isFinite(startPoint.y) || !isFinite(currentPoint.y)) {
     return {
       currentPrice: currentPoint.y,
       startPrice: startPoint.y,
@@ -599,7 +648,7 @@ export const calculatePriceChange = (chartData) => {
 
   // Fix Bug 3: Guard against division by zero
   // This prevents Infinity/NaN from leaking into UI state
-  let priceChangePercent = 0;
+  let priceChangePercent: number | null = 0;
   let isValidPercentage = true;
 
   if (startPoint.y > 0) {
@@ -617,7 +666,7 @@ export const calculatePriceChange = (chartData) => {
   }
 
   // Additional safety: Check for NaN/Infinity after calculation
-  if (!isFinite(priceChangePercent)) {
+  if (priceChangePercent !== null && !isFinite(priceChangePercent)) {
     priceChangePercent = null;
     isValidPercentage = false;
   }
@@ -633,29 +682,24 @@ export const calculatePriceChange = (chartData) => {
 
 /**
  * Calculate SVG path coordinates for price line
- * @param {Array} chartData - Chart data points
- * @param {Object} priceRange - Price range with min and max
- * @param {number} chartWidth - Chart width in pixels (default 660)
- * @param {number} chartHeight - Chart height in pixels (default 250)
- * @param {number} paddingLeft - Left padding (default 60)
- * @param {number} paddingTop - Top padding (default 40)
- * @returns {string} SVG path data
  */
 export const calculateChartPath = (
-  chartData,
-  priceRange,
-  chartWidth = 660,
-  chartHeight = 250,
-  paddingLeft = 60,
-  paddingTop = 40
-) => {
+  chartData: ChartDataPoint[],
+  priceRange: PriceRange,
+  chartWidth: number = 660,
+  chartHeight: number = 250,
+  paddingLeft: number = 60,
+  paddingTop: number = 40
+): string => {
   if (chartData.length === 0) return '';
 
-  const points = chartData.map((point, i) => {
-    const x = paddingLeft + (i * (chartWidth / Math.max(1, chartData.length - 1)));
-    const y = paddingTop + chartHeight - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
-    return { x, y };
-  });
+  const points = chartData
+    .filter((point): point is ChartDataPoint & { y: number } => point.y !== null)
+    .map((point, i) => {
+      const x = paddingLeft + (i * (chartWidth / Math.max(1, chartData.length - 1)));
+      const y = paddingTop + chartHeight - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+      return { x, y };
+    });
 
   const pathData = points.map((point, i) =>
     i === 0 ? `M ${point.x} ${point.y}` : `L ${point.x} ${point.y}`
@@ -666,27 +710,22 @@ export const calculateChartPath = (
 
 /**
  * Calculate SVG path for filled area under chart
- * @param {Array} chartData - Chart data points
- * @param {Object} priceRange - Price range with min and max
- * @param {number} chartWidth - Chart width in pixels (default 660)
- * @param {number} chartHeight - Chart height in pixels (default 250)
- * @param {number} paddingLeft - Left padding (default 60)
- * @param {number} paddingTop - Top padding (default 40)
- * @returns {string} SVG path data for fill area
  */
 export const calculateFillPath = (
-  chartData,
-  priceRange,
-  chartWidth = 660,
-  chartHeight = 250,
-  paddingLeft = 60,
-  paddingTop = 40
-) => {
+  chartData: ChartDataPoint[],
+  priceRange: PriceRange,
+  chartWidth: number = 660,
+  chartHeight: number = 250,
+  paddingLeft: number = 60,
+  paddingTop: number = 40
+): string => {
   if (chartData.length === 0) return '';
 
   const bottomY = paddingTop + chartHeight;
 
-  const points = chartData.map((point, i) => {
+  const validPoints = chartData.filter((point): point is ChartDataPoint & { y: number } => point.y !== null);
+
+  const points = validPoints.map((point, i) => {
     const x = paddingLeft + (i * (chartWidth / Math.max(1, chartData.length - 1)));
     const y = paddingTop + chartHeight - ((point.y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
     return `L ${x} ${y}`;
@@ -699,12 +738,8 @@ export const calculateFillPath = (
 
 /**
  * Generate daily sentiment bar chart data
- * @param {Object} dailySentiment - Daily sentiment data keyed by date
- * @param {number} daysToShow - Number of days to include (default 7)
- * @param {string} exchange - Exchange code for timezone-aware parsing (default: 'NASDAQ')
- * @returns {Array} Bar chart data with date, label, score, count, headlines, index
  */
-export const generateDailySentimentBars = (dailySentiment, daysToShow = 7, exchange = 'NASDAQ') => {
+export const generateDailySentimentBars = (dailySentiment: Record<string, DailySentimentPoint>, daysToShow: number = 7, exchange: string = 'NASDAQ'): DailySentimentBar[] => {
   if (!dailySentiment || Object.keys(dailySentiment).length === 0) {
     return [];
   }
@@ -717,8 +752,12 @@ export const generateDailySentimentBars = (dailySentiment, daysToShow = 7, excha
     const dayData = dailySentiment[date];
     const score = dayData.score || 0;
     const count = dayData.count || 0;
-    const headlines = dayData.headlines || [];
-    const dateObj = parseExchangeDate(date, exchange);
+    // Convert string headlines to SentimentHeadline objects if needed
+    const rawHeadlines = dayData.headlines || [];
+    const headlines: SentimentHeadline[] = rawHeadlines.map((h: string | SentimentHeadline) =>
+      typeof h === 'string' ? { title: h } : h
+    );
+    const dateObj = parseExchangeDate(date, exchange) || new Date(date);
     const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return {
@@ -732,15 +771,17 @@ export const generateDailySentimentBars = (dailySentiment, daysToShow = 7, excha
   });
 };
 
+export interface ChartEvent {
+  start_date: string;
+  trend: string;
+  total_move_pct?: number;
+  news?: string[];
+}
+
 /**
  * Find event position on chart (Entity style - using CHART_CONFIG)
- * @param {Object} event - Event object with start_date and trend
- * @param {Array} chartData - Chart data points with date and index
- * @param {number} chartWidth - Chart width (default 660)
- * @param {number} paddingLeft - Left padding (default 60)
- * @returns {Object|null} Object with xPos, pricePoint, isUpward or null if not found
  */
-export const findEventPosition = (event, chartData, chartWidth = 660, paddingLeft = 60) => {
+export const findEventPosition = (event: ChartEvent, chartData: ChartDataPoint[], chartWidth: number = 660, paddingLeft: number = 60): EventPosition | null => {
   const eventDate = new Date(event.start_date);
   
   // Find the index of the actual event date
@@ -771,48 +812,46 @@ export const findEventPosition = (event, chartData, chartWidth = 660, paddingLef
 
 /**
  * Compute event marker positions on chart (Sector style - with y-coordinate)
- * @param {Array} events - Significant events array
- * @param {Array} chartData - Chart data points
- * @param {number} chartWidth - Chart width in pixels
- * @param {number} chartHeight - Chart height in pixels
- * @param {Object} priceRange - Price range with min and max
- * @param {number} paddingLeft - Left padding (default 60)
- * @param {number} paddingTop - Top padding (default 40)
- * @returns {Array} Event markers with x, y, trend, pct, date, news
  */
 export const computeEventMarkers = (
-  events,
-  chartData,
-  chartWidth,
-  chartHeight,
-  priceRange,
-  paddingLeft = 60,
-  paddingTop = 40
-) => {
+  events: ChartEvent[],
+  chartData: ChartDataPoint[],
+  chartWidth: number,
+  chartHeight: number,
+  priceRange: PriceRange,
+  paddingLeft: number = 60,
+  paddingTop: number = 40
+): EventMarker[] => {
   if (!chartData || chartData.length === 0 || !events || events.length === 0) {
     return [];
   }
 
-  return events.map((event) => {
-    const eventDate = new Date(event.start_date);
+  const markers: EventMarker[] = [];
+
+  for (const event of events) {
     const index = chartData.findIndex(pt => {
       const ptDateStr = (new Date(pt.date)).toISOString().slice(0,10);
       const evDateStr = (new Date(event.start_date)).toISOString().slice(0,10);
       return ptDateStr === evDateStr;
     });
 
-    if (index === -1) return null;
+    if (index === -1) continue;
+
+    const pointY = chartData[index].y;
+    if (pointY === null) continue;
 
     const x = paddingLeft + (index * (chartWidth / Math.max(1, chartData.length - 1)));
-    const y = (paddingTop + chartHeight) - ((chartData[index].y - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
+    const y = (paddingTop + chartHeight) - ((pointY - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight);
 
-    return {
+    markers.push({
       x,
       y,
       trend: event.trend,
-      pct: event.total_move_pct,
+      pct: event.total_move_pct ?? 0,
       date: event.start_date,
-      news: event.news
-    };
-  }).filter(Boolean);
+      news: event.news || []
+    });
+  }
+
+  return markers;
 };

@@ -1,7 +1,15 @@
-// frontend/src/features/portfolio/hooks/usePortfolioQueries.js
+// frontend/src/features/portfolio/hooks/usePortfolioQueries.ts
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiService from '../../../services/api';
+
+// Type definitions
+interface Portfolio {
+  id: string;
+  client_account_name: string;
+  is_primary?: boolean;
+  holdings?: unknown[];
+}
 
 /**
  * Query key factory for portfolio-related queries.
@@ -16,17 +24,17 @@ import apiService from '../../../services/api';
  *   queryClient.invalidateQueries({ queryKey: portfolioKeys.lists() });
  */
 export const portfolioKeys = {
-  all: ['portfolios'],
-  lists: () => [...portfolioKeys.all, 'list'],
-  list: (username) => [...portfolioKeys.lists(), username],
-  details: () => [...portfolioKeys.all, 'detail'],
-  detail: (username, accountName) => [...portfolioKeys.details(), username, accountName],
-  holdings: (username, accountName) => [...portfolioKeys.detail(username, accountName), 'holdings'],
-  performance: (username, accountName, timeframe) => [
+  all: ['portfolios'] as const,
+  lists: () => [...portfolioKeys.all, 'list'] as const,
+  list: (username: string | undefined) => [...portfolioKeys.lists(), username] as const,
+  details: () => [...portfolioKeys.all, 'detail'] as const,
+  detail: (username: string | undefined, accountName: string | undefined) => [...portfolioKeys.details(), username, accountName] as const,
+  holdings: (username: string | undefined, accountName: string | undefined) => [...portfolioKeys.detail(username, accountName), 'holdings'] as const,
+  performance: (username: string | undefined, accountName: string | undefined, timeframe: string) => [
     ...portfolioKeys.detail(username, accountName),
     'performance',
     timeframe,
-  ],
+  ] as const,
 };
 
 /**
@@ -41,10 +49,11 @@ export const portfolioKeys = {
  * Usage:
  *   const { data: portfolios, isLoading, error } = useUserPortfolios('john@example.com');
  */
-export function useUserPortfolios(username) {
+export function useUserPortfolios(username: string | undefined) {
   return useQuery({
     queryKey: portfolioKeys.list(username),
     queryFn: async () => {
+      if (!username) throw new Error('Username required');
       const response = await apiService.getPortfolioAccounts(username);
       return response.data.accounts || [];
     },
@@ -117,11 +126,11 @@ export function useAddPortfolioMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ portfolioData }: { portfolioData: any; username?: string }) => {
+    mutationFn: async ({ portfolioData, username }: { portfolioData: unknown; username?: string }) => {
       const response = await apiService.addPortfolio(portfolioData);
       return response.data;
     },
-    onSuccess: (data, { username }: { username?: string }) => {
+    onSuccess: (_data, { username }) => {
       // Invalidate to refetch updated list
       queryClient.invalidateQueries({ queryKey: portfolioKeys.list(username) });
     },
@@ -145,25 +154,25 @@ export function useDeletePortfolioMutation() {
       const response = await apiService.deletePortfolio(username, accountName);
       return response.data;
     },
-    onMutate: async ({ username, accountName }: { username: string; accountName: string }) => {
+    onMutate: async ({ username, accountName }) => {
       await queryClient.cancelQueries({ queryKey: portfolioKeys.list(username) });
 
       const previousPortfolios = queryClient.getQueryData(portfolioKeys.list(username));
 
       // Optimistically remove from list
-      queryClient.setQueryData(portfolioKeys.list(username), (old: any) => {
+      queryClient.setQueryData(portfolioKeys.list(username), (old: Portfolio[] | undefined) => {
         if (!old) return old;
-        return old.filter((p: any) => p.client_account_name !== accountName);
+        return old.filter((p) => p.client_account_name !== accountName);
       });
 
       return { previousPortfolios };
     },
-    onError: (err, { username }: { username: string }, context: any) => {
+    onError: (_err, { username }, context) => {
       if (context?.previousPortfolios) {
         queryClient.setQueryData(portfolioKeys.list(username), context.previousPortfolios);
       }
     },
-    onSettled: (data, error, { username }: { username: string }) => {
+    onSettled: (_data, _error, { username }) => {
       queryClient.invalidateQueries({ queryKey: portfolioKeys.list(username) });
     },
   });
@@ -178,12 +187,12 @@ export function useDeletePortfolioMutation() {
  * Usage:
  *   const primaryPortfolio = usePrimaryPortfolio('john@example.com');
  */
-export function usePrimaryPortfolio(username) {
+export function usePrimaryPortfolio(username: string | undefined): Portfolio | null {
   const { data: portfolios = [] } = useUserPortfolios(username);
 
   if (!portfolios.length) return null;
 
-  return portfolios.find((p) => p.is_primary) || portfolios[0];
+  return portfolios.find((p: Portfolio) => p.is_primary) || portfolios[0];
 }
 
 export default {

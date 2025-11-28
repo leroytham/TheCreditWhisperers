@@ -4,32 +4,26 @@ import { useUser } from '../../../hooks/useUser';
 import { useSelectedAccount } from '../../../hooks/useSelectedAccount';
 import apiService from '../../../services/api';
 
+// Type definitions
+interface Account {
+  client_account_name: string;
+  account_no: string;
+}
+
 /**
  * ClientInfoBar Component
  *
  * Top navigation bar for portfolio page that displays and manages account selection.
  * Features a dropdown menu with searchable account list, showing account name and number.
  * Integrates with Zustand store via useSelectedAccount hook.
- *
- * Key Features:
- * - Searchable account dropdown
- * - Visual indication of selected account
- * - Loading state during account fetch
- * - Automatic account fetch on component mount
- *
- * @returns {React.ReactElement} Rendered client info bar component
- *
- * @example
- * // Used at the top of portfolio page
- * <ClientInfoBar />
  */
-const ClientInfoBar = () => {
+const ClientInfoBar: React.FC = () => {
   const { username } = useUser();
   const { selectedAccount, selectAccount } = useSelectedAccount();
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // Fetch accounts for current logged-in user
   useEffect(() => {
@@ -59,10 +53,10 @@ const ClientInfoBar = () => {
       a.account_no.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAccountSelect = (account) => {
+  const handleAccountSelect = (account: Account): void => {
     // Update Zustand store with selected account
     selectAccount(
-      username,
+      username || '',
       account.client_account_name,
       account.account_no
     );

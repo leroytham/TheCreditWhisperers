@@ -1,8 +1,9 @@
-// frontend/src/features/entity/components/EarningsTranscript/EarningsTranscript.jsx
+// frontend/src/features/entity/components/EarningsTranscript/EarningsTranscript.tsx
 
 import React, { useState, useMemo } from 'react';
 import { useEarningsTranscript } from '../../hooks/useEarningsTranscript';
 import EarningsCalendar from '../EarningsCalendar/EarningsCalendar';
+import type { TranscriptSegment } from '../../../../types';
 import {
   ChevronDown,
   ChevronUp,
@@ -16,9 +17,14 @@ import {
   Loader2
 } from 'lucide-react';
 
+interface EarningsTranscriptProps {
+  ticker: string;
+  className?: string;
+}
+
 /**
  * EarningsTranscript Component
- * 
+ *
  * Displays earnings call transcript data with LLM-based sentiment analysis.
  * Features:
  * - Quarter selector dropdown
@@ -27,7 +33,7 @@ import {
  * - Summary statistics
  * - Sentiment color coding
  */
-const EarningsTranscript = ({ ticker, className = '' }) => {
+const EarningsTranscript: React.FC<EarningsTranscriptProps> = ({ ticker, className = '' }) => {
   const [selectedQuarter, setSelectedQuarter] = useState('');
   const [expandedSegments, setExpandedSegments] = useState(new Set());
   const [showAllSegments, setShowAllSegments] = useState(false);
@@ -51,7 +57,7 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
   }, [availableQuarters, selectedQuarter]);
 
   // Toggle segment expansion
-  const toggleSegment = (index) => {
+  const toggleSegment = (index: number): void => {
     const newExpanded = new Set(expandedSegments);
     if (newExpanded.has(index)) {
       newExpanded.delete(index);
@@ -72,16 +78,16 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
   };
 
   // Get sentiment icon
-  const getSentimentIcon = (sentiment) => {
-    const score = parseFloat(sentiment);
+  const getSentimentIcon = (sentiment: number | string): React.ReactNode => {
+    const score = typeof sentiment === 'string' ? parseFloat(sentiment) : sentiment;
     if (score > 0.2) return <TrendingUp className="w-4 h-4" />;
     if (score < -0.2) return <TrendingDown className="w-4 h-4" />;
     return <Minus className="w-4 h-4" />;
   };
 
   // Get sentiment badge color
-  const getSentimentBadgeColor = (sentiment) => {
-    const score = parseFloat(sentiment);
+  const getSentimentBadgeColor = (sentiment: number | string): string => {
+    const score = typeof sentiment === 'string' ? parseFloat(sentiment) : sentiment;
     if (score >= 0.6) return 'bg-green-100 text-green-800 border-green-200';
     if (score >= 0.4) return 'bg-green-50 text-green-700 border-green-200';
     if (score >= 0.2) return 'bg-blue-50 text-blue-700 border-blue-200';
@@ -92,7 +98,7 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
   };
 
   // Truncate content for preview
-  const getPreviewText = (content, maxWords = 50) => {
+  const getPreviewText = (content: string, maxWords: number = 50): string => {
     const words = content.split(' ');
     if (words.length <= maxWords) return content;
     return words.slice(0, maxWords).join(' ') + '...';
@@ -110,12 +116,12 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
       avgSentiment: number | string;
       sentiments: number[];
     }> = {};
-    transcript.forEach((segment: any) => {
+    transcript.forEach((segment: TranscriptSegment) => {
       const speaker = segment.speaker;
       if (!speakers[speaker]) {
         speakers[speaker] = {
           name: speaker,
-          title: segment.title,
+          title: segment.title || '',
           segments: 0,
           totalWords: 0,
           avgSentiment: 0,
@@ -124,7 +130,7 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
       }
       speakers[speaker].segments += 1;
       speakers[speaker].totalWords += segment.word_count || 0;
-      speakers[speaker].sentiments.push(parseFloat(segment.sentiment || 0));
+      speakers[speaker].sentiments.push(Number(segment.sentiment || 0));
     });
 
     // Calculate average sentiment for each speaker
@@ -333,9 +339,9 @@ const EarningsTranscript = ({ ticker, className = '' }) => {
           </div>
 
           <div className="divide-y divide-gray-200">
-            {transcript.map((segment, idx) => {
+            {transcript.map((segment: TranscriptSegment, idx: number) => {
               const isExpanded = expandedSegments.has(idx);
-              const sentimentScore = parseFloat(segment.sentiment || 0);
+              const sentimentScore = typeof segment.sentiment === 'number' ? segment.sentiment : parseFloat(String(segment.sentiment || 0));
               
               return (
                 <div key={idx} className="p-6 hover:bg-gray-50 transition-colors">

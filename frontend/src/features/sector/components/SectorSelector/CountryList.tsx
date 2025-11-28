@@ -1,13 +1,32 @@
 import React from 'react';
 import { industryData } from '../../config/sectorData';
 
+// Type definitions
+interface Country {
+  code: string;
+  name: string;
+}
+
+interface Region {
+  name: string;
+  countries: Country[];
+}
+
+interface CountryListProps {
+  regions: Region[];
+  selectedCountry: string | null;
+  onCountrySelect: (countryCode: string) => void;
+  openRegions: Record<string, boolean>;
+  onRegionToggle: (regionName: string) => void;
+}
+
 /**
  * CountryList component - displays collapsible regions with countries
  */
-const CountryList = ({ regions, selectedCountry, onCountrySelect, openRegions, onRegionToggle }) => {
+const CountryList: React.FC<CountryListProps> = ({ regions, selectedCountry, onCountrySelect, openRegions, onRegionToggle }) => {
   return (
     <div className="space-y-4 p-6">
-      {regions.map((region) => (
+      {regions.map((region: Region) => (
         <div key={region.name} className="region-container">
           <div
             className="region-header flex justify-between items-center cursor-pointer p-2 rounded-md hover:bg-gray-50"
@@ -30,8 +49,8 @@ const CountryList = ({ regions, selectedCountry, onCountrySelect, openRegions, o
           </div>
           {openRegions[region.name] && (
             <div className="country-list-container pl-2 pt-1 space-y-1">
-              {region.countries.map((country) => {
-                const hasSectors = !!industryData[country.code];
+              {region.countries.map((country: Country) => {
+                const hasSectors = !!(industryData as Record<string, unknown>)[country.code];
                 return (
                   <div
                     key={country.code}

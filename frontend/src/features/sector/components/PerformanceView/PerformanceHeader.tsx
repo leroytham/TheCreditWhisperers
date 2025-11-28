@@ -1,10 +1,24 @@
 import React from 'react';
 import { formatCurrency } from '../../../shared/utils/formatters';
 
+// Type definitions
+interface PerformanceHeaderProps {
+  countryName: string;
+  sectorName: string;
+  indexName?: string;
+  ticker?: string;
+  companyName?: string;
+  currentPrice: number | null;
+  priceChange: number;
+  priceChangePercent: number;
+  currency: string;
+  onBack?: () => void;
+}
+
 /**
  * PerformanceHeader component - displays sector header with price and change info
  */
-const PerformanceHeader = ({
+const PerformanceHeader: React.FC<PerformanceHeaderProps> = ({
   countryName,
   sectorName,
   indexName,

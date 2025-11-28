@@ -54,7 +54,7 @@ export const regions = [
  * @param {string} code - Country code (e.g., 'US', 'CHN')
  * @returns {string} Country name or empty string if not found
  */
-export const getCountryName = (code) => {
+export const getCountryName = (code: string): string => {
   for (const region of regions) {
     for (const country of region.countries) {
       if (country.code === code) return country.name;

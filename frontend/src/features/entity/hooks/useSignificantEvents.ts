@@ -5,27 +5,45 @@
  * Optimized with React Query for automatic caching and background refetching
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import apiService from '../../../services/api';
 
-export const useSignificantEvents = (ticker, timeframe = '1D', options = {}) => {
-  const queryClient = useQueryClient();
-  const prefetchInitiated = useRef(new Set());
+interface RawEvent {
+  start_date: string;
+  total_move_pct: number;
+  title?: string;
+  description?: string;
+  source?: string;
+}
 
-  const { data, isLoading, error } = useQuery({
+interface TransformedEvent extends RawEvent {
+  trend: 'Upward' | 'Downward';
+  end_date: string;
+  days: number;
+}
+
+export const useSignificantEvents = (
+  ticker: string | null,
+  timeframe: string = '1D',
+  options: Partial<UseQueryOptions<TransformedEvent[], Error>> = {}
+) => {
+  const queryClient = useQueryClient();
+  const prefetchInitiated = useRef<Set<string>>(new Set());
+
+  const { data, isLoading, error } = useQuery<TransformedEvent[], Error>({
     queryKey: ['significantEvents', ticker, timeframe],
     queryFn: async () => {
-      const response = await apiService.getStockEvents(ticker, timeframe);
-      const data = response.data;
+      const response = await apiService.getStockEvents(ticker!, timeframe);
+      const responseData = response.data;
 
-      const rawEvents = data.events || [];
+      const rawEvents: RawEvent[] = responseData.events || [];
       // Transform events to match UI expectations
-      const transformedEvents = rawEvents.map(event => {
+      const transformedEvents: TransformedEvent[] = rawEvents.map((event: RawEvent) => {
         const movePct = event.total_move_pct * 100;
         return {
           ...event,
-          trend: movePct >= 0 ? 'Upward' : 'Downward',
+          trend: (movePct >= 0 ? 'Upward' : 'Downward') as 'Upward' | 'Downward',
           total_move_pct: movePct,
           end_date: event.start_date,
           days: 1
@@ -53,16 +71,16 @@ export const useSignificantEvents = (ticker, timeframe = '1D', options = {}) => 
       timeframesToPrefetch.forEach(tf => {
         queryClient.prefetchQuery({
           queryKey: ['significantEvents', ticker, tf],
-          queryFn: async () => {
+          queryFn: async (): Promise<TransformedEvent[]> => {
             try {
               const response = await apiService.getStockEvents(ticker, tf);
-              const data = response.data;
-              const rawEvents = data.events || [];
-              return rawEvents.map(event => {
+              const responseData = response.data;
+              const rawEvents: RawEvent[] = responseData.events || [];
+              return rawEvents.map((event: RawEvent): TransformedEvent => {
                 const movePct = event.total_move_pct * 100;
                 return {
                   ...event,
-                  trend: movePct >= 0 ? 'Upward' : 'Downward',
+                  trend: (movePct >= 0 ? 'Upward' : 'Downward') as 'Upward' | 'Downward',
                   total_move_pct: movePct,
                   end_date: event.start_date,
                   days: 1

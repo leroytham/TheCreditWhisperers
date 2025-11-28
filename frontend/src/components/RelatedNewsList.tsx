@@ -1,13 +1,36 @@
 import React from "react";
 import "./RelatedNewsList.css";
 
-const toSentiment = (s) => {
+interface NewsItem {
+  id?: string;
+  title: string;
+  link?: string;
+  publishedAt: string;
+  source: string;
+  summary?: string;
+  tickers?: string[];
+  sentimentScore: number;
+}
+
+interface TickerTagProps {
+  symbol: string;
+}
+
+interface RelatedNewsCardProps {
+  item: NewsItem;
+}
+
+interface RelatedNewsListProps {
+  items?: NewsItem[];
+}
+
+const toSentiment = (s: number): { label: string; tone: string } => {
   if (s >= 0.25) return { label: `Positive (+${s.toFixed(2)})`, tone: "pos" };
   if (s <= -0.25) return { label: `Negative (${s.toFixed(2)})`, tone: "neg" };
   return { label: `Neutral (${s.toFixed(2)})`, tone: "neu" };
 };
 
-const timeAgo = (iso) => {
+const timeAgo = (iso: string): string => {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diff / 60000);
   if (mins < 1) return "just now";
@@ -16,11 +39,11 @@ const timeAgo = (iso) => {
   return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
 };
 
-const TickerTag = ({ symbol }) => (
+const TickerTag: React.FC<TickerTagProps> = ({ symbol }) => (
   <span className="ticker-tag">{symbol}</span>
 );
 
-const RelatedNewsCard = ({ item }) => {
+const RelatedNewsCard: React.FC<RelatedNewsCardProps> = ({ item }) => {
   const { label, tone } = toSentiment(item.sentimentScore);
   return (
     <article className="news-card">
@@ -43,10 +66,10 @@ const RelatedNewsCard = ({ item }) => {
       </p>
       {item.summary && <p className="news-summary">{item.summary}</p>}
 
-      {item.tickers?.length > 0 && (
+      {item.tickers && item.tickers.length > 0 && (
         <div className="news-tickers">
           <span className="tickers-label">Related tickers:</span>
-          {item.tickers.map((t) => (
+          {item.tickers.map((t: string) => (
             <TickerTag key={t} symbol={t} />
           ))}
         </div>
@@ -59,13 +82,15 @@ const RelatedNewsCard = ({ item }) => {
   );
 };
 
-export default function RelatedNewsList({ items = [] }) {
+const RelatedNewsList: React.FC<RelatedNewsListProps> = ({ items = [] }) => {
   if (!items.length) return <p className="no-news">No related news.</p>;
   return (
     <div className="news-list">
-      {items.map((it) => (
+      {items.map((it: NewsItem) => (
         <RelatedNewsCard key={it.id ?? it.title} item={it} />
       ))}
     </div>
   );
-}
+};
+
+export default RelatedNewsList;

@@ -1,17 +1,64 @@
-// frontend/src/features/shared/components/NewsDetailModal.jsx
+// frontend/src/features/shared/components/NewsDetailModal.tsx
 
 import React, { useEffect } from 'react';
 import { X, ExternalLink, TrendingUp, BarChart3 } from 'lucide-react';
+
+interface TickerSentimentItem {
+  ticker: string;
+  ticker_sentiment_score?: number | string;
+  ticker_sentiment_label?: string;
+  relevance_score?: number | string;
+}
+
+interface TopicItem {
+  topic: string;
+  relevance_score?: number | string;
+}
+
+// Support both string topics and TopicItem objects for flexibility
+type TopicType = string | TopicItem;
+
+interface Article {
+  title?: string;
+  source?: string;
+  time_published?: string;
+  url?: string;
+  link?: string;
+  banner_image?: string;
+  image?: string;
+  summary?: string;
+  overall_sentiment_score?: number;
+  overall_sentiment_label?: string;
+  relevance_score?: number;
+  category_within_source?: string;
+  source_domain?: string;
+  authors?: string[];
+  ticker_sentiment?: TickerSentimentItem[];
+  topics?: TopicType[];
+  // Additional fields from NewsArticle for compatibility
+  ticker?: string;
+  provider?: string;
+  publish_date?: string;
+  sentiment_label?: string;
+  sentiment_score?: number;
+}
+
+interface NewsDetailModalProps {
+  article: Article | null;
+  isOpen: boolean;
+  onClose: () => void;
+  mode?: 'modal' | 'slideover';
+}
 
 /**
  * Modal component to display full news article details
  * Supports both center modal and slide-over modes
  */
-const NewsDetailModal = ({
+const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
   article,
   isOpen,
   onClose,
-  mode = 'modal', // 'modal' or 'slideover'
+  mode = 'modal',
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -26,14 +73,14 @@ const NewsDetailModal = ({
 
   if (!isOpen || !article) return null;
 
-  const formatPublishTime = (timeStr) => {
+  const formatPublishTime = (timeStr: string | undefined): string => {
     if (!timeStr) return 'Unknown';
     const year = timeStr.substring(0, 4);
     const month = timeStr.substring(4, 6);
     const day = timeStr.substring(6, 8);
     const hour = timeStr.substring(9, 11);
     const minute = timeStr.substring(11, 13);
-    
+
     const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`);
     return date.toLocaleString('en-US', {
       month: 'short',
@@ -45,7 +92,8 @@ const NewsDetailModal = ({
     });
   };
 
-  const getSentimentColor = (score) => {
+  const getSentimentColor = (score: number | undefined): string => {
+    if (score === undefined) return 'text-gray-600 bg-gray-50 border-gray-200';
     if (score >= 0.35) return 'text-green-600 bg-green-50 border-green-200';
     if (score >= 0.15) return 'text-lime-600 bg-lime-50 border-lime-200';
     if (score > -0.15) return 'text-gray-600 bg-gray-50 border-gray-200';
@@ -53,13 +101,14 @@ const NewsDetailModal = ({
     return 'text-red-600 bg-red-50 border-red-200';
   };
 
-  const getRelevanceColor = (score) => {
+  const getRelevanceColor = (score: number | undefined): string => {
+    if (score === undefined) return 'text-blue-700 bg-blue-50 border-blue-200';
     if (score >= 0.7) return 'text-purple-700 bg-purple-50 border-purple-200';
     if (score >= 0.4) return 'text-indigo-700 bg-indigo-50 border-indigo-200';
     return 'text-blue-700 bg-blue-50 border-blue-200';
   };
 
-  const handleBackdropClick = (e) => {
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
@@ -152,7 +201,7 @@ const NewsDetailModal = ({
               {article.overall_sentiment_label && (
                 <div className="bg-white p-3 rounded-lg border border-gray-200">
                   <div className="text-xs text-gray-600 mb-1">Overall Sentiment</div>
-                  <div className={`text-sm font-bold ${article.overall_sentiment_score >= 0.15 ? 'text-green-600' : article.overall_sentiment_score <= -0.15 ? 'text-red-600' : 'text-gray-600'}`}>
+                  <div className={`text-sm font-bold ${(article.overall_sentiment_score ?? 0) >= 0.15 ? 'text-green-600' : (article.overall_sentiment_score ?? 0) <= -0.15 ? 'text-red-600' : 'text-gray-600'}`}>
                     {article.overall_sentiment_label}
                   </div>
                 </div>
@@ -161,7 +210,7 @@ const NewsDetailModal = ({
                 <div className="bg-white p-3 rounded-lg border border-gray-200">
                   <div className="text-xs text-gray-600 mb-1">Main Topic</div>
                   <div className="text-sm font-bold text-gray-900">
-                    {article.topics[0].topic}
+                    {typeof article.topics[0] === 'string' ? article.topics[0] : article.topics[0].topic}
                   </div>
                 </div>
               )}
@@ -219,15 +268,18 @@ const NewsDetailModal = ({
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {article.topics.map((topic, idx) => {
-                const relevance = parseFloat(topic.relevance_score);
-                const hasValidRelevance = !isNaN(relevance) && relevance !== null;
+                const isString = typeof topic === 'string';
+                const topicName = isString ? topic : topic.topic;
+                const relevanceRaw = isString ? undefined : topic.relevance_score;
+                const relevance = typeof relevanceRaw === 'number' ? relevanceRaw : parseFloat(String(relevanceRaw ?? ''));
+                const hasValidRelevance = !isString && !isNaN(relevance);
 
                 return (
                   <div
                     key={idx}
                     className="flex justify-between items-center p-2.5 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors"
                   >
-                    <span className="text-sm font-medium text-gray-800">{topic.topic}</span>
+                    <span className="text-sm font-medium text-gray-800">{topicName}</span>
                     {hasValidRelevance ? (
                       <span className={`text-sm font-bold px-2.5 py-1 rounded-md border ${getRelevanceColor(relevance)}`}>
                         {(relevance * 100).toFixed(1)}%
@@ -261,10 +313,12 @@ const NewsDetailModal = ({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {article.ticker_sentiment.map((ts, idx) => {
-                    const relevance = parseFloat(ts.relevance_score);
-                    const sentiment = parseFloat(ts.ticker_sentiment_score);
-                    const hasValidRelevance = !isNaN(relevance) && relevance !== null;
-                    const hasValidSentiment = !isNaN(sentiment) && sentiment !== null;
+                    const relevanceRaw = ts.relevance_score;
+                    const sentimentRaw = ts.ticker_sentiment_score;
+                    const relevance = typeof relevanceRaw === 'number' ? relevanceRaw : parseFloat(String(relevanceRaw ?? ''));
+                    const sentiment = typeof sentimentRaw === 'number' ? sentimentRaw : parseFloat(String(sentimentRaw ?? ''));
+                    const hasValidRelevance = !isNaN(relevance);
+                    const hasValidSentiment = !isNaN(sentiment);
 
                     return (
                       <tr key={idx} className="hover:bg-gray-50 transition-colors">

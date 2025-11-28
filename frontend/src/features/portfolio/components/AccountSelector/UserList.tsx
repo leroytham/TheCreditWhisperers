@@ -1,48 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import apiService from '../../../../services/api';
 
+// Type definitions
+interface User {
+  username: string;
+  displayName?: string;
+  accountCount?: number;
+  type?: string;
+}
+
+interface UserListProps {
+  selectedUser: User | null;
+  onUserSelect: (user: User) => void;
+}
+
+type GroupedUsers = Record<string, User[]>;
+
 /**
  * UserList Component
  *
  * Displays a collapsible list of users grouped by type (Individual/Institutional).
  * Fetches users from API with fallback to mock data for development.
- *
- * @param {Object} props - Component props
- * @param {Object} props.selectedUser - Currently selected user object
- * @param {string} props.selectedUser.username - Username of selected user
- * @param {string} [props.selectedUser.displayName] - Display name of selected user
- * @param {Function} props.onUserSelect - Callback when a user is selected
- * @returns {React.ReactElement} Rendered user list component
- *
- * @example
- * <UserList
- *   selectedUser={currentUser}
- *   onUserSelect={(user) => handleUserChange(user)}
- * />
  */
-const UserList = ({ selectedUser, onUserSelect }: { selectedUser: any; onUserSelect: (user: any) => void }) => {
-  const [users, setUsers] = useState<Record<string, any[]>>({});
+const UserList: React.FC<UserListProps> = ({ selectedUser, onUserSelect }) => {
+  const [users, setUsers] = useState<GroupedUsers>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       const response = await apiService.getUsers();
-      const data = response.data;
+      const data = response.data as { users?: User[] };
 
       // Group users by type (individual vs institutional)
       const grouped = groupUsersByType(data.users || []);
       setUsers(grouped);
 
       // Expand all groups by default
-      const defaultExpanded = {};
+      const defaultExpanded: Record<string, boolean> = {};
       Object.keys(grouped).forEach(key => {
         defaultExpanded[key] = true;
       });
@@ -59,13 +61,13 @@ const UserList = ({ selectedUser, onUserSelect }: { selectedUser: any; onUserSel
     }
   };
 
-  const groupUsersByType = (usersList) => {
-    const grouped = {
+  const groupUsersByType = (usersList: User[]): GroupedUsers => {
+    const grouped: GroupedUsers = {
       'Individual Clients': [],
       'Institutional Clients': []
     };
 
-    usersList.forEach(user => {
+    usersList.forEach((user: User) => {
       if (user.type === 'institutional' || user.username?.includes('fund')) {
         grouped['Institutional Clients'].push(user);
       } else {
@@ -83,7 +85,7 @@ const UserList = ({ selectedUser, onUserSelect }: { selectedUser: any; onUserSel
     return grouped;
   };
 
-  const getMockUsers = () => {
+  const getMockUsers = (): GroupedUsers => {
     return {
       'Individual Clients': [
         { username: 'john_doe', displayName: 'John Doe', accountCount: 2 },
@@ -99,7 +101,7 @@ const UserList = ({ selectedUser, onUserSelect }: { selectedUser: any; onUserSel
     };
   };
 
-  const toggleGroup = (groupName) => {
+  const toggleGroup = (groupName: string): void => {
     setExpandedGroups(prev => ({
       ...prev,
       [groupName]: !prev[groupName]

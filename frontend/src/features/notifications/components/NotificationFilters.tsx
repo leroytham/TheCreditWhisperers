@@ -1,13 +1,38 @@
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 
+interface MarketSignalsFilters {
+  enabled: boolean;
+  criticalThreats: boolean;
+  emergingOpportunities: boolean;
+  marketIntelligence: boolean;
+}
+
+interface OperationalAlertsFilters {
+  enabled: boolean;
+  accountServicing: boolean;
+  tradeSettlement: boolean;
+  complianceReporting: boolean;
+}
+
+interface NotificationFiltersState {
+  selectAll: boolean;
+  marketSignals: MarketSignalsFilters;
+  operationalAlerts: OperationalAlertsFilters;
+}
+
+interface NotificationFiltersProps {
+  filters: NotificationFiltersState;
+  setFilters: (filters: NotificationFiltersState) => void;
+}
+
 /**
  * NotificationFilters Component
  *
  * Sidebar filter component for filtering notifications by category and subcategory
  */
-const NotificationFilters = ({ filters, setFilters }) => {
-  const handleSelectAll = (e) => {
+const NotificationFilters: React.FC<NotificationFiltersProps> = ({ filters, setFilters }) => {
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
     setFilters({
       ...filters,
@@ -27,7 +52,7 @@ const NotificationFilters = ({ filters, setFilters }) => {
     });
   };
 
-  const handleMarketSignalsToggle = (e) => {
+  const handleMarketSignalsToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
     setFilters({
       ...filters,
@@ -41,7 +66,7 @@ const NotificationFilters = ({ filters, setFilters }) => {
     });
   };
 
-  const handleOperationalAlertsToggle = (e) => {
+  const handleOperationalAlertsToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
     setFilters({
       ...filters,

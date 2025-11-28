@@ -1,17 +1,52 @@
 /**
- * sentimentAnalysis.js
+ * sentimentAnalysis.ts
  *
  * Utility functions for sentiment analysis calculations
  * Used by sentiment components for metrics and insights
  */
 
+// Interfaces for sentiment analysis
+export interface SentimentDataPoint {
+  sentiment?: number;
+  y?: number;
+  [key: string]: unknown;
+}
+
+export interface MomentumResult {
+  value: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface DistributionResult {
+  bearish: number;
+  somewhatBearish: number;
+  neutral: number;
+  somewhatBullish: number;
+  bullish: number;
+}
+
+export interface VolatilityResult {
+  score: number;
+  level: 'Low' | 'Medium' | 'High';
+}
+
+export interface OverallSentimentResult {
+  label: string;
+  value: number;
+  color: string;
+  confidence: number;
+}
+
+export interface SentimentInsights {
+  summary: string;
+  keyPoints: string[];
+  trend: string;
+}
+
 /**
  * Calculate momentum (percentage change) over a given period
- * @param {Array<Object>} data - Array of sentiment data points with scores
- * @param {number} days - Number of days to calculate momentum over
- * @returns {Object} { value: percentage, trend: 'up'|'down'|'stable' }
  */
-export const calculateMomentum = (data, days = 7) => {
+export const calculateMomentum = (data: SentimentDataPoint[], days: number = 7): MomentumResult => {
   if (!data || data.length === 0) {
     return { value: 0, trend: 'stable' };
   }
@@ -38,10 +73,8 @@ export const calculateMomentum = (data, days = 7) => {
 
 /**
  * Calculate sentiment distribution (5 categories based on thresholds)
- * @param {Array<Object>} data - Array of sentiment data points
- * @returns {Object} { bearish, somewhatBearish, neutral, somewhatBullish, bullish (all 0-100) }
  */
-export const calculateDistribution = (data) => {
+export const calculateDistribution = (data: SentimentDataPoint[]): DistributionResult => {
   if (!data || data.length === 0) {
     return { 
       bearish: 20, 
@@ -87,10 +120,8 @@ export const calculateDistribution = (data) => {
 
 /**
  * Calculate volatility score (0-10) based on sentiment variation
- * @param {Array<Object>} data - Array of sentiment data points
- * @returns {Object} { score: 0-10, level: 'Low'|'Medium'|'High' }
  */
-export const calculateVolatility = (data) => {
+export const calculateVolatility = (data: SentimentDataPoint[]): VolatilityResult => {
   if (!data || data.length < 2) {
     return { score: 0, level: 'Low' };
   }
@@ -113,10 +144,8 @@ export const calculateVolatility = (data) => {
 
 /**
  * Calculate overall sentiment with confidence
- * @param {Array<Object>} data - Array of sentiment data points
- * @returns {Object} { label, value, color, confidence }
  */
-export const calculateOverallSentiment = (data) => {
+export const calculateOverallSentiment = (data: SentimentDataPoint[]): OverallSentimentResult => {
   if (!data || data.length === 0) {
     return {
       label: 'Neutral',
@@ -163,14 +192,14 @@ export const calculateOverallSentiment = (data) => {
 
 /**
  * Generate AI-like insights from sentiment data
- * @param {Object} overall - Overall sentiment object
- * @param {Object} momentum - Momentum object
- * @param {Object} distribution - Distribution object
- * @param {Object} volatility - Volatility object
- * @returns {Object} { summary, keyPoints, trend }
  */
-export const generateSentimentInsights = (overall, momentum, distribution, volatility) => {
-  const insights = {
+export const generateSentimentInsights = (
+  overall: OverallSentimentResult,
+  momentum: MomentumResult,
+  distribution: DistributionResult,
+  volatility: VolatilityResult
+): SentimentInsights => {
+  const insights: SentimentInsights = {
     summary: '',
     keyPoints: [],
     trend: overall.label
@@ -194,7 +223,7 @@ export const generateSentimentInsights = (overall, momentum, distribution, volat
   }
 
   // Generate key points
-  const points = [];
+  const points: string[] = [];
 
   // Point 1: Distribution insight
   if (distribution.bullish > 50) {
@@ -236,10 +265,8 @@ export const generateSentimentInsights = (overall, momentum, distribution, volat
 
 /**
  * Format sentiment score for display
- * @param {number} score - Sentiment score (-1 to 1)
- * @returns {string} Formatted sentiment label
  */
-export const formatSentimentLabel = (score) => {
+export const formatSentimentLabel = (score: number): string => {
   if (score >= 0.35) return 'Bullish';
   if (score >= 0.15) return 'Somewhat Bullish';
   if (score >= -0.15) return 'Neutral';
@@ -249,10 +276,8 @@ export const formatSentimentLabel = (score) => {
 
 /**
  * Get sentiment color for a given score
- * @param {number} score - Sentiment score (-1 to 1)
- * @returns {string} Color key ('green', 'yellow', 'gray', 'red', 'blue')
  */
-export const getSentimentColorByScore = (score) => {
+export const getSentimentColorByScore = (score: number): string => {
   if (score >= 0.35) return 'green';
   if (score >= 0.15) return 'yellow';
   if (score >= -0.15) return 'gray';
@@ -262,10 +287,8 @@ export const getSentimentColorByScore = (score) => {
 
 /**
  * Calculate trend line for chart (linear regression)
- * @param {Array<Object>} data - Array of data points with 'sentiment' or 'y' value
- * @returns {Array<number>} Array of trend line points
  */
-export const calculateTrendLine = (data) => {
+export const calculateTrendLine = (data: SentimentDataPoint[]): number[] => {
   if (!data || data.length < 2) return [];
 
   const values = data.map((d, i) => ({

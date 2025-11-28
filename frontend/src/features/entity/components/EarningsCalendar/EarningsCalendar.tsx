@@ -1,7 +1,8 @@
-// frontend/src/features/entity/components/EarningsCalendar/EarningsCalendar.jsx
+// frontend/src/features/entity/components/EarningsCalendar/EarningsCalendar.tsx
 
 import React from 'react';
 import { useEarningsCalendar } from '../../hooks/useEarningsCalendar';
+import type { EarningsEvent } from '../../../../types';
 import {
   Calendar,
   TrendingUp,
@@ -11,6 +12,12 @@ import {
   Loader2,
   ChevronRight
 } from 'lucide-react';
+
+interface EarningsCalendarProps {
+  ticker: string;
+  className?: string;
+  maxEvents?: number;
+}
 
 /**
  * EarningsCalendar Component
@@ -25,7 +32,7 @@ import {
  * - Empty state handling
  * - Loading skeleton
  */
-const EarningsCalendar = ({ ticker, className = '', maxEvents = 10 }) => {
+const EarningsCalendar: React.FC<EarningsCalendarProps> = ({ ticker, className = '', maxEvents = 10 }) => {
   const {
     earningsEvents,
     groupedEvents,
@@ -155,14 +162,14 @@ const EarningsCalendar = ({ ticker, className = '', maxEvents = 10 }) => {
 
       {/* Events List */}
       <div className="divide-y divide-gray-200">
-        {upcomingEvents.map((event, idx) => {
+        {upcomingEvents.map((event: EarningsEvent, idx: number) => {
           const isImminent = event.days_until <= 7;
           const statusColor = getStatusColor(event.days_until);
           const statusLabel = getStatusLabel(event.days_until);
 
           return (
             <div
-              key={idx}
+              key={`${event.earnings_date}-${idx}`}
               className={`p-4 hover:bg-gray-50 transition-colors ${
                 isImminent ? 'bg-red-50/30' : ''
               }`}
@@ -218,9 +225,9 @@ const EarningsCalendar = ({ ticker, className = '', maxEvents = 10 }) => {
                       </span>
                       {event.surprise && (
                         <span className={`text-xs font-medium ${
-                          parseFloat(event.surprise) >= 0 ? 'text-green-600' : 'text-red-600'
+                          Number(event.surprise) >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          ({event.surprise > 0 ? '+' : ''}{event.surprise})
+                          ({Number(event.surprise) > 0 ? '+' : ''}{event.surprise})
                         </span>
                       )}
                     </div>

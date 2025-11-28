@@ -1,23 +1,38 @@
 import React, { useState } from 'react';
 import { Archive, Trash2 } from 'lucide-react';
 
+// Type definitions
+interface NotificationItem {
+  id: string;
+  title?: string;
+  message?: string;
+  preview?: string;
+  subcategory?: string;
+  isRead?: boolean;
+  is_global?: boolean;
+  portfolio_name?: string;
+  affected_tickers?: string[];
+}
+
+interface NotificationListProps {
+  notifications: NotificationItem[];
+  onNotificationClick?: (notification: NotificationItem) => void;
+  onArchive?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  showArchive?: boolean;
+}
+
 /**
  * NotificationList Component
  *
  * Displays categorized list of notifications
  */
-const NotificationList = ({
+const NotificationList: React.FC<NotificationListProps> = ({
   notifications,
   onNotificationClick,
   onArchive,
   onDelete,
   showArchive = true,
-}: {
-  notifications: any[];
-  onNotificationClick?: (notification: any) => void;
-  onArchive?: (id: string) => void;
-  onDelete?: (id: string) => void;
-  showArchive?: boolean;
 }) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -25,15 +40,16 @@ const NotificationList = ({
   const filteredNotifications = notifications;
 
   // Group notifications by subcategory
-  const groupedNotifications = filteredNotifications.reduce((acc: Record<string, any[]>, notif) => {
-    if (!acc[notif.subcategory]) {
-      acc[notif.subcategory] = [];
+  const groupedNotifications = filteredNotifications.reduce<Record<string, NotificationItem[]>>((acc, notif) => {
+    const key = notif.subcategory || 'Other';
+    if (!acc[key]) {
+      acc[key] = [];
     }
-    acc[notif.subcategory].push(notif);
+    acc[key].push(notif);
     return acc;
   }, {});
 
-  const subcategoryTitles = {
+  const subcategoryTitles: Record<string, string> = {
     'Critical Threats': 'Critical Threats & Account Issues',
     'Emerging Opportunities': 'Emerging Opportunities',
     'Market Intelligence': 'Market Intelligence',
@@ -43,7 +59,7 @@ const NotificationList = ({
   return (
     <div className="bg-white p-4 rounded-lg shadow">
       <div className="space-y-6">
-        {Object.entries(groupedNotifications).map(([subcategory, notifs]: [string, any[]]) => (
+        {Object.entries(groupedNotifications).map(([subcategory, notifs]) => (
           <section key={subcategory}>
             <h3 className="text-lg font-semibold text-gray-900 pb-2 border-b border-gray-200">
               {subcategoryTitles[subcategory] || subcategory} ({notifs.length})
@@ -58,7 +74,7 @@ const NotificationList = ({
                     !notif.isRead ? 'bg-blue-100 border border-blue-300' : ''
                   }`}
                 >
-                  <div onClick={() => onNotificationClick(notif)} className="flex items-start flex-1">
+                  <div onClick={() => onNotificationClick?.(notif)} className="flex items-start flex-1">
                     <input
                       type="checkbox"
                       checked={!notif.isRead}
@@ -88,7 +104,7 @@ const NotificationList = ({
                       {/* Affected Tickers */}
                       {notif.affected_tickers && notif.affected_tickers.length > 0 && (
                         <div className="flex items-center gap-1 mt-2 flex-wrap">
-                          {notif.affected_tickers.slice(0, 5).map((ticker) => (
+                          {notif.affected_tickers.slice(0, 5).map((ticker: string) => (
                             <span
                               key={ticker}
                               className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700 border border-gray-300"

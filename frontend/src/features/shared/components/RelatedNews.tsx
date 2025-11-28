@@ -47,7 +47,7 @@ const RelatedNews = ({
 }: RelatedNewsProps) => {
   const [filter, setFilter] = useState('');
   const [sortOption, setSortOption] = useState('date-desc');
-  const [layout, setLayout] = useState('grid');
+  const [layout, setLayout] = useState<'list' | 'grid'>('grid');
   
   const OVERVIEW_ARTICLE_LIMIT = 3;
 
@@ -98,13 +98,13 @@ const RelatedNews = ({
     // Overview is always a list, news page can be grid or list
     const currentLayout = isOverview ? 'list' : layout;
 
-    const layoutClasses = {
+    const layoutClasses: Record<'list' | 'grid', string> = {
       list: 'space-y-3',
       grid: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4',
     };
 
     return (
-      <div className={layoutClasses[currentLayout]}>
+      <div className={layoutClasses[currentLayout as 'list' | 'grid']}>
         {newsToDisplay.map((article, index) => (
           // Use unique combination of properties to avoid duplicate keys
           <NewsCard 

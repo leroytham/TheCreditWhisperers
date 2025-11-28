@@ -132,39 +132,46 @@ describe('PortfolioPerformanceDetail', () => {
     accountNumber: 'ACC-123',
   };
 
-  const mockPerformanceResponse = {
-    data: {
-      historical_data: {
-        data_points: [
-          { date: '2024-01-01', portfolio_value: 100000, capital_flow: 0 },
-          { date: '2024-01-15', portfolio_value: 102000, capital_flow: 0 },
-          { date: '2024-01-31', portfolio_value: 105000, capital_flow: 0 },
-        ],
-        missing_price_symbols: [],
-      },
-      benchmark_data: {
-        data_points: [
-          { date: '2024-01-01', value: 4500, close: 0 },
-          { date: '2024-01-15', value: 4550, close: 1.1 },
-          { date: '2024-01-31', value: 4600, close: 2.2 },
-        ],
-      },
-      events: [], // Simplified - no events in default mock to avoid date processing issues
-      performance: [
-        {
-          period: 'MTD',
-          holdings_count: 15,
-          top_gainers: [
-            { ticker: 'AAPL', contribution: 2.5 },
-            { ticker: 'MSFT', contribution: 1.8 },
-          ],
-          top_losers: [
-            { ticker: 'TSLA', contribution: -1.2 },
-          ],
-        },
+  // Helper to create mock AxiosResponse
+  const createMockResponse = <T,>(data: T) => ({
+    data,
+    status: 200,
+    statusText: 'OK',
+    headers: {},
+    config: { headers: {} } as import('axios').InternalAxiosRequestConfig,
+  });
+
+  const mockPerformanceResponse = createMockResponse({
+    historical_data: {
+      data_points: [
+        { date: '2024-01-01', portfolio_value: 100000, capital_flow: 0 },
+        { date: '2024-01-15', portfolio_value: 102000, capital_flow: 0 },
+        { date: '2024-01-31', portfolio_value: 105000, capital_flow: 0 },
+      ],
+      missing_price_symbols: [],
+    },
+    benchmark_data: {
+      data_points: [
+        { date: '2024-01-01', value: 4500, close: 0 },
+        { date: '2024-01-15', value: 4550, close: 1.1 },
+        { date: '2024-01-31', value: 4600, close: 2.2 },
       ],
     },
-  };
+    events: [], // Simplified - no events in default mock to avoid date processing issues
+    performance: [
+      {
+        period: 'MTD',
+        holdings_count: 15,
+        top_gainers: [
+          { ticker: 'AAPL', contribution: 2.5 },
+          { ticker: 'MSFT', contribution: 1.8 },
+        ],
+        top_losers: [
+          { ticker: 'TSLA', contribution: -1.2 },
+        ],
+      },
+    ],
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -471,14 +478,12 @@ describe('PortfolioPerformanceDetail', () => {
 
   describe('Edge Cases', () => {
     it('shows empty state message for empty historical data', async () => {
-      mockApiService.getPortfolioPerformance.mockResolvedValue({
-        data: {
-          historical_data: { data_points: [] },
-          benchmark_data: { data_points: [] },
-          events: [],
-          performance: [],
-        },
-      });
+      mockApiService.getPortfolioPerformance.mockResolvedValue(createMockResponse({
+        historical_data: { data_points: [] },
+        benchmark_data: { data_points: [] },
+        events: [],
+        performance: [],
+      }));
 
       render(<PortfolioPerformanceDetail />);
 
@@ -488,18 +493,16 @@ describe('PortfolioPerformanceDetail', () => {
     });
 
     it('handles missing benchmark data gracefully', async () => {
-      mockApiService.getPortfolioPerformance.mockResolvedValue({
-        data: {
-          historical_data: {
-            data_points: [
-              { date: '2024-01-01', portfolio_value: 100000 },
-            ],
-          },
-          benchmark_data: {},
-          events: [],
-          performance: [],
+      mockApiService.getPortfolioPerformance.mockResolvedValue(createMockResponse({
+        historical_data: {
+          data_points: [
+            { date: '2024-01-01', portfolio_value: 100000 },
+          ],
         },
-      });
+        benchmark_data: {},
+        events: [],
+        performance: [],
+      }));
 
       render(<PortfolioPerformanceDetail />);
 
@@ -510,18 +513,16 @@ describe('PortfolioPerformanceDetail', () => {
     });
 
     it('handles undefined events array', async () => {
-      mockApiService.getPortfolioPerformance.mockResolvedValue({
-        data: {
-          historical_data: {
-            data_points: [
-              { date: '2024-01-01', portfolio_value: 100000 },
-            ],
-          },
-          benchmark_data: { data_points: [] },
-          events: undefined,
-          performance: [],
+      mockApiService.getPortfolioPerformance.mockResolvedValue(createMockResponse({
+        historical_data: {
+          data_points: [
+            { date: '2024-01-01', portfolio_value: 100000 },
+          ],
         },
-      });
+        benchmark_data: { data_points: [] },
+        events: undefined,
+        performance: [],
+      }));
 
       render(<PortfolioPerformanceDetail />);
 

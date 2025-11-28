@@ -1,16 +1,21 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 import { useTickerSearch } from '../../hooks/useTickerSearch';
+import type { SearchResult } from '../../../../types';
+
+interface EntitySearchProps {
+  onTickerSelect: (symbol: string) => void;
+}
 
 /**
  * EntitySearch Component
  *
  * Search input with autocomplete for ticker symbols
  */
-const EntitySearch = ({ onTickerSelect }) => {
+const EntitySearch: React.FC<EntitySearchProps> = ({ onTickerSelect }) => {
   const { searchTerm, setSearchTerm, suggestions, loading, clearSearch } = useTickerSearch();
 
-  const handleTickerSelect = (symbol) => {
+  const handleTickerSelect = (symbol: string): void => {
     onTickerSelect(symbol.toUpperCase().trim());
     clearSearch();
   };
@@ -38,10 +43,10 @@ const EntitySearch = ({ onTickerSelect }) => {
               Array.from(
                 new Map(
                   suggestions
-                    .filter(q => q.quoteType === 'EQUITY')
-                    .map(q => [q.symbol, q])
+                    .filter((q: SearchResult) => q.quoteType === 'EQUITY')
+                    .map((q: SearchResult): [string, SearchResult] => [q.symbol, q])
                 ).values()
-              ).map((q, idx) => (
+              ).map((q: SearchResult, idx: number) => (
                 <div
                   key={q.symbol + '-' + idx}
                   onClick={() => handleTickerSelect(q.symbol)}

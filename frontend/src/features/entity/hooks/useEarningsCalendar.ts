@@ -6,12 +6,43 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../../../services/api';
+import type { EarningsEvent } from '../../../types';
 
-export const useEarningsCalendar = (ticker, horizon = '12month') => {
-  const [earningsEvents, setEarningsEvents] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [metadata, setMetadata] = useState(null);
+interface EarningsMetadata {
+  ticker: string;
+  totalEvents: number;
+  fetchedAt?: string;
+}
+
+interface GroupedEvents {
+  upcoming: EarningsEvent[];
+  thisMonth: EarningsEvent[];
+  nextMonth: EarningsEvent[];
+  later: EarningsEvent[];
+  past: EarningsEvent[];
+}
+
+interface UseEarningsCalendarReturn {
+  earningsEvents: EarningsEvent[];
+  groupedEvents: GroupedEvents;
+  loading: boolean;
+  error: string | null;
+  metadata: EarningsMetadata | null;
+  formatTimeUntil: (daysUntil: number | string) => string;
+  formatDate: (dateString: string) => string;
+  getStatusColor: (daysUntil: number | string) => string;
+  getStatusLabel: (daysUntil: number | string) => string;
+  refetch: () => Promise<void>;
+}
+
+export const useEarningsCalendar = (
+  ticker: string,
+  horizon: string = '12month'
+): UseEarningsCalendarReturn => {
+  const [earningsEvents, setEarningsEvents] = useState<EarningsEvent[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<EarningsMetadata | null>(null);
 
   // Fetch earnings calendar events
   const fetchEarningsCalendar = useCallback(async () => {
@@ -34,9 +65,9 @@ export const useEarningsCalendar = (ticker, horizon = '12month') => {
         totalEvents: data.total_events,
         fetchedAt: data.fetched_at
       });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error fetching earnings calendar:', err);
-      setError(err.message || 'Network error fetching earnings calendar');
+      setError(err instanceof Error ? err.message : 'Network error fetching earnings calendar');
       setEarningsEvents([]);
       setMetadata(null);
     } finally {
@@ -59,8 +90,8 @@ export const useEarningsCalendar = (ticker, horizon = '12month') => {
   };
 
   // Utility function to format time until earnings
-  const formatTimeUntil = (daysUntil) => {
-    const days = parseInt(daysUntil);
+  const formatTimeUntil = (daysUntil: number | string): string => {
+    const days = typeof daysUntil === 'string' ? parseInt(daysUntil, 10) : daysUntil;
 
     if (days < 0) {
       const absDays = Math.abs(days);
@@ -90,7 +121,7 @@ export const useEarningsCalendar = (ticker, horizon = '12month') => {
   };
 
   // Utility function to format date
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
@@ -100,8 +131,8 @@ export const useEarningsCalendar = (ticker, horizon = '12month') => {
   };
 
   // Utility function to get status badge color
-  const getStatusColor = (daysUntil) => {
-    const days = parseInt(daysUntil);
+  const getStatusColor = (daysUntil: number | string): string => {
+    const days = typeof daysUntil === 'string' ? parseInt(daysUntil, 10) : daysUntil;
 
     if (days < 0) return 'bg-gray-100 text-gray-700 border-gray-300';
     if (days <= 7) return 'bg-red-100 text-red-700 border-red-300';
@@ -110,8 +141,8 @@ export const useEarningsCalendar = (ticker, horizon = '12month') => {
   };
 
   // Utility function to get status label
-  const getStatusLabel = (daysUntil) => {
-    const days = parseInt(daysUntil);
+  const getStatusLabel = (daysUntil: number | string): string => {
+    const days = typeof daysUntil === 'string' ? parseInt(daysUntil, 10) : daysUntil;
 
     if (days < 0) return 'Past';
     if (days === 0) return 'Today';

@@ -14,6 +14,14 @@ jest.mock('../../store/useAppStore');
 
 const mockUseAppStore = useAppStore as jest.MockedFunction<typeof useAppStore>;
 
+// Type for mock store state
+interface MockState {
+  user: User | string | null;
+  isAuthenticated: boolean;
+  setUser: jest.Mock;
+  logout: jest.Mock;
+}
+
 describe('useUser', () => {
   // Default mock values
   const mockSetUser = jest.fn();
@@ -28,16 +36,16 @@ describe('useUser', () => {
     user?: User | string | null;
     isAuthenticated?: boolean;
   } = {}) => {
-    const state = {
+    const state: MockState = {
       user: overrides.user ?? null,
       isAuthenticated: overrides.isAuthenticated ?? false,
       setUser: mockSetUser,
       logout: mockLogout,
     };
 
-    mockUseAppStore.mockImplementation((selector: (state: typeof state) => unknown) => {
+    mockUseAppStore.mockImplementation(((selector: (state: MockState) => unknown) => {
       return selector(state);
-    });
+    }) as typeof useAppStore);
   };
 
   describe('User State', () => {

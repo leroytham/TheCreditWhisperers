@@ -1,13 +1,18 @@
 import React from 'react';
-import PropTypes from 'prop-types';
 import { X } from 'lucide-react';
+
+// Type definitions
+interface AccountDetailsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
 
 /**
  * AccountDetailsModal Component
  *
  * Displays detailed account information in a modal
  */
-const AccountDetailsModal = ({ isOpen, onClose }) => {
+const AccountDetailsModal: React.FC<AccountDetailsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const accountDetails = {
@@ -124,11 +129,6 @@ const AccountDetailsModal = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
-};
-
-AccountDetailsModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
 };
 
 export default AccountDetailsModal;

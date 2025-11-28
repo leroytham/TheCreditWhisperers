@@ -16,7 +16,7 @@ export default function LoginCard() {
   const setUser = useAppStore((state) => state.setUser); 
 
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     try {

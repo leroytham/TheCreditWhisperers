@@ -46,7 +46,7 @@ export const usePriceAlerts = (options: { pollingInterval?: number; enabled?: bo
       const prices = await Promise.all(pricePromises);
 
       // Convert to object for easy lookup
-      return prices.reduce((acc, { ticker, price }) => {
+      return prices.reduce<Record<string, number>>((acc, { ticker, price }) => {
         if (price !== null) {
           acc[ticker] = price;
         }

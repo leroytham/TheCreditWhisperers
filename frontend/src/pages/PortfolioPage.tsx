@@ -70,8 +70,8 @@ const PortfolioPage = () => {
     error: newsError,
     refetch: refetchNews
   } = usePortfolioNews(
-    activeSubTab === 'news' ? selectedAccount?.username : null,
-    activeSubTab === 'news' ? selectedAccount?.accountName : null
+    activeSubTab === 'news' ? selectedAccount?.username ?? undefined : undefined,
+    activeSubTab === 'news' ? selectedAccount?.accountName ?? undefined : undefined
   );
 
   // Modal states
@@ -95,9 +95,10 @@ const PortfolioPage = () => {
       try {
         const { default: apiService } = await import('../services/api');
         await apiService.get('/auth/me');
-      } catch (error) {
+      } catch (error: unknown) {
         // If authentication fails, redirect to login
-        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+        const err = error as { response?: { status?: number }; message?: string };
+        if (err.response?.status === 401 || err.message?.includes('Session expired')) {
           navigate('/login');
         }
       }
@@ -128,7 +129,10 @@ const PortfolioPage = () => {
   };
 
   // Handle account selection from AccountSelector
-  const handleAccountSelect = (selection) => {
+  const handleAccountSelect = (selection: {
+    user: { username: string };
+    account: { account_name: string; account_number?: string };
+  }) => {
     // Update context with new account
     selectAccount(
       selection.user.username,

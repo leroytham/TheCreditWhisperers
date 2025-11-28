@@ -10,9 +10,53 @@ import apiService from '../../../services/api';
  * @param {Object} sector - Optional sector object with yfinanceKey for aggregated news
  * @returns {Object} Sector data and loading/error states
  */
-export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
+// Sector type for the hook
+interface SectorInput {
+  yfinanceKey?: string;
+  ticker?: string;
+  name?: string;
+  index?: string;
+  available?: boolean;
+}
+
+// Event type for mapping
+interface RawEvent {
+  total_move_pct: number;
+  start_date: string;
+  end_date?: string;
+  trend?: string;
+  news?: unknown[];
+}
+
+// Article type for mapping
+interface RawNewsArticle {
+  title?: string;
+  headline?: string;
+  headline_text?: string;
+  summary?: string;
+  link?: string;
+  url?: string;
+  href?: string;
+  source_link?: string;
+  source?: string;
+  publish_date?: string;
+  date?: string;
+  publishedAt?: string;
+  pub_date?: string;
+  provider?: string;
+  source_name?: string;
+  sentiment_score?: number | null;
+  score?: number | null;
+  sentiment_label?: string;
+  image?: string | null;
+  relevance_score?: number | null;
+  topics?: string[];
+  tickers?: string[];
+}
+
+export const useSectorData = (ticker: string | null, timeframe = '1Y', sector: SectorInput | null = null) => {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState({
     priceData1Y: [],
     news: [],
@@ -72,7 +116,7 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
       total_articles_analyzed: null
     },
     // Aggregated news metadata
-    newsAggregationMetadata: null
+    newsAggregationMetadata: null as Record<string, unknown> | null
   });
 
   // Fetch all data once when ticker changes
@@ -194,7 +238,7 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
           } else {
             // Process legacy news response
             const raw = n.news || [];
-            const normalized = raw.map(article => ({
+            const normalized = raw.map((article: RawNewsArticle) => ({
               title: article.title || article.headline || article.headline_text || article.summary || '',
               link: article.link || article.url || article.href || article.source_link || article.source || '#',
               publish_date: article.publish_date || article.date || article.publishedAt || article.pub_date || '',
@@ -306,7 +350,7 @@ export const useSectorData = (ticker, timeframe = '1Y', sector = null) => {
         if (cancelled) return;
 
         const rawEvents = analysis?.events || [];
-        const transformedEvents = rawEvents.map(event => {
+        const transformedEvents = rawEvents.map((event: RawEvent) => {
           const movePct = event.total_move_pct * 100;
           return {
             ...event,

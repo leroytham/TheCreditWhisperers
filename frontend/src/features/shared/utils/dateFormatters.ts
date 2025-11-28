@@ -5,7 +5,7 @@
  * @param {Date} date - The date object to format.
  * @returns {string} The formatted date string.
  */
-const formatDate = (date) => {
+const formatDate = (date: Date) => {
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -19,7 +19,7 @@ const formatDate = (date) => {
  * @param {string} dateString - The ISO date string to format.
  * @returns {string} The formatted relative or absolute time string.
  */
-export const formatRelativeTime = (dateString) => {
+export const formatRelativeTime = (dateString: string | null | undefined) => {
   if (!dateString) return '';
   
   const now = new Date();

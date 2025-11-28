@@ -6,10 +6,25 @@
  * Optimized with React Query for automatic caching and background refetching
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
 import apiService from '../../../services/api';
+import type { DailySentimentPoint, TimeframeOption } from '../../../types';
 
-export const useDailySentiment = (ticker, timeframe = '1W', options = {}) => {
+interface DailySentimentResponse {
+  daily?: Record<string, DailySentimentPoint>;
+}
+
+interface UseDailySentimentReturn {
+  dailySentiment: Record<string, DailySentimentPoint>;
+  loading: boolean;
+  error: string | null;
+}
+
+export const useDailySentiment = (
+  ticker: string,
+  timeframe: TimeframeOption | string = '1W',
+  options: Partial<UseQueryOptions<DailySentimentResponse>> = {}
+): UseDailySentimentReturn => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['dailySentiment', ticker, timeframe],
     queryFn: async () => {
@@ -27,6 +42,6 @@ export const useDailySentiment = (ticker, timeframe = '1W', options = {}) => {
   return {
     dailySentiment: data?.daily || {},
     loading: isLoading,
-    error: error?.message || null
+    error: error instanceof Error ? error.message : null
   };
 };

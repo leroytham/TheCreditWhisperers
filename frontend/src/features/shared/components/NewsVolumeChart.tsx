@@ -2,27 +2,49 @@ import React, { useState } from 'react';
 import { generateDailySentimentBars } from '../utils/chartHelpers';
 import { DEFAULT_VISIBLE_HEADLINES } from '../utils/constants';
 
+interface SentimentHeadline {
+  title?: string;
+  link?: string;
+  provider?: string;
+  sentiment_score?: number;
+}
+
+interface DaySentiment {
+  score?: number;
+  count?: number;
+  headlines?: SentimentHeadline[];
+}
+
+interface DailySentimentData {
+  [date: string]: DaySentiment;
+}
+
+interface NewsVolumeChartProps {
+  dailySentiment: DailySentimentData | null;
+  daysToShow?: number;
+  className?: string;
+}
+
 /**
  * NewsVolumeChart Component
  *
  * Bar chart displaying daily news article volume with headline tooltips
  * Used in Sentiment page to show news activity over time
- *
- * @param {Object} props
- * @param {Object} props.dailySentiment - Daily sentiment data object (keyed by date)
- * @param {number} props.daysToShow - Number of days to display (default: 7)
- * @param {string} props.className - Additional CSS classes for wrapper
  */
-const NewsVolumeChart = ({
+const NewsVolumeChart: React.FC<NewsVolumeChartProps> = ({
   dailySentiment,
   daysToShow = 7,
   className = 'px-6 pb-6'
 }) => {
-  const [hoveredBar, setHoveredBar] = useState(null);
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null);
   const [visibleHeadlines, setVisibleHeadlines] = useState(DEFAULT_VISIBLE_HEADLINES);
 
   // Generate bars from dailySentiment data
-  const dailyVolumeBars = generateDailySentimentBars(dailySentiment, daysToShow);
+  // Type assertion needed because the function signature expects DailySentimentPoint but actually uses score/count/headlines
+  const dailyVolumeBars = generateDailySentimentBars(
+    (dailySentiment || {}) as Parameters<typeof generateDailySentimentBars>[0],
+    daysToShow
+  );
 
   // Chart dimensions for consistent positioning
   const topPadding = 40;
@@ -222,14 +244,16 @@ const NewsVolumeChart = ({
                           </a>
                           <div className="flex items-center justify-between mt-1">
                             <span className="text-xs text-gray-500">{headline.provider}</span>
-                            <span
-                              className={`text-xs font-semibold ${
-                                headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
-                              }`}
-                            >
-                              {headline.sentiment_score >= 0 ? '+' : ''}
-                              {headline.sentiment_score.toFixed(2)}
-                            </span>
+                            {headline.sentiment_score !== undefined && (
+                              <span
+                                className={`text-xs font-semibold ${
+                                  headline.sentiment_score >= 0 ? 'text-green-600' : 'text-red-600'
+                                }`}
+                              >
+                                {headline.sentiment_score >= 0 ? '+' : ''}
+                                {headline.sentiment_score.toFixed(2)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       ))}

@@ -28,7 +28,7 @@ export const useSearch = () => {
     retry: 1,
   });
 
-  const selectTicker = (ticker) => {
+  const selectTicker = (ticker: string) => {
     addRecentSearch(ticker);
     setSearchQuery('');
   };

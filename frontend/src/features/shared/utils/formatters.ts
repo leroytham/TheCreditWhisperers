@@ -3,18 +3,16 @@ import { startOfWeek, startOfMonth, addDays, getYear, getMonth, format } from 'd
 
 /**
  * Get timezone for a stock exchange
- * @param {string} exchange - Exchange code (e.g., 'NASDAQ', 'NYSE', 'LSE', 'HKEX')
- * @returns {string} IANA timezone identifier
  */
-export const getExchangeTimezone = (exchange) => {
-  const timezones = {
+export const getExchangeTimezone = (exchange: string | undefined): string => {
+  const timezones: Record<string, string> = {
     // US Exchanges
     'NASDAQ': 'America/New_York',
     'NYSE': 'America/New_York',
     'NYSEARCA': 'America/New_York',
     'AMEX': 'America/New_York',
     'BATS': 'America/New_York',
-    
+
     // European Exchanges
     'LSE': 'Europe/London',
     'LON': 'Europe/London',
@@ -22,7 +20,7 @@ export const getExchangeTimezone = (exchange) => {
     'PAR': 'Europe/Paris',
     'AMS': 'Europe/Amsterdam',
     'SWX': 'Europe/Zurich',
-    
+
     // Asian Exchanges
     'HKEX': 'Asia/Hong_Kong',
     'HKG': 'Asia/Hong_Kong',
@@ -33,15 +31,16 @@ export const getExchangeTimezone = (exchange) => {
     'KRX': 'Asia/Seoul',
     'NSE': 'Asia/Kolkata',
     'BOM': 'Asia/Kolkata',
-    
+
     // Other Exchanges
     'ASX': 'Australia/Sydney',
     'TSX': 'America/Toronto',
     'BMV': 'America/Mexico_City',
     'BOVESPA': 'America/Sao_Paulo',
   };
-  
-  return timezones[exchange?.toUpperCase()] || 'America/New_York'; // Default to ET
+
+  const key = exchange?.toUpperCase();
+  return (key ? timezones[key] : undefined) || 'America/New_York'; // Default to ET
 };
 
 /**
@@ -51,7 +50,7 @@ export const getExchangeTimezone = (exchange) => {
  * @param {Object} options - Additional formatting options
  * @returns {string} Formatted timestamp string
  */
-export const formatTimestampWithTimezone = (timestamp, exchange, options = {}) => {
+export const formatTimestampWithTimezone = (timestamp: string | Date | null | undefined, exchange: string | undefined, options: Intl.DateTimeFormatOptions = {}): string => {
   if (!timestamp) return '';
   
   const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
@@ -77,7 +76,7 @@ export const formatTimestampWithTimezone = (timestamp, exchange, options = {}) =
  * @param {string} exchange - Exchange code
  * @returns {string} Timezone abbreviation (e.g., 'ET', 'GMT', 'HKT')
  */
-export const getTimezoneAbbreviation = (exchange) => {
+export const getTimezoneAbbreviation = (exchange: string | undefined): string => {
   const date = new Date();
   const timezone = getExchangeTimezone(exchange);
 
@@ -110,7 +109,7 @@ export const getTimezoneAbbreviation = (exchange) => {
  * // With this function (CORRECT):
  * parseExchangeDate("2024-11-01", "NASDAQ") // Parses as midnight America/New_York, displays Nov 1 correctly
  */
-export const parseExchangeDate = (dateString, exchange) => {
+export const parseExchangeDate = (dateString: string | Date | null | undefined, exchange: string | undefined): Date | null => {
   if (!dateString) return null;
 
   // If already a Date object, return it
@@ -160,7 +159,7 @@ export const parseExchangeDate = (dateString, exchange) => {
  * parseExchangeDate("2024-11-01T14:30:00", "NASDAQ")
  * // Returns: Date representing 12:00 AM America/New_York on Nov 1, 2024
  */
-export const parseExchangeTimestamp = (timestampString, exchange) => {
+export const parseExchangeTimestamp = (timestampString: string | Date | null | undefined, exchange: string | undefined): Date | null => {
   if (!timestampString) return null;
 
   // If already a Date object, return it
@@ -190,7 +189,7 @@ export const parseExchangeTimestamp = (timestampString, exchange) => {
  * const weekStart = getWeekStartInTimezone(date, "NASDAQ");
  * // Returns: Monday Nov 4, 2024 at midnight ET (not shifted to viewer's timezone)
  */
-export const getWeekStartInTimezone = (date, exchange) => {
+export const getWeekStartInTimezone = (date: Date | null | undefined, exchange: string | undefined): Date | null => {
   if (!date) return null;
 
   const timezone = getExchangeTimezone(exchange);
@@ -221,7 +220,7 @@ export const getWeekStartInTimezone = (date, exchange) => {
  * const monthKey = getMonthKeyInTimezone(date, "NASDAQ");
  * // Returns: "2024-11" (even if viewer is in different timezone)
  */
-export const getMonthKeyInTimezone = (date, exchange) => {
+export const getMonthKeyInTimezone = (date: Date | null | undefined, exchange: string | undefined): string | null => {
   if (!date) return null;
 
   const timezone = getExchangeTimezone(exchange);
@@ -248,7 +247,7 @@ export const getMonthKeyInTimezone = (date, exchange) => {
  * const monthStart = getMonthStartInTimezone(2024, 10, "NASDAQ"); // November 2024
  * // Returns: Nov 1, 2024 at midnight ET
  */
-export const getMonthStartInTimezone = (year, month, exchange) => {
+export const getMonthStartInTimezone = (year: number, month: number, exchange: string | undefined): Date => {
   const timezone = getExchangeTimezone(exchange);
 
   // Create date string for the 1st of the month
@@ -275,7 +274,7 @@ export const getMonthStartInTimezone = (year, month, exchange) => {
  * const sunday = addDaysInTimezone(monday, 6, "NASDAQ");
  * // Returns: Sunday Nov 10, 2024 at midnight ET
  */
-export const addDaysInTimezone = (date, days, exchange) => {
+export const addDaysInTimezone = (date: Date | null | undefined, days: number, exchange: string | undefined): Date | null => {
   if (!date) return null;
 
   const timezone = getExchangeTimezone(exchange);
@@ -304,7 +303,7 @@ export const addDaysInTimezone = (date, days, exchange) => {
  * @param {number} decimals - Number of decimal places (default 2)
  * @returns {string} Formatted price string
  */
-export const formatPrice = (price, currency = 'USD', decimals = 2) => {
+export const formatPrice = (price: number | null | undefined, currency: string = 'USD', decimals: number = 2): string => {
   if (price === null || price === undefined) return '--';
 
   return price.toLocaleString(undefined, {
@@ -320,7 +319,7 @@ export const formatPrice = (price, currency = 'USD', decimals = 2) => {
  * @param {number} decimals - Number of decimal places (default 2)
  * @returns {string} Formatted currency string
  */
-export const formatCurrency = (value, currency = 'USD', decimals = 2) => {
+export const formatCurrency = (value: number | null | undefined, currency: string = 'USD', decimals: number = 2): string => {
   return formatPrice(value, currency, decimals);
 };
 
@@ -331,7 +330,7 @@ export const formatCurrency = (value, currency = 'USD', decimals = 2) => {
  * @param {boolean} includeSign - Whether to include + sign for positive values (default true)
  * @returns {string} Formatted percentage string
  */
-export const formatPercentage = (value, decimals = 2, includeSign = true) => {
+export const formatPercentage = (value: number | null | undefined, decimals: number = 2, includeSign: boolean = true): string => {
   if (value === null || value === undefined) return '--';
 
   const sign = includeSign && value >= 0 ? '+' : '';
@@ -344,7 +343,7 @@ export const formatPercentage = (value, decimals = 2, includeSign = true) => {
  * @param {boolean} includeTime - Whether to include time (default true)
  * @returns {string} Formatted date/time string
  */
-export const formatDateTime = (dateString, includeTime = true) => {
+export const formatDateTime = (dateString: string | null | undefined, includeTime: boolean = true): string => {
   if (!dateString) return 'Loading...';
 
   const date = new Date(dateString);
@@ -369,7 +368,7 @@ export const formatDateTime = (dateString, includeTime = true) => {
  * @param {Object} options - Intl.DateTimeFormat options (default: month: 'short', day: 'numeric')
  * @returns {string} Formatted date string
  */
-export const formatChartDate = (dateString, options: any = { month: 'short', day: 'numeric' }) => {
+export const formatChartDate = (dateString: string | null | undefined, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }): string => {
   if (!dateString) return '';
 
   const date = new Date(dateString);
@@ -382,7 +381,7 @@ export const formatChartDate = (dateString, options: any = { month: 'short', day
  * @param {Object} options - Intl.DateTimeFormat options
  * @returns {string} Formatted date string
  */
-export const formatDate = (dateString, options: any = { month: 'short', day: 'numeric' }) => {
+export const formatDate = (dateString: string | null | undefined, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }): string => {
   return formatChartDate(dateString, options);
 };
 
@@ -391,7 +390,7 @@ export const formatDate = (dateString, options: any = { month: 'short', day: 'nu
  * @param {Date|string} date - Date object or string
  * @returns {string} Formatted timestamp string
  */
-export const formatFullTimestamp = (date) => {
+export const formatFullTimestamp = (date: Date | string | null | undefined): string => {
   if (!date) return '';
 
   const dateObj = date instanceof Date ? date : new Date(date);
@@ -413,7 +412,8 @@ export const formatFullTimestamp = (date) => {
  * @param {number} score - Sentiment score
  * @returns {string} Tailwind CSS color class
  */
-export const getSentimentColor = (score) => {
+export const getSentimentColor = (score: number | null | undefined): string => {
+  if (score == null) return 'text-gray-600';
   if (score >= 0.15) return 'text-green-600';
   if (score <= -0.15) return 'text-red-600';
   return 'text-gray-600';
@@ -424,7 +424,8 @@ export const getSentimentColor = (score) => {
  * @param {number} score - Sentiment score
  * @returns {string} Tailwind CSS background and border color classes
  */
-export const getSentimentBgColor = (score) => {
+export const getSentimentBgColor = (score: number | null | undefined): string => {
+  if (score == null) return 'bg-gray-50 border-gray-600';
   if (score > 0) return 'bg-green-50 border-green-600';
   if (score < 0) return 'bg-red-50 border-red-600';
   return 'bg-gray-50 border-gray-600';
@@ -435,8 +436,8 @@ export const getSentimentBgColor = (score) => {
  * @param {number} change - Price change value
  * @returns {string} Tailwind CSS color class
  */
-export const getPriceChangeColor = (change) => {
-  return change >= 0 ? 'text-green-600' : 'text-red-600';
+export const getPriceChangeColor = (change: number | null | undefined): string => {
+  return (change ?? 0) >= 0 ? 'text-green-600' : 'text-red-600';
 };
 
 /**
@@ -444,8 +445,8 @@ export const getPriceChangeColor = (change) => {
  * @param {number} change - Price change value
  * @returns {string} Arrow symbol (▲ or ▼)
  */
-export const getPriceChangeArrow = (change) => {
-  return change >= 0 ? '▲' : '▼';
+export const getPriceChangeArrow = (change: number | null | undefined): string => {
+  return (change ?? 0) >= 0 ? '▲' : '▼';
 };
 
 /**
@@ -453,8 +454,8 @@ export const getPriceChangeArrow = (change) => {
  * @param {number} change - Price change value
  * @returns {string} Hex color code
  */
-export const getChartLineColor = (change) => {
-  return change >= 0 ? '#16a34a' : '#dc2626';
+export const getChartLineColor = (change: number | null | undefined): string => {
+  return (change ?? 0) >= 0 ? '#16a34a' : '#dc2626';
 };
 
 /**
@@ -462,7 +463,8 @@ export const getChartLineColor = (change) => {
  * @param {number} score - Sentiment score
  * @returns {string} Hex color code
  */
-export const getBarColor = (score) => {
+export const getBarColor = (score: number | null | undefined): string => {
+  if (score == null) return '#9ca3af';
   if (score > 0) return '#22c55e';
   if (score < 0) return '#ef4444';
   return '#9ca3af';

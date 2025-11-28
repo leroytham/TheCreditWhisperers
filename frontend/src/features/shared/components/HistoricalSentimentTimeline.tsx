@@ -31,7 +31,7 @@ const HistoricalSentimentTimeline = ({
   className?: string;
 }) => {
   const [displayPeriod, setDisplayPeriod] = useState(period);
-  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const periodOptions = ['1W', '1M', '3M', '6M', '1Y'];
 
@@ -87,7 +87,7 @@ const HistoricalSentimentTimeline = ({
 
   const stats = getStats();
 
-  const getSentimentColor = (score) => {
+  const getSentimentColor = (score: number): string => {
     if (score > 0.3) return '#10B981';
     if (score > 0) return '#F59E0B';
     if (score < -0.3) return '#EF4444';

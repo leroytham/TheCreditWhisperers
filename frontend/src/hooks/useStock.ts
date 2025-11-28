@@ -1,19 +1,14 @@
-// frontend/src/hooks/useStock.js
+// frontend/src/hooks/useStock.ts
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import apiService from '../services/api';
 import { QUERY_KEYS, CACHE_TIMES } from '../config/constants';
 import useAppStore from '../store/useAppStore';
 
 /**
  * Custom hook for fetching stock price data
- *
- * @param {string} ticker - Stock ticker symbol
- * @param {string} timeframe - Timeframe for data (1D, 1M, 3M, 6M, YTD, 1Y, 5Y)
- * @param {object} options - React Query options
- * @returns {object} Query result with data, loading, error states
  */
-export const useStockPrice = (ticker, timeframe = '1Y', options = {}) => {
+export const useStockPrice = (ticker: string, timeframe = '1Y', options: Partial<UseQueryOptions<unknown>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.STOCK_PRICE, ticker, timeframe],
     queryFn: async () => {
@@ -30,7 +25,7 @@ export const useStockPrice = (ticker, timeframe = '1Y', options = {}) => {
 /**
  * Custom hook for fetching historical stock data
  */
-export const useStockHistorical = (ticker, timeframe = '1M', options = {}) => {
+export const useStockHistorical = (ticker: string, timeframe = '1M', options: Partial<UseQueryOptions<unknown>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.STOCK_HISTORICAL, ticker, timeframe],
     queryFn: async () => {
@@ -47,7 +42,7 @@ export const useStockHistorical = (ticker, timeframe = '1M', options = {}) => {
 /**
  * Custom hook for fetching stock sentiment
  */
-export const useStockSentiment = (ticker, options = {}) => {
+export const useStockSentiment = (ticker: string, options: Partial<UseQueryOptions<unknown>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.STOCK_SENTIMENT, ticker],
     queryFn: async () => {
@@ -64,7 +59,7 @@ export const useStockSentiment = (ticker, options = {}) => {
 /**
  * Custom hook for fetching significant stock events
  */
-export const useStockEvents = (ticker, options = {}) => {
+export const useStockEvents = (ticker: string, options: Partial<UseQueryOptions<unknown>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.STOCK_EVENTS, ticker],
     queryFn: async () => {
@@ -80,12 +75,8 @@ export const useStockEvents = (ticker, options = {}) => {
 
 /**
  * Combined hook that fetches all stock data at once
- *
- * @param {string} ticker - Stock ticker symbol
- * @param {string} timeframe - Timeframe for price data
- * @returns {object} Object containing all query results
  */
-export const useStockData = (ticker, timeframe = '1Y') => {
+export const useStockData = (ticker: string, timeframe = '1Y') => {
   const priceQuery = useStockPrice(ticker, timeframe);
   const sentimentQuery = useStockSentiment(ticker);
   const eventsQuery = useStockEvents(ticker);
@@ -144,7 +135,7 @@ export const usePrefetchStock = () => {
   const queryClient = useQueryClient();
 
   return {
-    prefetchPrice: (ticker, timeframe = '1Y') => {
+    prefetchPrice: (ticker: string, timeframe = '1Y') => {
       queryClient.prefetchQuery({
         queryKey: [QUERY_KEYS.STOCK_PRICE, ticker, timeframe],
         queryFn: async () => {
@@ -154,7 +145,7 @@ export const usePrefetchStock = () => {
         staleTime: CACHE_TIMES.STOCK_PRICE,
       });
     },
-    prefetchSentiment: (ticker) => {
+    prefetchSentiment: (ticker: string) => {
       queryClient.prefetchQuery({
         queryKey: [QUERY_KEYS.STOCK_SENTIMENT, ticker],
         queryFn: async () => {

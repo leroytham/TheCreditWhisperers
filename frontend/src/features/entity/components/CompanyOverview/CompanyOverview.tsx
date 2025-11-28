@@ -1,18 +1,23 @@
-// src/features/entity/components/CompanyOverview/CompanyOverview.jsx
+// src/features/entity/components/CompanyOverview/CompanyOverview.tsx
 
 import React from 'react';
 import { useCompanyOverview } from '../../hooks/useCompanyOverview';
+import type { CompanyOverview as CompanyOverviewType } from '../../../../types';
+
+interface CompanyOverviewProps {
+  ticker: string;
+}
 
 /**
  * CompanyOverview Component
- * 
+ *
  * Displays comprehensive company information including:
  * - Basic information (description, sector, industry)
  * - Financial ratios and metrics
  * - Analyst ratings and target price
  * - Key performance indicators
  */
-const CompanyOverview = ({ ticker }) => {
+const CompanyOverview: React.FC<CompanyOverviewProps> = ({ ticker }) => {
   const { overview, loading, error } = useCompanyOverview(ticker);
 
   if (loading) {
@@ -53,11 +58,11 @@ const CompanyOverview = ({ ticker }) => {
   }
 
   // Helper function to format large numbers
-  const formatNumber = (value) => {
+  const formatNumber = (value: string | number | null | undefined): string => {
     if (!value || value === 'None') return 'N/A';
-    const num = parseFloat(value);
-    if (isNaN(num)) return value;
-    
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    if (isNaN(num)) return String(value);
+
     if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
     if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
     if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
@@ -65,18 +70,18 @@ const CompanyOverview = ({ ticker }) => {
   };
 
   // Helper function to format percentage
-  const formatPercent = (value) => {
+  const formatPercent = (value: string | number | null | undefined): string => {
     if (!value || value === 'None') return 'N/A';
-    const num = parseFloat(value);
-    if (isNaN(num)) return value;
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    if (isNaN(num)) return String(value);
     return `${(num * 100).toFixed(2)}%`;
   };
 
   // Helper function to format ratio
-  const formatRatio = (value) => {
+  const formatRatio = (value: string | number | null | undefined): string => {
     if (!value || value === 'None') return 'N/A';
-    const num = parseFloat(value);
-    if (isNaN(num)) return value;
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    if (isNaN(num)) return String(value);
     return num.toFixed(2);
   };
 
@@ -337,7 +342,12 @@ const CompanyOverview = ({ ticker }) => {
 /**
  * MetricCard - Reusable component for displaying individual metrics
  */
-const MetricCard = ({ label, value }) => (
+interface MetricCardProps {
+  label: string;
+  value: string;
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({ label, value }) => (
   <div className="bg-gray-50 rounded-lg p-3">
     <p className="text-xs font-medium text-gray-500 uppercase mb-1">{label}</p>
     <p className="text-sm font-semibold text-gray-900">{value}</p>

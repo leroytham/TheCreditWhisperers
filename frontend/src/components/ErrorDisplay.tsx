@@ -1,21 +1,34 @@
 import React from 'react';
 
+type Variant = 'error' | 'warning' | 'info';
+
+interface VariantConfig {
+  bgColor: string;
+  borderColor: string;
+  iconBgColor: string;
+  iconColor: string;
+  titleColor: string;
+  messageColor: string;
+  buttonColor: string;
+}
+
+interface ErrorDisplayProps {
+  message?: string;
+  title?: string;
+  onRetry?: () => void;
+  retryText?: string;
+  fullScreen?: boolean;
+  variant?: Variant;
+  className?: string;
+  showIcon?: boolean;
+}
+
 /**
  * ErrorDisplay Component
  *
  * Reusable error display component to replace scattered error states
- *
- * @param {Object} props
- * @param {string} props.message - Error message to display
- * @param {string} props.title - Optional error title (default: "Error")
- * @param {Function} props.onRetry - Optional retry callback
- * @param {string} props.retryText - Text for retry button (default: "Try Again")
- * @param {boolean} props.fullScreen - If true, renders centered full screen
- * @param {string} props.variant - Style variant: 'error', 'warning', 'info' (default: 'error')
- * @param {string} props.className - Additional CSS classes
- * @param {boolean} props.showIcon - Show error icon (default: true)
  */
-const ErrorDisplay = ({
+const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
   message = 'Something went wrong',
   title = '',
   onRetry,
@@ -26,7 +39,7 @@ const ErrorDisplay = ({
   showIcon = true,
 }) => {
   // Variant configurations
-  const variantConfig = {
+  const variantConfig: Record<Variant, VariantConfig> = {
     error: {
       bgColor: 'bg-red-50',
       borderColor: 'border-red-200',
@@ -139,10 +152,17 @@ const ErrorDisplay = ({
   return errorContent;
 };
 
+interface InlineErrorProps {
+  message: string;
+  onRetry?: () => void;
+  className?: string;
+  details?: string | null;
+}
+
 /**
  * Inline error display for compact spaces
  */
-export const InlineError = ({ message, onRetry, className = '', details = null }) => {
+export const InlineError: React.FC<InlineErrorProps> = ({ message, onRetry, className = '', details = null }) => {
   const enhancedMessage = React.useMemo(() => {
     // Add helpful context to common error messages
     if (message.toLowerCase().includes('failed to load')) {
@@ -198,10 +218,19 @@ export const InlineError = ({ message, onRetry, className = '', details = null }
   );
 };
 
+interface EmptyStateProps {
+  title?: string;
+  message?: string;
+  icon?: React.ReactNode;
+  action?: () => void;
+  actionText?: string;
+  className?: string;
+}
+
 /**
  * Empty state display (for when there's no data but no error)
  */
-export const EmptyState = ({
+export const EmptyState: React.FC<EmptyStateProps> = ({
   title = 'No data available',
   message = '',
   icon,

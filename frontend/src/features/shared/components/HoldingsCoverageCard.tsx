@@ -1,25 +1,29 @@
 import React from 'react';
 import { BarChart3, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
+interface HoldingsCoverage {
+  holdings_with_data?: number;
+  total_holdings?: number;
+  coverage_percentage?: number;
+  holdings_list?: string[];
+}
+
+interface HoldingsCoverageCardProps {
+  holdingsCoverage: HoldingsCoverage | null;
+  totalHoldings?: number;
+  className?: string;
+}
+
 /**
  * HoldingsCoverageCard Component
  *
  * Displays holdings coverage for portfolio sentiment
  * Shows how many holdings in the portfolio have sentiment data available
- *
- * @param {Object} props
- * @param {Object} props.holdingsCoverage - Portfolio holdings coverage object {holdings_with_data, total_holdings, coverage_percentage, holdings_list}
- * @param {number} props.totalHoldings - Total holdings in portfolio (alternative)
- * @param {string} props.className - Additional CSS classes
  */
-const HoldingsCoverageCard = ({
+const HoldingsCoverageCard: React.FC<HoldingsCoverageCardProps> = ({
   holdingsCoverage,
   totalHoldings,
   className = 'bg-white border border-gray-200 rounded-lg shadow p-6'
-}: {
-  holdingsCoverage: any;
-  totalHoldings?: any;
-  className?: string;
 }) => {
   const hasData = holdingsCoverage && (
     holdingsCoverage.holdings_with_data !== undefined ||

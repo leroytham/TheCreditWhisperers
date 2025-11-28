@@ -7,12 +7,33 @@
 import { useState, useEffect } from 'react';
 import apiService from '../../../services/api';
 
-export const useRollingSentiment = (ticker, timeframe = '1D') => {
-  const [data, setData] = useState([]);
-  const [hasData, setHasData] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [sourceEarliestDates, setSourceEarliestDates] = useState(null);
+interface SentimentHeadline {
+  link?: string;
+  title?: string;
+  sentiment_score?: number;
+  relevance_score?: number;
+  source?: string;
+}
+
+interface RollingSentimentDataPoint {
+  timestamp?: string;
+  date?: string;
+  label?: string;
+  volume: number;
+  sentiment: number;
+  headlines?: SentimentHeadline[];
+}
+
+interface SourceEarliestDates {
+  [source: string]: string;
+}
+
+export const useRollingSentiment = (ticker: string | null, timeframe: string = '1D') => {
+  const [data, setData] = useState<RollingSentimentDataPoint[]>([]);
+  const [hasData, setHasData] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sourceEarliestDates, setSourceEarliestDates] = useState<SourceEarliestDates | null>(null);
 
   useEffect(() => {
     console.log('[useRollingSentiment] Effect triggered:', { ticker, timeframe });
@@ -39,9 +60,10 @@ export const useRollingSentiment = (ticker, timeframe = '1D') => {
         setData(result.data || []);
         setHasData(result.has_data !== false);
         setSourceEarliestDates(result.source_earliest_dates || null);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('[useRollingSentiment] Error fetching rolling sentiment:', err);
-        setError(err.message);
+        const error = err as { message?: string };
+        setError(error.message || 'Failed to fetch rolling sentiment');
         setData([]);
         setHasData(false);
         setSourceEarliestDates(null);

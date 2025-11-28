@@ -49,7 +49,7 @@ const SentimentShockCard = ({
   const isLowConfidence = zScoreQuality === 'low_confidence';
 
   // Get Z-Score details for display
-  const getZScoreDetails = (zScore) => {
+  const getZScoreDetails = (zScore: number | null | undefined) => {
     if (zScore === null || zScore === undefined) {
       return { 
         label: 'N/A', 
@@ -111,7 +111,7 @@ const SentimentShockCard = ({
   const IconComponent = zScoreDetails.icon;
 
   // Format Z-Score with sign
-  const formatZScore = (zScore) => {
+  const formatZScore = (zScore: number | null | undefined) => {
     if (zScore === null || zScore === undefined) return '--';
     const sign = zScore > 0 ? '+' : '';
     return `${sign}${zScore.toFixed(2)}σ`;

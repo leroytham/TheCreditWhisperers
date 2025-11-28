@@ -1,13 +1,55 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { getExchangeTimezone, getTimezoneAbbreviation, parseExchangeDate, parseExchangeTimestamp, getWeekStartInTimezone, getMonthKeyInTimezone, getMonthStartInTimezone, addDaysInTimezone } from '../utils/formatters';
 
+// Type definitions for the chart data
+interface SentimentHeadline {
+  link?: string;
+  title?: string;
+  sentiment_score?: number;
+  relevance_score?: number;
+  source?: string;
+  provider?: string;
+}
+
+interface ChartDataPoint {
+  timestamp?: string;
+  date?: string;
+  label?: string;
+  volume: number;
+  sentiment: number;
+  score?: number;
+  count?: number;
+  headlines?: SentimentHeadline[];
+}
+
+interface AggregatedDataPoint extends ChartDataPoint {
+  weekStart?: string;
+  monthKey?: string;
+  monthStart?: string;
+}
+
+interface SourceEarliestDates {
+  [key: string]: string;
+}
+
+interface CombinedSentimentVolumeChartProps {
+  data?: ChartDataPoint[];
+  timeframe?: string;
+  viewMode?: 'rolling' | 'daily' | 'weekly' | 'monthly';
+  hasData?: boolean;
+  sourceEarliestDates?: SourceEarliestDates | null;
+  exchange?: string;
+  ticker?: string;
+  className?: string;
+}
+
 /**
  * Helper to detect if a timestamp contains a time component
  * @param {string} timestamp - Timestamp string
  * @returns {boolean} True if timestamp has time component (e.g., "2024-11-01T14:30:00"), false for date-only (e.g., "2024-11-01")
  */
-const hasTimeComponent = (timestamp) => {
-  return timestamp && typeof timestamp === 'string' && timestamp.includes('T');
+const hasTimeComponent = (timestamp: string): boolean => {
+  return Boolean(timestamp && typeof timestamp === 'string' && timestamp.includes('T'));
 };
 
 /**
@@ -16,14 +58,14 @@ const hasTimeComponent = (timestamp) => {
  * @param {number} maxHeadlines - Maximum number of headlines to return (default: 15)
  * @returns {Array} Processed array of top headlines
  */
-const processAggregatedHeadlines = (headlinesList, maxHeadlines = 15) => {
+const processAggregatedHeadlines = (headlinesList: SentimentHeadline[], maxHeadlines: number = 15): SentimentHeadline[] => {
   if (!headlinesList || headlinesList.length === 0) {
     return [];
   }
 
   // Deduplicate headlines by link using a Map
-  const uniqueHeadlines = new Map();
-  headlinesList.forEach(headline => {
+  const uniqueHeadlines = new Map<string, SentimentHeadline>();
+  headlinesList.forEach((headline: SentimentHeadline) => {
     if (headline && headline.link && !uniqueHeadlines.has(headline.link)) {
       uniqueHeadlines.set(headline.link, headline);
     }
@@ -32,7 +74,7 @@ const processAggregatedHeadlines = (headlinesList, maxHeadlines = 15) => {
   // Score each headline and sort by impact
   // Score = abs(sentiment_score) * (relevance_score || 1)
   const scoredHeadlines = Array.from(uniqueHeadlines.values())
-    .map(headline => ({
+    .map((headline: SentimentHeadline) => ({
       ...headline,
       _score: Math.abs(headline.sentiment_score || 0) * (headline.relevance_score || 1)
     }))
@@ -63,7 +105,7 @@ const processAggregatedHeadlines = (headlinesList, maxHeadlines = 15) => {
  * @param {string} props.ticker - Stock ticker symbol
  * @param {string} props.className - Additional CSS classes
  */
-const CombinedSentimentVolumeChart = ({
+const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> = ({
   data = [],
   timeframe = '1W',
   viewMode = 'rolling',
@@ -73,18 +115,18 @@ const CombinedSentimentVolumeChart = ({
   ticker = '',
   className = 'px-6 pb-6'
 }) => {
-  const [hoveredIndex, setHoveredIndex] = useState(null);
-  const [pinnedIndex, setPinnedIndex] = useState(null);
-  const [showAllHeadlines, setShowAllHeadlines] = useState(false);
-  const [dynamicChartWidth, setDynamicChartWidth] = useState(650);
-  const resetTimeoutIdRef = useRef(null);
-  const chartRef = useRef(null);
-  const chartContainerRef = useRef(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const [showAllHeadlines, setShowAllHeadlines] = useState<boolean>(false);
+  const [dynamicChartWidth, setDynamicChartWidth] = useState<number>(650);
+  const resetTimeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Handle click outside to close pinned tooltip
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (chartRef.current && !chartRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent): void => {
+      if (chartRef.current && !chartRef.current.contains(event.target as Node)) {
         setPinnedIndex(null);
       }
     };
@@ -115,7 +157,7 @@ const CombinedSentimentVolumeChart = ({
   }, []);
 
   // Helper function to get sentiment label based on score
-  const getSentimentLabel = (sentiment) => {
+  const getSentimentLabel = (sentiment: number): string => {
     if (sentiment >= 0.35) return 'Bullish';
     if (sentiment >= 0.15) return 'Somewhat-Bullish';
     if (sentiment >= -0.15) return 'Neutral';
@@ -124,7 +166,7 @@ const CombinedSentimentVolumeChart = ({
   };
 
   // Helper function to get sentiment color based on score
-  const getSentimentColor = (sentiment) => {
+  const getSentimentColor = (sentiment: number): string => {
     if (sentiment >= 0.35) return '#10b981'; // Bullish - green-500
     if (sentiment >= 0.15) return '#34d399'; // Somewhat-Bullish - green-400
     if (sentiment >= -0.15) return '#9ca3af'; // Neutral - gray-400
@@ -133,10 +175,10 @@ const CombinedSentimentVolumeChart = ({
   };
 
   // Adaptive aggregation based on timeframe
-  const aggregateDataByTimeframe = (rawData) => {
+  const aggregateDataByTimeframe = (rawData: ChartDataPoint[]): AggregatedDataPoint[] => {
     // Ensure all data has proper label format for display with exchange timezone
-    const normalizeData = (dataArray) => {
-      return dataArray.map(point => {
+    const normalizeData = (dataArray: ChartDataPoint[]): AggregatedDataPoint[] => {
+      return dataArray.map((point: ChartDataPoint) => {
         // For 1D timeframe, distinguish between intraday (hourly) and daily data
         if (timeframe === '1D' && point.timestamp) {
           const timezone = getExchangeTimezone(exchange);
@@ -147,27 +189,27 @@ const CombinedSentimentVolumeChart = ({
             const date = parseExchangeTimestamp(point.timestamp, exchange);
             return {
               ...point,
-              label: date.toLocaleTimeString('en-US', {
+              label: date?.toLocaleTimeString('en-US', {
                 hour: 'numeric',
                 minute: '2-digit',
                 hour12: true,
                 timeZone: timezone
-              })
+              }) ?? point.timestamp
             };
           } else {
             // Daily data: show date
             const date = parseExchangeDate(point.timestamp, exchange);
             return {
               ...point,
-              label: date.toLocaleDateString('en-US', {
+              label: date?.toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
                 timeZone: timezone
-              })
+              }) ?? point.timestamp
             };
           }
         }
-        return point;
+        return point as AggregatedDataPoint;
       });
     };
 
@@ -178,34 +220,43 @@ const CombinedSentimentVolumeChart = ({
 
     // For medium timeframes (3M, 6M, YTD), aggregate by week
     if (['3M', '6M', 'YTD'].includes(timeframe)) {
-      const weeklyData = [];
-      const weekMap = new Map();
+      const weeklyData: AggregatedDataPoint[] = [];
+      interface WeekAggregation {
+        timestamp: string;
+        volumes: number[];
+        sentiments: number[];
+        headlinesList: SentimentHeadline[];
+      }
+      const weekMap = new Map<string, WeekAggregation>();
 
-      rawData.forEach(point => {
-        const date = parseExchangeDate(point.timestamp, exchange);
+      rawData.forEach((point: ChartDataPoint) => {
+        const date = parseExchangeDate(point.timestamp || '', exchange);
         // Get week start (Monday) in exchange timezone
-        const weekStart = getWeekStartInTimezone(date, exchange);
-        const weekKey = weekStart.toISOString();
+        const weekStart = date ? getWeekStartInTimezone(date, exchange) : null;
+        const weekKey = weekStart?.toISOString() || '';
 
-        if (!weekMap.has(weekKey)) {
+        if (weekKey && !weekMap.has(weekKey)) {
           weekMap.set(weekKey, {
-            timestamp: weekStart.toISOString(),
+            timestamp: weekStart?.toISOString() || '',
             volumes: [],
             sentiments: [],
             headlinesList: []
           });
         }
 
-        weekMap.get(weekKey).volumes.push(point.volume);
-        weekMap.get(weekKey).sentiments.push(point.sentiment);
-        if (point.headlines && point.headlines.length > 0) {
-          weekMap.get(weekKey).headlinesList.push(...point.headlines);
+        const weekData = weekMap.get(weekKey);
+        if (weekData) {
+          weekData.volumes.push(point.volume);
+          weekData.sentiments.push(point.sentiment);
+          if (point.headlines && point.headlines.length > 0) {
+            weekData.headlinesList.push(...point.headlines);
+          }
         }
       });
 
-      weekMap.forEach((weekData, weekKey) => {
-        const avgVolume = weekData.volumes.reduce((a, b) => a + b, 0) / weekData.volumes.length;
-        const avgSentiment = weekData.sentiments.reduce((a, b) => a + b, 0) / weekData.sentiments.length;
+      weekMap.forEach((weekData: WeekAggregation) => {
+        const avgVolume = weekData.volumes.reduce((a: number, b: number) => a + b, 0) / weekData.volumes.length;
+        const avgSentiment = weekData.sentiments.reduce((a: number, b: number) => a + b, 0) / weekData.sentiments.length;
 
         weeklyData.push({
           timestamp: weekData.timestamp,
@@ -220,42 +271,51 @@ const CombinedSentimentVolumeChart = ({
         });
       });
 
-      return weeklyData.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      return weeklyData.sort((a: AggregatedDataPoint, b: AggregatedDataPoint) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
     }
 
     // For long timeframes (1Y), aggregate by month
     if (['1Y'].includes(timeframe)) {
-      const monthlyData = [];
-      const monthMap = new Map();
+      const monthlyData: AggregatedDataPoint[] = [];
+      interface MonthAggregation {
+        timestamp: string;
+        volumes: number[];
+        sentiments: number[];
+        headlinesList: SentimentHeadline[];
+      }
+      const monthMap = new Map<string, MonthAggregation>();
 
-      rawData.forEach(point => {
-        const date = parseExchangeDate(point.timestamp, exchange);
+      rawData.forEach((point: ChartDataPoint) => {
+        const date = parseExchangeDate(point.timestamp || '', exchange);
         // Get month key in exchange timezone (YYYY-MM format)
-        const monthKey = getMonthKeyInTimezone(date, exchange);
+        const monthKey = date ? getMonthKeyInTimezone(date, exchange) : null;
 
-        if (!monthMap.has(monthKey)) {
+        if (monthKey && !monthMap.has(monthKey)) {
           // Parse year and month from monthKey to create month start timestamp
           const [year, month] = monthKey.split('-').map(Number);
           const monthStart = getMonthStartInTimezone(year, month - 1, exchange); // month - 1 because JS months are 0-indexed
 
           monthMap.set(monthKey, {
-            timestamp: monthStart.toISOString(),
+            timestamp: monthStart?.toISOString() || '',
             volumes: [],
             sentiments: [],
             headlinesList: []
           });
         }
 
-        monthMap.get(monthKey).volumes.push(point.volume);
-        monthMap.get(monthKey).sentiments.push(point.sentiment);
-        if (point.headlines && point.headlines.length > 0) {
-          monthMap.get(monthKey).headlinesList.push(...point.headlines);
+        const monthData = monthMap.get(monthKey || '');
+        if (monthData) {
+          monthData.volumes.push(point.volume);
+          monthData.sentiments.push(point.sentiment);
+          if (point.headlines && point.headlines.length > 0) {
+            monthData.headlinesList.push(...point.headlines);
+          }
         }
       });
 
-      monthMap.forEach((monthData, monthKey) => {
-        const avgVolume = monthData.volumes.reduce((a, b) => a + b, 0) / monthData.volumes.length;
-        const avgSentiment = monthData.sentiments.reduce((a, b) => a + b, 0) / monthData.sentiments.length;
+      monthMap.forEach((monthData: MonthAggregation) => {
+        const avgVolume = monthData.volumes.reduce((a: number, b: number) => a + b, 0) / monthData.volumes.length;
+        const avgSentiment = monthData.sentiments.reduce((a: number, b: number) => a + b, 0) / monthData.sentiments.length;
 
         monthlyData.push({
           timestamp: monthData.timestamp,
@@ -270,7 +330,7 @@ const CombinedSentimentVolumeChart = ({
         });
       });
 
-      return monthlyData.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      return monthlyData.sort((a: AggregatedDataPoint, b: AggregatedDataPoint) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
     }
 
     // Default: return raw data
@@ -358,7 +418,7 @@ const CombinedSentimentVolumeChart = ({
   const stepWidth = chartWidth / Math.max(1, processedData.length - 1);
 
   // Helper function to get x-position, centering single data points
-  const getXPosition = (index) => {
+  const getXPosition = (index: number): number => {
     if (processedData.length === 1) {
       return leftPadding + (chartWidth / 2);
     }
@@ -435,7 +495,10 @@ const CombinedSentimentVolumeChart = ({
   };
 
   // Detail Panel Component
-  const DetailPanel = ({ dataPoint }) => {
+  interface DetailPanelDataPoint extends AggregatedDataPoint {
+    timezone?: string;
+  }
+  const DetailPanel = ({ dataPoint }: { dataPoint: DetailPanelDataPoint | null }) => {
     if (!dataPoint) return null;
 
     const pointTimezone = dataPoint.timezone ? dataPoint.timezone.toUpperCase() : null;
@@ -444,12 +507,12 @@ const CombinedSentimentVolumeChart = ({
     const timezone = isUtcPoint ? 'UTC' : exchangeTimezone;
     const tzAbbr = isUtcPoint ? 'UTC' : getTimezoneAbbreviation(exchange);
 
-    const parseTimestampForPoint = (timestamp) => {
+    const parseTimestampForPoint = (timestamp: string): Date | null => {
       if (!timestamp) return null;
       return isUtcPoint ? new Date(timestamp) : parseExchangeTimestamp(timestamp, exchange);
     };
 
-    const formatInTimezone = (date, options = {}) => {
+    const formatInTimezone = (date: Date | null, options: Intl.DateTimeFormatOptions = {}): string => {
       if (!date) return '';
       return new Intl.DateTimeFormat('en-US', {
         month: 'short',
@@ -468,37 +531,37 @@ const CombinedSentimentVolumeChart = ({
       // Detect if timestamp has time component to determine parsing method
       // Use parseExchangeTimestamp for timestamps with time (intraday/rolling),
       // parseExchangeDate for date-only timestamps (daily aggregated)
-      const isIntraday = hasTimeComponent(dataPoint.timestamp);
-      const date = (viewMode === 'rolling' || isIntraday)
-        ? parseTimestampForPoint(dataPoint.timestamp)
-        : parseExchangeDate(dataPoint.timestamp, exchange);
+      const isIntraday = hasTimeComponent(dataPoint.timestamp || '');
+      const date: Date | null = (viewMode === 'rolling' || isIntraday)
+        ? parseTimestampForPoint(dataPoint.timestamp || '')
+        : parseExchangeDate(dataPoint.timestamp || '', exchange);
 
       // Monthly aggregation for 1Y
       if (viewMode === 'monthly' || ['1Y'].includes(timeframe)) {
         return {
-          title: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: timezone }),
+          title: date?.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: timezone }) ?? 'Unknown',
           subtitle: 'Monthly Average',
           isAggregated: true,
           aggregationType: 'monthly'
         };
       }
-      
+
       // Weekly aggregation for 3M, 6M, YTD
       if (viewMode === 'weekly' || ['3M', '6M', 'YTD'].includes(timeframe)) {
         // Calculate week end date in exchange timezone
-        const weekEnd = addDaysInTimezone(date, 6, exchange);
+        const weekEnd = date ? addDaysInTimezone(date, 6, exchange) : null;
         return {
-          title: `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timezone })}`,
-          subtitle: `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timezone })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone })}`,
+          title: `Week of ${date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timezone }) ?? 'Unknown'}`,
+          subtitle: `${date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: timezone }) ?? ''} - ${weekEnd?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: timezone }) ?? ''}`,
           isAggregated: true,
           aggregationType: 'weekly'
         };
       }
-      
+
       // Rolling 24h window - show times in exchange timezone
       if (viewMode === 'rolling') {
         const startTime = date;
-        const endTime = new Date(startTime.getTime() + (24 * 60 * 60 * 1000));
+        const endTime = startTime ? new Date(startTime.getTime() + (24 * 60 * 60 * 1000)) : null;
 
         return {
           title: formatInTimezone(startTime, {
@@ -525,12 +588,12 @@ const CombinedSentimentVolumeChart = ({
 
       // Daily data (no aggregation) - show in exchange timezone
       return {
-        title: date.toLocaleDateString('en-US', {
+        title: date?.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
           timeZone: timezone
-        }),
+        }) ?? 'Unknown',
         subtitle: `Daily Data (${tzAbbr})`,
         isAggregated: false,
         aggregationType: 'daily'
@@ -616,7 +679,7 @@ const CombinedSentimentVolumeChart = ({
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="mb-2">
           <h5 className="text-sm font-semibold text-gray-700">
-            {dateDisplay.isAggregated ? 'Top Headlines from Period' : 'Top Headlines'} ({hasHeadlines ? dataPoint.headlines.length : 0})
+            {dateDisplay.isAggregated ? 'Top Headlines from Period' : 'Top Headlines'} ({hasHeadlines ? dataPoint.headlines?.length ?? 0 : 0})
           </h5>
           {dateDisplay.isAggregated && hasHeadlines && (
             <p className="text-xs text-gray-500 mt-1">
@@ -625,10 +688,10 @@ const CombinedSentimentVolumeChart = ({
           )}
         </div>
 
-        {hasHeadlines ? (
+        {hasHeadlines && dataPoint.headlines ? (
           <>
             <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-              {(showAllHeadlines ? dataPoint.headlines : dataPoint.headlines.slice(0, 10)).map((headline, idx) => (
+              {(showAllHeadlines ? dataPoint.headlines : dataPoint.headlines.slice(0, 10)).map((headline: SentimentHeadline, idx: number) => (
                 <div key={idx} className="border-l-4 border-blue-400 pl-3 py-2 bg-white rounded-r shadow-sm">
                   <a
                     href={headline.link}
@@ -676,7 +739,7 @@ const CombinedSentimentVolumeChart = ({
             </div>
             
             {/* Show More/Less Button */}
-            {dataPoint.headlines.length > 10 && (
+            {dataPoint.headlines && dataPoint.headlines.length > 10 && (
               <button
                 onClick={() => setShowAllHeadlines(!showAllHeadlines)}
                 className="mt-3 w-full py-2 px-4 bg-blue-50 hover:bg-blue-100 text-blue-600 text-sm font-medium rounded-lg transition-colors duration-150 flex items-center justify-center gap-2"
@@ -693,7 +756,7 @@ const CombinedSentimentVolumeChart = ({
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
-                    Show More ({dataPoint.headlines.length - 10} more)
+                    Show More ({(dataPoint.headlines?.length ?? 0) - 10} more)
                   </>
                 )}
               </button>
@@ -1152,9 +1215,9 @@ const CombinedSentimentVolumeChart = ({
               {/* Hover/Pinned indicator line */}
               {(hoveredIndex !== null || pinnedIndex !== null) && (
                 <line
-                  x1={getXPosition(pinnedIndex !== null ? pinnedIndex : hoveredIndex)}
+                  x1={getXPosition(pinnedIndex !== null ? pinnedIndex : (hoveredIndex ?? 0))}
                   y1={topPadding}
-                  x2={getXPosition(pinnedIndex !== null ? pinnedIndex : hoveredIndex)}
+                  x2={getXPosition(pinnedIndex !== null ? pinnedIndex : (hoveredIndex ?? 0))}
                   y2={topPadding + chartHeight}
                   stroke="#1d4ed8"
                   strokeWidth="2"

@@ -46,7 +46,7 @@ const SourceConcentrationCard = ({
                   topSources && topSources.length > 0;
 
   // Get HHI interpretation details
-  const getHhiDetails = (hhi, interpretation) => {
+  const getHhiDetails = (hhi: number | null | undefined, interpretation: string | null | undefined) => {
     if (!hasData) {
       return { 
         label: 'No Data', 
@@ -59,7 +59,7 @@ const SourceConcentrationCard = ({
     }
 
     // Low Concentration (HHI < 1500) - Diverse sources
-    if (interpretation === 'Low Concentration' || hhi < 1500) {
+    if (interpretation === 'Low Concentration' || (hhi !== null && hhi !== undefined && hhi < 1500)) {
       return {
         label: 'Low Concentration',
         color: 'text-green-700',
@@ -71,7 +71,7 @@ const SourceConcentrationCard = ({
     }
 
     // Moderate Concentration (1500 ≤ HHI < 2500)
-    if (interpretation === 'Moderate Concentration' || (hhi >= 1500 && hhi < 2500)) {
+    if (interpretation === 'Moderate Concentration' || (hhi !== null && hhi !== undefined && hhi >= 1500 && hhi < 2500)) {
       return {
         label: 'Moderate Concentration',
         color: 'text-yellow-700',
@@ -97,13 +97,13 @@ const SourceConcentrationCard = ({
   const IconComponent = hhiDetails.icon;
 
   // Format HHI score for display
-  const formatHhiScore = (hhi) => {
+  const formatHhiScore = (hhi: number | null | undefined) => {
     if (hhi === null || hhi === undefined) return '--';
     return Math.round(hhi).toLocaleString();
   };
 
   // Get color for source bar based on percentage
-  const getSourceBarColor = (percentage) => {
+  const getSourceBarColor = (percentage: number) => {
     if (percentage >= 50) return 'bg-red-500'; // Dominant source
     if (percentage >= 30) return 'bg-yellow-500'; // Major source
     return 'bg-blue-500'; // Normal source
@@ -198,7 +198,7 @@ const SourceConcentrationCard = ({
 
               {/* Scrollable container for sources list */}
               <div className="max-h-64 overflow-y-auto pr-2 space-y-3">
-                {topSources.map((source, index) => (
+                {topSources.map((source: { source: string; percentage: number }, index: number) => (
                   <div key={index} className="space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-700 truncate" title={source.source}>

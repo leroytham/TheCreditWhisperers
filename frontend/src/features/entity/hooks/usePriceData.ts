@@ -6,12 +6,42 @@
  * Optimized with React Query for automatic caching and background refetching
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { PRICE_POLL_INTERVAL } from '../../shared/utils/constants';
 import apiService from '../../../services/api';
+import type { PriceDataPoint, TimeframeOption } from '../../../types';
 
-export const usePriceData = (ticker, timeframe = '1Y', options = {}) => {
+interface PriceResponse {
+  prices?: PriceDataPoint[];
+  company_name?: string;
+  longname?: string;
+  shortname?: string;
+  currency?: string;
+  exchange?: string;
+  market?: string;
+  market_state?: string;
+  prev_close?: number;
+}
+
+interface UsePriceDataReturn {
+  priceData1Y: PriceDataPoint[];
+  companyName: string;
+  currency: string;
+  exchange: string;
+  market: string;
+  marketState: string;
+  prevClose: number | null;
+  lastFetched: Date | null;
+  loading: boolean;
+  error: string | null;
+}
+
+export const usePriceData = (
+  ticker: string,
+  timeframe: TimeframeOption | string = '1Y',
+  options: Partial<UseQueryOptions<PriceResponse>> = {}
+): UsePriceDataReturn => {
   const { data, isLoading, error } = useQuery({
     queryKey: ['price', ticker, timeframe],
     queryFn: async () => {
@@ -39,6 +69,6 @@ export const usePriceData = (ticker, timeframe = '1Y', options = {}) => {
     prevClose: data?.prev_close || null,
     lastFetched: data ? new Date() : null,
     loading: isLoading,
-    error: error?.message || null
+    error: error instanceof Error ? error.message : null
   }), [data, isLoading, error]);
 };

@@ -1,17 +1,55 @@
-// frontend/src/hooks/useNews.js
+// frontend/src/hooks/useNews.ts
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, UseQueryOptions } from '@tanstack/react-query';
 import apiService from '../services/api';
 import { QUERY_KEYS, CACHE_TIMES } from '../config/constants';
 
+interface NewsArticle {
+  title?: string;
+  link?: string;
+  provider?: string;
+  publish_date?: string;
+  sentiment_score?: number | null;
+  sentiment_label?: string;
+  image?: string | null;
+  summary?: string;
+  tickers?: string[];
+  relevance_score?: number | null;
+  [key: string]: unknown;
+}
+
+interface NewsData {
+  ticker?: string;
+  news?: NewsArticle[];
+  avg_score?: number;
+  source_concentration_hhi?: number;
+  concentration_interpretation?: string;
+  top_sources?: Array<{ name: string; count: number }>;
+  dominant_topic?: string;
+  dominant_topic_weight?: number;
+  dominant_topic_percentage?: number;
+  topic_count?: number;
+  sentiment_by_topic?: Record<string, number>;
+  topic_weights?: Record<string, number>;
+  [key: string]: unknown;
+}
+
+interface DailySentimentInfo {
+  score?: number;
+  count?: number;
+  headlines?: string[];
+}
+
+interface StatsAccumulator {
+  positive: number;
+  negative: number;
+  neutral: number;
+}
+
 /**
  * Custom hook for fetching news articles
- *
- * @param {string} ticker - Stock ticker symbol
- * @param {object} options - React Query options
- * @returns {object} Query result with data, loading, error states
  */
-export const useNews = (ticker, options = {}) => {
+export const useNews = (ticker: string, options: Partial<UseQueryOptions<NewsData>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.NEWS, ticker],
     queryFn: async () => {
@@ -43,7 +81,7 @@ export const useNews = (ticker, options = {}) => {
 /**
  * Custom hook for fetching categorized news
  */
-export const useCategorizedNews = (ticker, startDate, endDate, options = {}) => {
+export const useCategorizedNews = (ticker: string, startDate: string, endDate: string, options: Partial<UseQueryOptions<unknown>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.NEWS_CATEGORIZED, ticker, startDate, endDate],
     queryFn: async () => {
@@ -60,7 +98,7 @@ export const useCategorizedNews = (ticker, startDate, endDate, options = {}) => 
 /**
  * Custom hook for fetching daily sentiment data
  */
-export const useDailySentiment = (ticker, options = {}) => {
+export const useDailySentiment = (ticker: string, options: Partial<UseQueryOptions<unknown>> = {}) => {
   return useQuery({
     queryKey: [QUERY_KEYS.DAILY_SENTIMENT, ticker],
     queryFn: async () => {
@@ -70,9 +108,10 @@ export const useDailySentiment = (ticker, options = {}) => {
     enabled: !!ticker,
     staleTime: CACHE_TIMES.SENTIMENT,
     retry: 2,
-    select: (data) => {
+    select: (data: unknown) => {
+      const typedData = data as { ticker?: string; daily?: Record<string, DailySentimentInfo> };
       // Transform daily data into array format for charting
-      const dailyArray = Object.entries(data.daily || {}).map(([date, info]: [string, any]) => ({
+      const dailyArray = Object.entries(typedData.daily || {}).map(([date, info]) => ({
         date,
         score: info.score || 0,
         count: info.count || 0,
@@ -80,9 +119,9 @@ export const useDailySentiment = (ticker, options = {}) => {
       }));
 
       return {
-        ticker: data.ticker,
+        ticker: typedData.ticker,
         daily: dailyArray,
-        dailyMap: data.daily,
+        dailyMap: typedData.daily,
       };
     },
     ...options,
@@ -92,10 +131,10 @@ export const useDailySentiment = (ticker, options = {}) => {
 /**
  * Hook for filtering news by sentiment
  */
-export const useFilteredNews = (ticker, sentimentFilter = 'all') => {
+export const useFilteredNews = (ticker: string, sentimentFilter = 'all') => {
   const { data, ...rest } = useNews(ticker);
 
-  const filteredNews = data?.news?.filter((article) => {
+  const filteredNews = data?.news?.filter((article: NewsArticle) => {
     if (sentimentFilter === 'all') return true;
     return article.sentiment_label === sentimentFilter;
   });
@@ -114,7 +153,7 @@ export const useFilteredNews = (ticker, sentimentFilter = 'all') => {
 /**
  * Hook for getting news statistics
  */
-export const useNewsStats = (ticker) => {
+export const useNewsStats = (ticker: string) => {
   const { data, isLoading, isError } = useNews(ticker);
 
   if (isLoading || isError || !data?.news) {
@@ -130,7 +169,7 @@ export const useNewsStats = (ticker) => {
   }
 
   const stats = data.news.reduce(
-    (acc, article) => {
+    (acc: StatsAccumulator, article: NewsArticle) => {
       const label = article.sentiment_label || 'Neutral';
 
       // Map Bullish/Bearish labels to positive/negative/neutral categories
