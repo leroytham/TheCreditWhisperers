@@ -14,9 +14,10 @@ Endpoints:
 
 import logging
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from typing import Optional
 
+from app.core.validators import validate_account_name, validate_ticker
 from app.models.transaction import (
     CreateTransactionRequest,
     TransactionType,
@@ -35,8 +36,8 @@ router = APIRouter(tags=["Transactions"])
 
 @router.post("/transactions/{username}")
 async def create_transaction_endpoint(
-    username: str,
-    transaction_data: dict,
+    username: str = Path(..., min_length=1, max_length=100, description="Username"),
+    transaction_data: CreateTransactionRequest = ...,
     repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
@@ -59,22 +60,15 @@ async def create_transaction_endpoint(
     }
     """
     try:
-        # Parse and validate request
-        transaction_request = CreateTransactionRequest(
-            account_name=transaction_data.get("account_name"),
-            account_no=transaction_data.get("account_no"),
-            transaction_date=date.fromisoformat(transaction_data.get("transaction_date")),
-            transaction_type=transaction_data.get("transaction_type"),
-            symbol=transaction_data.get("symbol"),
-            quantity=transaction_data.get("quantity"),
-            price=transaction_data.get("price"),
-            cash_flow=float(transaction_data.get("cash_flow")),
-            fees=float(transaction_data.get("fees", 0.0)),
-            notes=transaction_data.get("notes"),
-        )
+        # Validate username
+        username = validate_account_name(username)
 
-        # Create transaction via repository
-        transaction_id = await repo.create_transaction(username, transaction_request)
+        # Validate symbol if provided (for BUY/SELL/DIVIDEND)
+        if transaction_data.symbol:
+            transaction_data.symbol = validate_ticker(transaction_data.symbol)
+
+        # Create transaction via repository (Pydantic model already validated)
+        transaction_id = await repo.create_transaction(username, transaction_data)
 
         return {
             "message": "Transaction created successfully",
@@ -90,13 +84,13 @@ async def create_transaction_endpoint(
 
 @router.get("/transactions/{username}/{account_name}")
 async def get_transactions_endpoint(
-    username: str,
-    account_name: str,
-    start_date: Optional[str] = Query(None, description="Filter start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="Filter end date (YYYY-MM-DD)"),
-    transaction_type: Optional[str] = Query(None, description="Filter by type"),
-    symbol: Optional[str] = Query(None, description="Filter by stock symbol"),
-    limit: int = Query(100, le=500, description="Maximum results"),
+    username: str = Path(..., min_length=1, max_length=100, description="Username"),
+    account_name: str = Path(..., min_length=1, max_length=100, description="Account name"),
+    start_date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$", description="Filter start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$", description="Filter end date (YYYY-MM-DD)"),
+    transaction_type: Optional[str] = Query(None, regex=r"^(BUY|SELL|DEPOSIT|WITHDRAWAL|DIVIDEND)$", description="Filter by type"),
+    symbol: Optional[str] = Query(None, min_length=1, max_length=10, description="Filter by stock symbol"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     skip: int = Query(0, ge=0, alias="offset", description="Results to skip"),
     repo: TransactionRepository = Depends(get_transaction_repository),
 ):
@@ -164,10 +158,10 @@ async def get_transactions_endpoint(
 
 @router.get("/transactions/{username}/{account_name}/stats")
 async def get_transaction_stats_endpoint(
-    username: str,
-    account_name: str,
-    start_date: Optional[str] = Query(None, description="Filter start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="Filter end date (YYYY-MM-DD)"),
+    username: str = Path(..., min_length=1, max_length=100, description="Username"),
+    account_name: str = Path(..., min_length=1, max_length=100, description="Account name"),
+    start_date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$", description="Filter start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, regex=r"^\d{4}-\d{2}-\d{2}$", description="Filter end date (YYYY-MM-DD)"),
     repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
@@ -197,8 +191,8 @@ async def get_transaction_stats_endpoint(
 
 @router.delete("/transactions/{username}/{transaction_id}")
 async def delete_transaction_endpoint(
-    username: str,
-    transaction_id: str,
+    username: str = Path(..., min_length=1, max_length=100, description="Username"),
+    transaction_id: str = Path(..., min_length=1, max_length=50, description="Transaction ID"),
     repo: TransactionRepository = Depends(get_transaction_repository),
 ):
     """
@@ -226,9 +220,9 @@ async def delete_transaction_endpoint(
 
 @router.get("/accounts/{username}/{account_name}/performance-twr")
 async def get_portfolio_performance_twr(
-    username: str,
-    account_name: str,
-    timeframe: str = Query("1Y", description="Timeframe: MTD, QTD, YTD, 1Y, 5Y, ITD"),
+    username: str = Path(..., min_length=1, max_length=100, description="Username"),
+    account_name: str = Path(..., min_length=1, max_length=100, description="Account name"),
+    timeframe: str = Query("1Y", regex=r"^(MTD|QTD|YTD|1Y|5Y|ITD)$", description="Timeframe: MTD, QTD, YTD, 1Y, 5Y, ITD"),
     twr_calculator_service: TWRCalculatorService = Depends(get_twr_calculator_service),
     account_repo: AccountRepository = Depends(get_account_repository),
 ):

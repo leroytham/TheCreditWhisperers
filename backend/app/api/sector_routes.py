@@ -9,8 +9,16 @@ Endpoints:
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Path, Query
 
+from app.core.validators import (
+    validate_sector,
+    validate_timeframe,
+    SectorPath,
+    TimeframeQuery,
+    LimitQuery,
+    DaysQuery,
+)
 from app.services.stock_data_service import StockDataService
 from app.services.news_service import NewsService
 from app.services.sector_service import SectorService
@@ -31,7 +39,7 @@ router = APIRouter(prefix="/sectors", tags=["Sectors"])
 
 @router.get("/{sector_ticker}/top-constituents")
 def get_top_constituents_for_sector(
-    sector_ticker: str,
+    sector_ticker: str = SectorPath(description="S&P 500 sector ticker (e.g., ^SP500-45)"),
     stock_data_service: StockDataService = Depends(get_stock_data_service),
 ):
     """
@@ -47,6 +55,9 @@ def get_top_constituents_for_sector(
     Example: /sectors/%5EGSP500-45/top-constituents
     """
     try:
+        # Validate sector ticker
+        sector_ticker = validate_sector(sector_ticker)
+
         constituents = stock_data_service.get_sector_top_constituents(sector_ticker)
 
         if not constituents:
@@ -71,9 +82,9 @@ def get_top_constituents_for_sector(
 
 @router.get("/{sector_identifier}/aggregated-news")
 async def get_sector_aggregated_news(
-    sector_identifier: str,
-    limit: int = 100,
-    timeframe: str = "1W",
+    sector_identifier: str = SectorPath(description="Sector identifier (e.g., XLK, technology)"),
+    limit: int = LimitQuery(default=100, max_val=500, description="Maximum unique articles to return"),
+    timeframe: str = TimeframeQuery("1W"),
     sector_service: SectorService = Depends(get_sector_service),
     news_service: NewsService = Depends(get_news_service),
 ):
@@ -115,6 +126,10 @@ async def get_sector_aggregated_news(
     Example: /sectors/XLK/aggregated-news?limit=50&timeframe=1W
     """
     try:
+        # Validate inputs
+        sector_identifier = validate_sector(sector_identifier)
+        timeframe = validate_timeframe(timeframe)
+
         # Resolve sector identifier to yfinance key
         sector_key = sector_service.resolve_sector_key(sector_identifier)
 
@@ -139,8 +154,8 @@ async def get_sector_aggregated_news(
 
 @router.get("/{sector_identifier}/daily-sentiment")
 async def get_sector_daily_sentiment(
-    sector_identifier: str,
-    days: int = 30,
+    sector_identifier: str = SectorPath(description="Sector identifier (e.g., XLK, technology)"),
+    days: int = DaysQuery(default=30, max_val=90, description="Number of days to include"),
     sector_service: SectorService = Depends(get_sector_service),
     news_service: NewsService = Depends(get_news_service),
     sector_sentiment_service: SectorSentimentService = Depends(get_sector_sentiment_service),
@@ -176,6 +191,9 @@ async def get_sector_daily_sentiment(
     Example: /sectors/technology/daily-sentiment?days=30
     """
     try:
+        # Validate sector identifier
+        sector_identifier = validate_sector(sector_identifier)
+
         # Generate cache key for this endpoint
         cache_key = generate_cache_key(
             "sector_daily_sentiment_v1",

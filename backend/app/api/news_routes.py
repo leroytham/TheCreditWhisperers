@@ -14,9 +14,16 @@ Endpoints:
 import copy
 import logging
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 import yfinance as yf
 
+from app.core.validators import (
+    validate_ticker,
+    validate_timeframe,
+    TickerQuery,
+    TimeframeQuery,
+    DaysQuery,
+)
 from app.services.news_service import NewsService
 from app.services.stock_data_service import StockDataService
 from app.services.sentiment_service import SentimentService
@@ -40,8 +47,8 @@ router = APIRouter(tags=["News & Sentiment"])
 
 @router.get("/news")
 async def get_news_data(
-    ticker: str,
-    timeframe: str = "1Y",
+    ticker: str = TickerQuery(required=True),
+    timeframe: str = TimeframeQuery("1Y"),
     news_service: NewsService = Depends(get_news_service),
     sentiment_service: SentimentService = Depends(get_sentiment_service),
 ):
@@ -66,6 +73,10 @@ async def get_news_data(
     Example: /news?ticker=AAPL&timeframe=1Y
     """
     try:
+        # Validate inputs
+        ticker = validate_ticker(ticker)
+        timeframe = validate_timeframe(timeframe)
+
         # Fetch news articles using the timeframe-aware news service
         news_articles = await news_service.get_ticker_news_for_timeframe(
             ticker,
@@ -183,7 +194,7 @@ async def get_news_data(
 
 @router.get("/news/sources")
 async def get_news_sources(
-    ticker: str,
+    ticker: str = TickerQuery(required=True),
     news_service: NewsService = Depends(get_news_service),
     sentiment_service: SentimentService = Depends(get_sentiment_service),
 ):
@@ -198,6 +209,9 @@ async def get_news_sources(
     Example: /news/sources?ticker=AAPL
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         news_articles = await news_service.get_ticker_news(ticker)
 
         if not news_articles:
@@ -266,9 +280,9 @@ async def get_news_sources(
 @router.get("/daily-sentiment")
 @async_cache_result(ttl=600, key_prefix="daily_sentiment")
 async def get_daily_sentiment(
-    ticker: str,
-    days: int = None,
-    timeframe: str = None,
+    ticker: str = TickerQuery(required=True),
+    days: int = Query(None, ge=1, le=7300, description="Number of days to fetch (1-7300)"),
+    timeframe: str = Query(None, regex=r"^(1D|1W|1M|3M|6M|YTD|1Y|5Y|10Y|MAX)$", description="Time range"),
     news_service: NewsService = Depends(get_news_service),
     sentiment_service: SentimentService = Depends(get_sentiment_service),
 ):
@@ -288,6 +302,9 @@ async def get_daily_sentiment(
     Example: /daily-sentiment?ticker=AAPL&timeframe=6M
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         # Determine days from timeframe if provided
         if timeframe:
             timeframe_days_map = {
@@ -394,8 +411,8 @@ async def get_daily_sentiment(
 
 @router.get("/rolling-sentiment")
 async def get_rolling_sentiment(
-    ticker: str,
-    timeframe: str = "1W",
+    ticker: str = TickerQuery(required=True, description="Stock ticker or sector identifier"),
+    timeframe: str = TimeframeQuery("1W"),
     news_service: NewsService = Depends(get_news_service),
     sentiment_service: SentimentService = Depends(get_sentiment_service),
     sector_service: SectorService = Depends(get_sector_service),
@@ -416,6 +433,9 @@ async def get_rolling_sentiment(
     Example: /rolling-sentiment?ticker=AAPL&timeframe=1W
     """
     try:
+        # Validate timeframe (ticker validation skipped - may be sector identifier)
+        timeframe = validate_timeframe(timeframe)
+
         # Try to resolve as sector identifier first
         is_sector = False
         sector_key = None
@@ -602,7 +622,7 @@ async def get_rolling_sentiment(
 
 @router.get("/news-models")
 async def get_news_models(
-    ticker: str,
+    ticker: str = TickerQuery(required=True),
     news_service: NewsService = Depends(get_news_service),
     sentiment_service: SentimentService = Depends(get_sentiment_service),
 ):
@@ -612,6 +632,9 @@ async def get_news_models(
     Example: /news-models?ticker=AAPL
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         news_articles = await news_service.get_ticker_news(ticker)
 
         score_defs = get_score_definitions()
@@ -665,8 +688,8 @@ async def get_news_models(
 
 @router.get("/price")
 def get_price_data(
-    ticker: str,
-    timeframe: str = "1Y",
+    ticker: str = TickerQuery(required=True),
+    timeframe: str = TimeframeQuery("1Y"),
     stock_data_service: StockDataService = Depends(get_stock_data_service),
 ):
     """
@@ -682,6 +705,10 @@ def get_price_data(
     Example: /price?ticker=AAPL&timeframe=1Y
     """
     try:
+        # Validate inputs
+        ticker = validate_ticker(ticker)
+        timeframe = validate_timeframe(timeframe)
+
         # Use Redis cache
         cache_key = f"price:{ticker.upper()}:{timeframe}"
         try:

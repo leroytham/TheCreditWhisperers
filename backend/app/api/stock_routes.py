@@ -14,8 +14,15 @@ Endpoints:
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
 
+from app.core.validators import (
+    validate_ticker,
+    validate_quarter,
+    validate_timeframe,
+    TickerPath,
+    TimeframeQuery,
+)
 from app.services.stock_data_service import StockDataService
 from app.services.news_service import NewsService
 from app.services.sentiment_service import SentimentService
@@ -37,8 +44,8 @@ router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
 @router.get("/{ticker}/historical-data")
 def get_historical_stock_data(
-    ticker: str,
-    timeframe: str = "1M",
+    ticker: str = TickerPath(),
+    timeframe: str = TimeframeQuery("1M"),
     stock_data_service: StockDataService = Depends(get_stock_data_service),
 ):
     """
@@ -54,6 +61,10 @@ def get_historical_stock_data(
     Example: /stocks/AAPL/historical-data?timeframe=3M
     """
     try:
+        # Validate and normalize inputs
+        ticker = validate_ticker(ticker)
+        timeframe = validate_timeframe(timeframe)
+
         # Fetch 1 year of data for all timeframes
         period = "1y"
 
@@ -78,7 +89,7 @@ def get_historical_stock_data(
 
 @router.get("/{ticker}/sentiment")
 async def get_stock_news_and_sentiment(
-    ticker: str,
+    ticker: str = TickerPath(),
     news_service: NewsService = Depends(get_news_service),
     sentiment_service: SentimentService = Depends(get_sentiment_service),
 ):
@@ -96,6 +107,9 @@ async def get_stock_news_and_sentiment(
     Example: /stocks/TSLA/sentiment
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         # 1. Fetch recent news using the service
         news_articles = await news_service.get_ticker_news(ticker)
         if not news_articles:
@@ -121,8 +135,8 @@ async def get_stock_news_and_sentiment(
 
 @router.get("/{ticker}/earnings-transcript")
 async def get_earnings_transcript(
-    ticker: str,
-    quarter: str,
+    ticker: str = TickerPath(),
+    quarter: str = Query(..., min_length=6, max_length=6, description="Quarter in YYYYQN format (e.g., 2024Q1)"),
     earnings_service: EarningsService = Depends(get_earnings_service),
 ):
     """
@@ -138,6 +152,10 @@ async def get_earnings_transcript(
     Example: /stocks/IBM/earnings-transcript?quarter=2024Q1
     """
     try:
+        # Validate inputs
+        ticker = validate_ticker(ticker)
+        quarter = validate_quarter(quarter)
+
         result = await earnings_service.fetch_earnings_transcript(ticker, quarter)
 
         if "error" in result:
@@ -158,8 +176,8 @@ async def get_earnings_transcript(
 
 @router.get("/{ticker}/earnings-quarters")
 async def get_available_earnings_quarters(
-    ticker: str,
-    years_back: int = 5,
+    ticker: str = TickerPath(),
+    years_back: int = Query(5, ge=1, le=15, description="Number of years to look back (max: 15)"),
     earnings_service: EarningsService = Depends(get_earnings_service),
 ):
     """
@@ -175,8 +193,8 @@ async def get_available_earnings_quarters(
     Example: /stocks/IBM/earnings-quarters?years_back=3
     """
     try:
-        # Limit years_back to reasonable range
-        years_back = min(max(1, years_back), 15)
+        # Validate ticker
+        ticker = validate_ticker(ticker)
 
         quarters = await earnings_service.get_available_quarters(ticker, years_back)
 
@@ -193,8 +211,8 @@ async def get_available_earnings_quarters(
 
 @router.get("/{ticker}/earnings-calendar")
 async def get_earnings_calendar(
-    ticker: str,
-    horizon: str = "12month",
+    ticker: str = TickerPath(),
+    horizon: str = Query("12month", regex="^(3month|6month|12month)$", description="Time horizon for earnings calendar"),
     earnings_service: EarningsService = Depends(get_earnings_service),
 ):
     """
@@ -210,6 +228,9 @@ async def get_earnings_calendar(
     Example: /stocks/AAPL/earnings-calendar?horizon=12month
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         result = await earnings_service.fetch_earnings_calendar(ticker, horizon)
 
         if "error" in result:
@@ -233,7 +254,7 @@ async def get_earnings_calendar(
 
 @router.get("/{ticker}/company-overview")
 async def get_company_overview(
-    ticker: str,
+    ticker: str = TickerPath(),
     stock_data_service: StockDataService = Depends(get_stock_data_service),
 ):
     """
@@ -248,6 +269,9 @@ async def get_company_overview(
     Example: /stocks/IBM/company-overview
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         overview = await stock_data_service.get_company_overview(ticker)
 
         if not overview:
@@ -270,8 +294,8 @@ async def get_company_overview(
 
 @router.get("/{ticker}/significant-events")
 async def get_significant_events_for_ticker(
-    ticker: str,
-    timeframe: str = "1Y",
+    ticker: str = TickerPath(),
+    timeframe: str = TimeframeQuery("1Y"),
     news_service: NewsService = Depends(get_news_service),
     market_analysis_service: MarketAnalysisService = Depends(get_market_analysis_service),
 ):
@@ -288,6 +312,10 @@ async def get_significant_events_for_ticker(
     Example: /stocks/NVDA/significant-events?timeframe=1M
     """
     try:
+        # Validate inputs
+        ticker = validate_ticker(ticker)
+        timeframe = validate_timeframe(timeframe)
+
         # Fetch cached news for the timeframe to reuse in significant events analysis
         try:
             cached_news = await news_service.get_ticker_news_for_timeframe(
@@ -318,8 +346,8 @@ async def get_significant_events_for_ticker(
 
 @router.post("/{ticker}/prefetch-events")
 async def prefetch_significant_events(
-    ticker: str,
     background_tasks: BackgroundTasks,
+    ticker: str = TickerPath(),
     market_analysis_service: MarketAnalysisService = Depends(get_market_analysis_service),
 ):
     """
@@ -329,6 +357,9 @@ async def prefetch_significant_events(
     Example: POST /stocks/AAPL/prefetch-events
     """
     try:
+        # Validate ticker
+        ticker = validate_ticker(ticker)
+
         # Define all timeframes to prefetch
         timeframes = ['1D', '1M', '6M', 'YTD', '1Y']
 
