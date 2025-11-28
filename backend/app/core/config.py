@@ -1,8 +1,9 @@
 # app/core/config.py
 
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from typing import Optional
+import warnings
 
 
 class Settings(BaseSettings):
@@ -56,6 +57,10 @@ class Settings(BaseSettings):
     # Frontend URL (for CORS and redirects)
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # Admin Configuration
+    # Comma-separated list of admin email addresses
+    ADMIN_EMAILS: str = ""
+
     @field_validator('DEBUG', mode='before')
     @classmethod
     def parse_debug(cls, v):
@@ -105,6 +110,41 @@ class Settings(BaseSettings):
             if v_lower in ('false', '0', 'no', 'off', ''):
                 return False
         return True  # Default to secure
+
+    @model_validator(mode='after')
+    def validate_production_security(self):
+        """
+        Validate security-critical settings in production environment.
+        Prevents deployment with insecure default values.
+        """
+        default_jwt_secret = "CHANGE-ME-IN-PRODUCTION-use-openssl-rand-hex-32"
+
+        if self.ENVIRONMENT == "production":
+            # Fail fast if JWT secret is still the default in production
+            if self.JWT_SECRET_KEY == default_jwt_secret:
+                raise ValueError(
+                    "SECURITY ERROR: JWT_SECRET_KEY must be changed in production! "
+                    "Generate a secure key with: openssl rand -hex 32"
+                )
+
+            # Warn if COOKIE_SECURE is False in production (should use HTTPS)
+            if not self.COOKIE_SECURE:
+                warnings.warn(
+                    "SECURITY WARNING: COOKIE_SECURE is False in production. "
+                    "Cookies will be sent over HTTP, which is insecure.",
+                    UserWarning
+                )
+
+        elif self.ENVIRONMENT == "staging":
+            # Warn but don't fail for staging
+            if self.JWT_SECRET_KEY == default_jwt_secret:
+                warnings.warn(
+                    "SECURITY WARNING: Using default JWT_SECRET_KEY in staging. "
+                    "Consider using a unique key for staging environment.",
+                    UserWarning
+                )
+
+        return self
 
     # Error Tracking (Sentry)
     SENTRY_DSN: Optional[str] = None  # Set to enable Sentry error tracking

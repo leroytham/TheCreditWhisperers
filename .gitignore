@@ -5,6 +5,12 @@
 .env.test.local
 .env.production.local
 
+# Explicitly ignore .env files with credentials in all directories
+backend/.env
+frontend/.env
+services/**/.env
+**/*.env.local
+
 # Dependencies
 node_modules/
 frontend/node_modules/

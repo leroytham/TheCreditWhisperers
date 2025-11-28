@@ -51,7 +51,7 @@ from app.schemas.notification import (
 )
 
 from app.database import get_notifications_collection, get_price_alerts_collection
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, get_current_admin
 
 logger = logging.getLogger(__name__)
 
@@ -609,21 +609,20 @@ async def delete_price_alert_endpoint(
 @router.get("/alerts/ticker/{ticker}", response_model=PriceAlertListResponse)
 async def get_alerts_for_ticker(
     ticker: str,
-    user_id: str = Depends(get_current_user)
+    admin_id: str = Depends(get_current_admin)
 ):
     """
-    Get all active alerts for a specific ticker (admin endpoint).
-    TODO: Add proper admin authentication.
+    Get all active alerts for a specific ticker (admin only).
+
+    This endpoint returns alerts from ALL users for the specified ticker.
+    Requires admin privileges.
     """
     try:
         alerts = await get_active_alerts_for_ticker(ticker)
 
-        # Filter to only user's alerts (for now)
-        user_alerts = [a for a in alerts if a.user_id == user_id]
-
         alert_responses = [
             PriceAlertResponse(**alert.dict())
-            for alert in user_alerts
+            for alert in alerts
         ]
 
         return PriceAlertListResponse(

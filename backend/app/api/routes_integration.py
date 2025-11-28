@@ -4,13 +4,14 @@ Integration file to update existing routes.py with optimized endpoints.
 This shows how to integrate the optimized portfolio endpoints into your existing application.
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from app.api.portfolio_optimized import (
     get_optimized_portfolio_holdings,
     get_optimized_portfolio_performance
 )
 from app.api.account_optimized import get_optimized_portfolio_account
 from app.middleware.performance_monitor import global_metrics, performance_optimizer
+from app.core.auth import get_current_admin
 
 # Create router for optimized endpoints
 optimized_router = APIRouter(prefix="/api/v2", tags=["Optimized Portfolio"])
@@ -40,35 +41,44 @@ optimized_router.add_api_route(
     description="Fetches comprehensive account details with all metrics"
 )
 
-# Add monitoring endpoints
+# Add monitoring endpoints (admin only)
 @optimized_router.get("/admin/performance/stats")
-async def get_performance_stats(endpoint: str = None):
-    """Get performance statistics for endpoints."""
+async def get_performance_stats(
+    endpoint: str = None,
+    admin_id: str = Depends(get_current_admin)
+):
+    """Get performance statistics for endpoints (admin only)."""
     return await global_metrics.get_endpoint_stats(endpoint)
 
 @optimized_router.get("/admin/performance/slow-queries")
-async def get_slow_queries(limit: int = 10):
-    """Get slowest recent queries."""
+async def get_slow_queries(
+    limit: int = 10,
+    admin_id: str = Depends(get_current_admin)
+):
+    """Get slowest recent queries (admin only)."""
     return await global_metrics.get_slow_queries(limit)
 
 @optimized_router.get("/admin/performance/errors")
-async def get_error_queries(limit: int = 10):
-    """Get recent error queries."""
+async def get_error_queries(
+    limit: int = 10,
+    admin_id: str = Depends(get_current_admin)
+):
+    """Get recent error queries (admin only)."""
     return await global_metrics.get_error_queries(limit)
 
 @optimized_router.get("/admin/performance/health")
-async def get_health_status():
-    """Get overall health status based on metrics."""
+async def get_health_status(admin_id: str = Depends(get_current_admin)):
+    """Get overall health status based on metrics (admin only)."""
     return await global_metrics.get_health_status()
 
 @optimized_router.get("/admin/performance/recommendations")
-async def get_optimization_recommendations():
-    """Get optimization recommendations based on metrics."""
+async def get_optimization_recommendations(admin_id: str = Depends(get_current_admin)):
+    """Get optimization recommendations based on metrics (admin only)."""
     return await performance_optimizer.get_optimization_recommendations()
 
 @optimized_router.get("/admin/performance/bottlenecks")
-async def get_bottleneck_analysis():
-    """Analyze and identify performance bottlenecks."""
+async def get_bottleneck_analysis(admin_id: str = Depends(get_current_admin)):
+    """Analyze and identify performance bottlenecks (admin only)."""
     return await performance_optimizer.get_bottleneck_analysis()
 
 

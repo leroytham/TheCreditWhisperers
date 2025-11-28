@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
-from app.core.auth import get_current_user, create_access_token
+from app.core.auth import get_current_user, create_access_token, is_admin_email
 from app.core.azure_auth import get_msal_client, get_redirect_uri, get_frontend_url, SCOPES
 
 logger = logging.getLogger(__name__)
@@ -113,10 +113,13 @@ async def azure_auth_callback(request: Request):
         username = account.get("preferred_username", "unknown")
         user_id = account.get("oid", username)  # Azure Object ID (stable unique identifier)
 
-        logger.info(f"✓ Azure Login Success: {username} (oid: {user_id})")
+        # Check if user is an admin
+        is_admin = is_admin_email(username)
+
+        logger.info(f"✓ Azure Login Success: {username} (oid: {user_id}, admin: {is_admin})")
 
         # Create JWT token for API authentication
-        access_token = create_access_token(user_id=user_id, email=username)
+        access_token = create_access_token(user_id=user_id, email=username, is_admin=is_admin)
 
         # Create redirect response and set httpOnly cookie
         response = RedirectResponse(

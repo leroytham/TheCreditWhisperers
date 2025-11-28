@@ -13,13 +13,30 @@ from fastapi import HTTPException, Header, Cookie, Request, status
 from app.core.config import settings
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def is_admin_email(email: str) -> bool:
+    """
+    Check if an email address is in the admin list.
+
+    Args:
+        email: The email address to check
+
+    Returns:
+        True if the email is in ADMIN_EMAILS, False otherwise
+    """
+    if not settings.ADMIN_EMAILS:
+        return False
+    admin_emails = [e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
+    return email.lower() in admin_emails
+
+
+def create_access_token(user_id: str, email: str, is_admin: bool = False) -> str:
     """
     Create a JWT access token after successful OAuth authentication.
 
     Args:
         user_id: The user's unique identifier (Azure Object ID or email)
         email: The user's email address
+        is_admin: Whether the user has admin privileges
 
     Returns:
         Encoded JWT token string
@@ -27,6 +44,7 @@ def create_access_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
         "email": email,
+        "is_admin": is_admin,
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRATION_HOURS)
     }
@@ -136,5 +154,61 @@ async def get_current_user_optional(
 
     if not payload:
         return None
+
+    return payload.get("sub")
+
+
+async def get_current_admin(
+    request: Request,
+    access_token: Optional[str] = Cookie(None, alias="access_token"),
+    authorization: Optional[str] = Header(None)
+) -> str:
+    """
+    FastAPI dependency for admin-only endpoints.
+
+    Validates JWT and checks that the user has admin privileges.
+    Raises 403 Forbidden if user is not an admin.
+
+    Args:
+        request: The FastAPI request object
+        access_token: JWT from httpOnly cookie (primary)
+        authorization: Authorization header value (fallback)
+
+    Returns:
+        The user_id (sub claim) from the validated token
+
+    Raises:
+        HTTPException: 401 if not authenticated, 403 if not admin
+    """
+    # First, validate the token and get user_id
+    token = access_token
+
+    # Fallback: Check Authorization header
+    if not token and authorization:
+        if authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    payload = decode_access_token(token)
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    # Check admin status
+    if not payload.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
 
     return payload.get("sub")
