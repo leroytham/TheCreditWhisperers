@@ -326,6 +326,13 @@ def reset_global_state():
     except (ImportError, AttributeError):
         pass
 
+    # Reset repository caches
+    try:
+        from app.repositories.factory import clear_repository_caches
+        clear_repository_caches()
+    except (ImportError, AttributeError):
+        pass
+
 
 @pytest.fixture
 def clean_global_state():
@@ -371,3 +378,179 @@ def _reset_all_globals():
         reset_telemetry()
     except (ImportError, AttributeError):
         pass
+
+    # Reset repository caches
+    try:
+        from app.repositories.factory import clear_repository_caches
+        clear_repository_caches()
+    except (ImportError, AttributeError):
+        pass
+
+
+# =============================================================================
+# REPOSITORY MOCK FIXTURES
+# =============================================================================
+# These fixtures provide mock repositories for testing with clean dependency
+# injection via FastAPI's dependency_overrides.
+
+@pytest.fixture
+def mock_notification_repository():
+    """
+    Create a mock NotificationRepository.
+
+    Usage:
+        def test_notifications(mock_notification_repository, client_with_repos):
+            mock_notification_repository.get_user_notifications.return_value = [...]
+            response = client_with_repos.get("/notifications?user_id=test")
+            assert response.status_code == 200
+    """
+    mock = MagicMock()
+    mock.get_user_notifications = AsyncMock(return_value=[])
+    mock.mark_as_read = AsyncMock(return_value=1)
+    mock.mark_all_as_read = AsyncMock(return_value=5)
+    mock.get_unread_count = AsyncMock(return_value=0)
+    mock.archive_notifications = AsyncMock(return_value=1)
+    mock.delete_old_notifications = AsyncMock(return_value=0)
+    mock.create = AsyncMock(return_value="new_notification_id")
+    mock.get_by_id = AsyncMock(return_value=None)
+    mock.get_all = AsyncMock(return_value=[])
+    mock.update = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def mock_transaction_repository():
+    """Create a mock TransactionRepository."""
+    mock = MagicMock()
+    mock.get_by_account = AsyncMock(return_value=[])
+    mock.get_summary = AsyncMock(return_value={
+        "total_buys": 0,
+        "total_sells": 0,
+        "total_deposits": 0,
+        "total_withdrawals": 0,
+    })
+    mock.create = AsyncMock(return_value="new_transaction_id")
+    mock.get_by_id = AsyncMock(return_value=None)
+    mock.get_all = AsyncMock(return_value=[])
+    mock.update = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def mock_portfolio_repository():
+    """Create a mock PortfolioRepository."""
+    mock = MagicMock()
+    mock.get_by_username = AsyncMock(return_value=[])
+    mock.get_primary_portfolio = AsyncMock(return_value=None)
+    mock.set_primary_portfolio = AsyncMock(return_value=True)
+    mock.create = AsyncMock(return_value="new_portfolio_id")
+    mock.get_by_id = AsyncMock(return_value=None)
+    mock.get_all = AsyncMock(return_value=[])
+    mock.update = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def mock_holding_repository():
+    """Create a mock HoldingRepository."""
+    mock = MagicMock()
+    mock.get_by_account = AsyncMock(return_value=[])
+    mock.get_by_ticker = AsyncMock(return_value=None)
+    mock.update_quantity = AsyncMock(return_value=True)
+    mock.create = AsyncMock(return_value="new_holding_id")
+    mock.get_by_id = AsyncMock(return_value=None)
+    mock.get_all = AsyncMock(return_value=[])
+    mock.update = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def mock_account_repository():
+    """Create a mock AccountRepository."""
+    mock = MagicMock()
+    mock.get_by_username = AsyncMock(return_value=[])
+    mock.update_balance = AsyncMock(return_value=(True, 1000.0))
+    mock.create = AsyncMock(return_value="new_account_id")
+    mock.get_by_id = AsyncMock(return_value=None)
+    mock.get_all = AsyncMock(return_value=[])
+    mock.update = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def mock_price_alert_repository():
+    """Create a mock PriceAlertRepository."""
+    mock = MagicMock()
+    mock.get_active_alerts = AsyncMock(return_value=[])
+    mock.get_alerts_for_ticker = AsyncMock(return_value=[])
+    mock.trigger_alert = AsyncMock(return_value=True)
+    mock.create = AsyncMock(return_value="new_alert_id")
+    mock.get_by_id = AsyncMock(return_value=None)
+    mock.get_all = AsyncMock(return_value=[])
+    mock.update = AsyncMock(return_value=True)
+    mock.delete = AsyncMock(return_value=True)
+    mock.count = AsyncMock(return_value=0)
+    return mock
+
+
+@pytest.fixture
+def client_with_repos(
+    app,
+    mock_notification_repository,
+    mock_transaction_repository,
+    mock_portfolio_repository,
+    mock_holding_repository,
+    mock_account_repository,
+    mock_price_alert_repository,
+):
+    """
+    Test client with all repositories mocked via dependency_overrides.
+
+    This is the recommended fixture for API tests that use the new
+    repository pattern. It provides clean, isolated testing with
+    simple mock setup.
+
+    Usage:
+        def test_notifications(client_with_repos, mock_notification_repository):
+            mock_notification_repository.get_user_notifications.return_value = [
+                {"id": "1", "title": "Test", "message": "Hello"}
+            ]
+            response = client_with_repos.get("/notifications?user_id=test")
+            assert response.status_code == 200
+            mock_notification_repository.get_user_notifications.assert_called_once()
+    """
+    from fastapi.testclient import TestClient
+    from app.repositories.factory import (
+        get_notification_repository,
+        get_transaction_repository,
+        get_portfolio_repository,
+        get_holding_repository,
+        get_account_repository,
+        get_price_alert_repository,
+        clear_repository_caches,
+    )
+
+    # Override all repository dependencies
+    app.dependency_overrides[get_notification_repository] = lambda: mock_notification_repository
+    app.dependency_overrides[get_transaction_repository] = lambda: mock_transaction_repository
+    app.dependency_overrides[get_portfolio_repository] = lambda: mock_portfolio_repository
+    app.dependency_overrides[get_holding_repository] = lambda: mock_holding_repository
+    app.dependency_overrides[get_account_repository] = lambda: mock_account_repository
+    app.dependency_overrides[get_price_alert_repository] = lambda: mock_price_alert_repository
+
+    with TestClient(app) as client:
+        yield client
+
+    # Cleanup
+    app.dependency_overrides.clear()
+    clear_repository_caches()
