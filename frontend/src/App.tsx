@@ -10,6 +10,7 @@ import ToastContainer from "./features/notifications/components/ToastContainer";
 import { usePriceAlerts } from "./features/notifications/hooks/usePriceAlerts";
 import { useNewsNotifications } from "./features/notifications/hooks/useNewsNotifications";
 import { useNotificationSocket } from "./features/notifications/hooks/useNotificationSocket";
+import useAppStore from "./store/useAppStore";
 
 function App() {
   // Activate price alert monitoring (polls every 60 seconds)
@@ -25,12 +26,9 @@ function App() {
   });
 
   // Activate WebSocket for real-time notifications (optional - app works without it)
-  // Use a consistent client ID (in production, use actual user ID from auth)
-  const clientId = `client-${typeof window !== 'undefined' ? window.localStorage.getItem('clientId') || (() => {
-    const id = `user-${Date.now()}`;
-    window.localStorage.setItem('clientId', id);
-    return id;
-  })() : 'default'}`;
+  // Use a consistent client ID from Zustand store (persisted via middleware)
+  const storeClientId = useAppStore(state => state.clientId);
+  const clientId = `client-${storeClientId}`;
 
   const { isConnected, hasError } = useNotificationSocket(clientId, {
     autoConnect: false, // Temporarily disabled - WebSocket hanging on Windows

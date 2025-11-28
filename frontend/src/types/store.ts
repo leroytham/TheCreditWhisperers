@@ -52,6 +52,9 @@ export interface AppStoreState {
   setUser: (user: User | string | null) => void;
   logout: () => void;
 
+  // Client Identification (for WebSocket connections)
+  clientId: string;
+
   // Selected Account
   selectedAccount: SelectedAccount | null;
   selectAccount: (username: string, accountName: string, accountNumber?: string) => void;
@@ -63,6 +66,12 @@ export interface AppStoreState {
   toggleTheme: () => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
+
+  // Portfolio Display Preferences
+  portfolioDisplayMode: 'value' | 'percent';
+  portfolioShowBenchmark: boolean;
+  setPortfolioDisplayMode: (mode: 'value' | 'percent') => void;
+  setPortfolioShowBenchmark: (show: boolean) => void;
 
   // Selected Ticker
   selectedTicker: string | null;

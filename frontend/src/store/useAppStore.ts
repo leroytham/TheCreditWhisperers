@@ -36,6 +36,17 @@ const useAppStore = create<AppStoreState>()(
           selectedAccount: null, // Clear account on logout
         }),
 
+        // ===== CLIENT IDENTIFICATION =====
+        // Used for WebSocket connections - persisted across sessions
+        clientId: `user-${Date.now()}`,
+
+        // ===== PORTFOLIO DISPLAY PREFERENCES =====
+        portfolioDisplayMode: 'value' as const,
+        portfolioShowBenchmark: false,
+
+        setPortfolioDisplayMode: (mode: 'value' | 'percent') => set({ portfolioDisplayMode: mode }),
+        setPortfolioShowBenchmark: (show: boolean) => set({ portfolioShowBenchmark: show }),
+
         // ===== SELECTED ACCOUNT STATE =====
         // Replaces PortfolioContext's selectedAccount
         // Shape: { username, accountName, accountNumber } or null
@@ -350,6 +361,11 @@ const useAppStore = create<AppStoreState>()(
           user: state.user,
           isAuthenticated: state.isAuthenticated,
           selectedAccount: state.selectedAccount,
+          // Client identification (WebSocket)
+          clientId: state.clientId,
+          // Portfolio display preferences
+          portfolioDisplayMode: state.portfolioDisplayMode,
+          portfolioShowBenchmark: state.portfolioShowBenchmark,
           // UI preferences
           theme: state.theme,
           watchlist: state.watchlist,

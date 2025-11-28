@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import PriceChart from '../../../shared/components/PriceChart';
 import TimeRangeSelector from '../../../shared/components/TimeRangeSelector';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
@@ -7,6 +8,7 @@ import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
 import { formatCurrency, formatPercentage, normalizeToPercentageReturn, normalizeToPercentageReturnWithCapitalFlows, normalizeToTWR, normalizeToHybridReturn } from '../../../../utils/formatters';
 import { parseExchangeDate } from '../../../shared/utils/formatters';
 import apiService from '../../../../services/api';
+import useAppStore from '../../../../store/useAppStore';
 
 // Types for price data points
 interface PriceDataPoint {
@@ -110,32 +112,24 @@ const PortfolioPerformanceDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState<number>(0);
 
-  // Display mode: 'value' (Portfolio Value $) or 'percent' (% Return)
-  // Use lazy initializer with SSR guard to prevent crashes in SSR/test environments
-  const [displayMode, setDisplayMode] = useState<'value' | 'percent'>(() =>
-    typeof window !== 'undefined'
-      ? (localStorage.getItem('portfolioDisplayMode') as 'value' | 'percent') || 'value'
-      : 'value'
-  );
-  // Show S&P 500 benchmark overlay (only in percent mode)
-  const [showBenchmark, setShowBenchmark] = useState<boolean>(() =>
-    typeof window !== 'undefined'
-      ? localStorage.getItem('portfolioShowBenchmark') === 'true'
-      : false
+  // Display mode and benchmark preferences from Zustand (persisted via middleware)
+  const {
+    portfolioDisplayMode: displayMode,
+    setPortfolioDisplayMode: setDisplayMode,
+    portfolioShowBenchmark: showBenchmark,
+    setPortfolioShowBenchmark: setShowBenchmark,
+  } = useAppStore(
+    useShallow(state => ({
+      portfolioDisplayMode: state.portfolioDisplayMode,
+      setPortfolioDisplayMode: state.setPortfolioDisplayMode,
+      portfolioShowBenchmark: state.portfolioShowBenchmark,
+      setPortfolioShowBenchmark: state.setPortfolioShowBenchmark,
+    }))
   );
 
   // Use hooks for account selection
   const { selectedAccount } = useSelectedAccount();
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Persist display preferences to localStorage
-  useEffect(() => {
-    localStorage.setItem('portfolioDisplayMode', displayMode);
-  }, [displayMode]);
-
-  useEffect(() => {
-    localStorage.setItem('portfolioShowBenchmark', showBenchmark.toString());
-  }, [showBenchmark]);
 
   // Fetch portfolio performance data with real historical time-series
   useEffect(() => {
