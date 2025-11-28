@@ -115,6 +115,15 @@ export interface AppStoreState {
   lastRefresh: Record<string, number>;
   setLastRefresh: (key: string) => void;
   shouldRefresh: (key: string, maxAge?: number) => boolean;
+
+  // Notifications (for NotificationPage)
+  notifications: any[];
+  markAsRead: (id: string | number) => void;
+  archiveNotification: (id: string | number) => void;
+  markAllAsRead: () => void;
+  clearNotifications: () => void;
+  clearActiveNotifications: () => void;
+  clearArchivedNotifications: () => void;
 }
 
 // =============================================================================

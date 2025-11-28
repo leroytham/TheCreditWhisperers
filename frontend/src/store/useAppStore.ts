@@ -311,6 +311,35 @@ const useAppStore = create<AppStoreState>()(
           const lastTime = lastRefresh[key] || 0;
           return Date.now() - lastTime > maxAge;
         },
+
+        // ===== NOTIFICATIONS (for NotificationPage) =====
+        notifications: [],
+
+        markAsRead: (id) => set((state) => ({
+          notifications: state.notifications.map((n: any) =>
+            n.id === id ? { ...n, isRead: true } : n
+          ),
+        })),
+
+        archiveNotification: (id) => set((state) => ({
+          notifications: state.notifications.map((n: any) =>
+            n.id === id ? { ...n, isArchived: true } : n
+          ),
+        })),
+
+        markAllAsRead: () => set((state) => ({
+          notifications: state.notifications.map((n: any) => ({ ...n, isRead: true })),
+        })),
+
+        clearNotifications: () => set({ notifications: [] }),
+
+        clearActiveNotifications: () => set((state) => ({
+          notifications: state.notifications.filter((n: any) => n.isArchived),
+        })),
+
+        clearArchivedNotifications: () => set((state) => ({
+          notifications: state.notifications.filter((n: any) => !n.isArchived),
+        })),
       }),
       {
         name: 'app-storage', // localStorage key
