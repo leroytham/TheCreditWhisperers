@@ -24,15 +24,14 @@ class SectorService:
     """
     Service to fetch and manage ETF constituent tickers.
     """
-    _instance = None
 
-    def __new__(cls):
-        # Singleton pattern ensures we only ever have one instance
-        if cls._instance is None:
-            logger.info("Creating SectorService instance...")
-            cls._instance = super(SectorService, cls).__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
+    def __init__(self):
+        # Guard against re-initialization (module-level singleton handles uniqueness)
+        if getattr(self, '_initialized', False):
+            return
+        logger.info("Creating SectorService instance...")
+        self._initialize()
+        self._initialized = True
 
     def _initialize(self):
         """Initializes the service."""

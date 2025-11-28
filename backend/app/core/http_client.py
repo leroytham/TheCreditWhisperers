@@ -33,17 +33,15 @@ class HTTPClientManager:
     """
     Centralized HTTP session manager with connection pooling.
 
-    Uses singleton pattern to ensure a single shared session across
+    Module-level singleton ensures a single shared session across
     all services, maximizing connection reuse and minimizing overhead.
     """
 
-    _instance: Optional["HTTPClientManager"] = None
     _session: Optional[aiohttp.ClientSession] = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+    def __init__(self):
+        # No initialization needed - session is lazily created
+        pass
 
     async def get_session(self) -> aiohttp.ClientSession:
         """

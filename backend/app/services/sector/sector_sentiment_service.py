@@ -48,14 +48,13 @@ class SectorSentimentService:
     - Sector-wide aggregation (sentiment, breadth, momentum, volatility, coverage)
     """
 
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            logger.info("Creating SectorSentimentService instance...")
-            cls._instance = super(SectorSentimentService, cls).__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
+    def __init__(self):
+        # Guard against re-initialization (module-level singleton handles uniqueness)
+        if getattr(self, '_initialized', False):
+            return
+        logger.info("Creating SectorSentimentService instance...")
+        self._initialize()
+        self._initialized = True
 
     def _initialize(self):
         """Initialize service configuration."""

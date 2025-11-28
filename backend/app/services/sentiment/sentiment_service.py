@@ -43,14 +43,14 @@ class SentimentService:
     1. Alpha Vantage pre-calculated scores when available (primary)
     2. FinBERT ML model for fallback news sources (secondary)
     """
-    _instance = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            logger.info("Creating SentimentService instance...")
-            cls._instance = super(SentimentService, cls).__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
+    def __init__(self):
+        # Guard against re-initialization (module-level singleton handles uniqueness)
+        if getattr(self, '_initialized', False):
+            return
+        logger.info("Creating SentimentService instance...")
+        self._initialize()
+        self._initialized = True
 
     def _initialize(self):
         """Initialize sentiment service components."""

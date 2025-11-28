@@ -19,14 +19,14 @@ class EarningsService:
     Service to fetch earnings call transcripts from Alpha Vantage API.
     Provides LLM-enriched sentiment signals for each speaker segment.
     """
-    _instance = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            logger.info("Creating EarningsService instance...")
-            cls._instance = super(EarningsService, cls).__new__(cls)
-            cls._instance._initialize()
-        return cls._instance
+    def __init__(self):
+        # Guard against re-initialization (module-level singleton handles uniqueness)
+        if getattr(self, '_initialized', False):
+            return
+        logger.info("Creating EarningsService instance...")
+        self._initialize()
+        self._initialized = True
 
     def _initialize(self):
         """Initialize the service and load API keys."""

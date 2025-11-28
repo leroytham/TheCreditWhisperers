@@ -78,22 +78,14 @@ class PubSubManager:
     """
     Manages Redis Pub/Sub for distributed WebSocket notifications.
 
-    Singleton pattern ensures one subscriber per server instance.
+    Module-level singleton ensures one subscriber per server instance.
     Graceful degradation: continues working in local-only mode if Redis unavailable.
     """
 
-    _instance: Optional["PubSubManager"] = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
     def __init__(self):
-        if self._initialized:
+        # Guard against re-initialization (module-level singleton handles uniqueness)
+        if getattr(self, '_initialized', False):
             return
-
         self._initialized = True
         self._redis_client: Optional[redis.Redis] = None
         self._pubsub: Optional[PubSub] = None
@@ -103,6 +95,18 @@ class PubSubManager:
         self._subscribed_channels: Set[str] = set()
         self._message_handler: Optional[Callable[[str, str, dict], Awaitable[None]]] = None
         self._reconnect_attempts: int = 0
+
+    def _reset_for_testing(self):
+        """Reset instance state for testing. Only use in test code."""
+        self._initialized = False
+        self._redis_client = None
+        self._pubsub = None
+        self._subscriber_task = None
+        self._is_running = False
+        self._instance_id = uuid.uuid4().hex[:8]
+        self._subscribed_channels = set()
+        self._message_handler = None
+        self._reconnect_attempts = 0
 
     @property
     def instance_id(self) -> str:

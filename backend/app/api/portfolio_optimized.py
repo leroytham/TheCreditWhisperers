@@ -22,7 +22,6 @@ from app.services.cache_manager import (
     RequestCache,
     with_smart_cache
 )
-from app.services.sentiment_service import sentiment_service
 from app.core.cache import async_cache_result
 
 logger = logging.getLogger(__name__)

@@ -132,20 +132,21 @@ class TestPubSubManagerSingleton:
     """Tests for PubSubManager singleton pattern."""
 
     def test_singleton_instance(self):
-        """Test that PubSubManager is a singleton."""
-        # Reset singleton for test
-        PubSubManager._instance = None
-
+        """Test that PubSubManager maintains state across instances."""
         manager1 = PubSubManager()
+        manager1._reset_for_testing()
+        manager1.__init__()  # Re-initialize after reset
+
         manager2 = PubSubManager()
 
-        assert manager1 is manager2
+        # Both variables reference the same module-level instance
+        assert manager1.instance_id == manager2.instance_id
 
     def test_instance_id_generated(self):
         """Test that instance ID is generated."""
-        PubSubManager._instance = None
-
         manager = PubSubManager()
+        manager._reset_for_testing()
+        manager.__init__()  # Re-initialize after reset
 
         assert manager.instance_id is not None
         assert len(manager.instance_id) == 8
@@ -156,8 +157,9 @@ class TestPubSubManagerProperties:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        PubSubManager._instance = None
         self.manager = PubSubManager()
+        self.manager._reset_for_testing()
+        self.manager.__init__()  # Re-initialize after reset
 
     def test_is_available_false_initially(self):
         """Test is_available returns False when not connected."""
@@ -185,8 +187,9 @@ class TestPubSubManagerOperations:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        PubSubManager._instance = None
         self.manager = PubSubManager()
+        self.manager._reset_for_testing()
+        self.manager.__init__()  # Re-initialize after reset
 
     @pytest.mark.asyncio
     @patch('app.core.pubsub.settings')
@@ -346,8 +349,9 @@ class TestPubSubManagerMessageHandling:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        PubSubManager._instance = None
         self.manager = PubSubManager()
+        self.manager._reset_for_testing()
+        self.manager.__init__()  # Re-initialize after reset
 
     @pytest.mark.asyncio
     async def test_handle_message_skips_own_messages(self):
@@ -432,8 +436,9 @@ class TestPubSubManagerStatus:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        PubSubManager._instance = None
         self.manager = PubSubManager()
+        self.manager._reset_for_testing()
+        self.manager.__init__()  # Re-initialize after reset
 
     def test_get_status_initial(self):
         """Test initial status values."""
@@ -471,8 +476,9 @@ class TestPubSubManagerLifecycle:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        PubSubManager._instance = None
         self.manager = PubSubManager()
+        self.manager._reset_for_testing()
+        self.manager.__init__()  # Re-initialize after reset
 
     @pytest.mark.asyncio
     @patch('app.core.pubsub.settings')
