@@ -7,9 +7,13 @@ import certifi
 import asyncio
 import uuid
 import secrets
+import logging
 
 import msal
 import os
+
+logger = logging.getLogger(__name__)
+
 from fastapi.responses import RedirectResponse, JSONResponse
 
 # Import the modular services
@@ -1546,8 +1550,8 @@ def search_ticker(q: str):
                             "industry": info.get("industry", "")
                         }]
                     }
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch stock quote for {q}: {e}")
 
             return {"quotes": []}
 

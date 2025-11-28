@@ -2,11 +2,14 @@
 
 import yfinance as yf
 import pandas as pd
+import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import asyncio
 
 from app.core.cache import async_cache_result
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioTimeseriesService:
@@ -215,8 +218,9 @@ class PortfolioTimeseriesService:
                             # Only count this lot if it was purchased on or before this date
                             if date >= lot_purchase_date:
                                 total_quantity += lot_quantity
-                        except:
+                        except (ValueError, TypeError) as e:
                             # If parse fails, include the lot (conservative approach)
+                            logger.debug(f"Date parsing failed for lot, using fallback: {e}")
                             total_quantity += lot_quantity
                     else:
                         # If no purchase date, include the lot
@@ -233,7 +237,8 @@ class PortfolioTimeseriesService:
                         # Only count position if purchased on or before this date
                         if date >= purchase_date:
                             total_quantity = quantity
-                    except:
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"Date parsing failed for holding, using fallback: {e}")
                         total_quantity = quantity
                 else:
                     total_quantity = quantity
@@ -328,8 +333,9 @@ class PortfolioTimeseriesService:
                                 "current_price": current_price,
                                 "purchase_price": lot_cost_basis
                             })
-                        except:
+                        except (ValueError, TypeError) as e:
                             # If date parsing fails, include the lot conservatively
+                            logger.debug(f"Date parsing failed for lot breakdown, using conservative fallback: {e}")
                             lot_breakdown.append({
                                 "symbol": symbol,
                                 "lot_id": lot.get("lot_id", ""),
@@ -354,8 +360,9 @@ class PortfolioTimeseriesService:
                         try:
                             purchase_date = pd.to_datetime(purchase_date_str).to_pydatetime()
                             is_pre_period = purchase_date < period_start_date
-                        except:
-                            pass
+                        except (ValueError, TypeError) as e:
+                            logger.debug(f"Date parsing failed for aggregate holding: {e}")
+                            # Keep is_pre_period = True as conservative default
 
                     start_value = quantity * start_price if is_pre_period else quantity * purchase_price
 

@@ -338,8 +338,10 @@ def add_trace_attributes(**attributes):
         span = trace.get_current_span()
         for key, value in attributes.items():
             span.set_attribute(key, value)
-    except (ImportError, Exception):
-        pass  # Silently ignore if tracing not available
+    except ImportError:
+        pass  # OpenTelemetry not installed - expected in dev
+    except Exception as e:
+        logger.debug(f"Failed to add trace attributes: {e}")
 
 
 def add_trace_event(name: str, attributes: dict = None):
@@ -353,8 +355,10 @@ def add_trace_event(name: str, attributes: dict = None):
         from opentelemetry import trace
         span = trace.get_current_span()
         span.add_event(name, attributes=attributes)
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pass  # OpenTelemetry not installed - expected in dev
+    except Exception as e:
+        logger.debug(f"Failed to add trace event '{name}': {e}")
 
 
 def get_trace_id() -> Optional[str]:
@@ -369,8 +373,10 @@ def get_trace_id() -> Optional[str]:
         span = trace.get_current_span()
         if span and span.get_span_context().is_valid:
             return format(span.get_span_context().trace_id, "032x")
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pass  # OpenTelemetry not installed - expected in dev
+    except Exception as e:
+        logger.debug(f"Failed to get trace ID: {e}")
     return None
 
 
@@ -386,6 +392,8 @@ def get_span_id() -> Optional[str]:
         span = trace.get_current_span()
         if span and span.get_span_context().is_valid:
             return format(span.get_span_context().span_id, "016x")
-    except (ImportError, Exception):
-        pass
+    except ImportError:
+        pass  # OpenTelemetry not installed - expected in dev
+    except Exception as e:
+        logger.debug(f"Failed to get span ID: {e}")
     return None

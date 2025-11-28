@@ -101,7 +101,8 @@ class RedisCache:
         # First time check - trigger connection attempt
         try:
             return self.client is not None and self._is_available
-        except:
+        except Exception as e:
+            print(f"[WARNING] Redis availability check failed: {e}")
             return False
 
     def get(self, key: str) -> Optional[Any]:
@@ -358,8 +359,8 @@ def cache_with_tags(ttl: int = 300, tags: list[str] = None):
                     try:
                         redis_cache.client.sadd(tag_key, cache_key)
                         redis_cache.client.expire(tag_key, ttl)
-                    except:
-                        pass
+                    except Exception as e:
+                        print(f"[WARNING] Failed to set cache tag '{tag}' for key '{cache_key}': {e}")
 
             return result
         return wrapper

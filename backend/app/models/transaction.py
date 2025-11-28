@@ -8,8 +8,12 @@ accurate Time-Weighted Return (TWR) calculations that account for cash flows.
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timezone
 from enum import Enum
+import logging
 from pydantic import BaseModel, Field, field_validator, model_validator
 from bson import ObjectId
+from bson.errors import InvalidId
+
+logger = logging.getLogger(__name__)
 
 
 class TransactionType(str, Enum):
@@ -237,7 +241,11 @@ async def get_transaction_by_id(
     try:
         doc = await collection.find_one({"_id": ObjectId(transaction_id)})
         return TransactionModel.from_dict(doc) if doc else None
-    except:
+    except InvalidId:
+        logger.debug(f"Invalid transaction ID format: {transaction_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching transaction {transaction_id}: {e}")
         return None
 
 
@@ -352,7 +360,11 @@ async def delete_transaction(
             "username": username  # Ensure user owns this transaction
         })
         return result.deleted_count > 0
-    except:
+    except InvalidId:
+        logger.debug(f"Invalid transaction ID format for delete: {transaction_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Error deleting transaction {transaction_id}: {e}")
         return False
 
 
@@ -378,7 +390,11 @@ async def update_transaction(
             {"$set": updates}
         )
         return result.modified_count > 0
-    except:
+    except InvalidId:
+        logger.debug(f"Invalid transaction ID format for update: {transaction_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Error updating transaction {transaction_id}: {e}")
         return False
 
 

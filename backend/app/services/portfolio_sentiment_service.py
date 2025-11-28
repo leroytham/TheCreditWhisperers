@@ -1,12 +1,16 @@
 # app/services/portfolio_sentiment_service.py
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
 import pandas as pd
 
 from app.services.sentiment_service import sentiment_service
+
+logger = logging.getLogger(__name__)
+
 from app.services.news_service import news_service_instance
 from app.services.stock_data_service import stock_data_service
 from app.core.cache import async_cache_result
@@ -594,7 +598,11 @@ class PortfolioSentimentService:
                     from app.services.sector_service import sector_service_instance
                     sector_service_instance.resolve_sector_key(symbol)
                     symbol_data["is_etf"] = True
-                except:
+                except KeyError:
+                    # Symbol not found in sector mapping - expected for non-ETF symbols
+                    symbol_data["is_etf"] = False
+                except Exception as e:
+                    logger.warning(f"Error checking if {symbol} is ETF: {e}")
                     symbol_data["is_etf"] = False
 
             # Fetch rolling sentiment for each holding
@@ -889,7 +897,11 @@ class PortfolioSentimentService:
             try:
                 sector_key = sector_service_instance.resolve_sector_key(ticker)
                 is_sector = True
-            except:
+            except KeyError:
+                # Not a recognized sector/ETF - expected case
+                is_sector = False
+            except Exception as e:
+                logger.warning(f"Error resolving sector key for {ticker}: {e}")
                 is_sector = False
 
             # Configure timeframe parameters

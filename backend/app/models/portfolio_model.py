@@ -7,8 +7,12 @@ the existing domain models in portfolio.py.
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+import logging
 from pydantic import BaseModel, Field
 from bson import ObjectId
+from bson.errors import InvalidId
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioModel(BaseModel):
@@ -153,7 +157,11 @@ async def get_portfolio_by_id(db: AsyncIOMotorDatabase, portfolio_id: str) -> Op
     try:
         doc = await collection.find_one({"_id": ObjectId(portfolio_id)})
         return PortfolioModel.from_dict(doc) if doc else None
-    except:
+    except InvalidId:
+        logger.debug(f"Invalid portfolio ID format: {portfolio_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching portfolio {portfolio_id}: {e}")
         return None
 
 
