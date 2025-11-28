@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import LoginCard from "./components/auth/LoginPage";
+import ProtectedRoute from "./components/ProtectedRoute";
 import PortfolioPage from "./pages/PortfolioPage";
 import EntityPage from "./pages/EntityPage";
 import SectorPage from "./pages/SectorPage";
@@ -59,10 +60,10 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<LoginCard />} />
-        <Route path="/portfolio" element={<PortfolioPage />} />
-        <Route path="/entity" element={<EntityPage />} />
-        <Route path="/sector_page" element={<SectorPage />} />
-        <Route path="/notifications" element={<NotificationPageEnhanced />} />
+        <Route path="/portfolio" element={<ProtectedRoute><PortfolioPage /></ProtectedRoute>} />
+        <Route path="/entity" element={<ProtectedRoute><EntityPage /></ProtectedRoute>} />
+        <Route path="/sector_page" element={<ProtectedRoute><SectorPage /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><NotificationPageEnhanced /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
       {/* Global Toast Notification Container */}
