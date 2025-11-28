@@ -20,7 +20,7 @@ from .api.news_routes import router as news_router
 from .api.transaction_routes import router as transaction_router
 from .api.utility_routes import router as utility_router
 from .api.websocket import websocket_endpoint, manager as ws_manager
-from .database import create_indexes
+from .database import create_indexes_async
 from .core.config import settings
 from .core.http_client import http_client
 import logging
@@ -127,9 +127,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("MongoDB connection failed: %s", e)
         logger.error("Please check your MONGO_URI environment variable and network connectivity")
 
-    # Create MongoDB indexes for notifications
+    # Create MongoDB indexes for notifications (async)
     try:
-        create_indexes()
+        await create_indexes_async()
         logger.info("Database indexes created successfully")
     except Exception as e:
         logger.error("Failed to create database indexes: %s", e)

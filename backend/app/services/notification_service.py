@@ -463,12 +463,13 @@ class NotificationService:
             priority: Priority level
         """
         try:
-            from ..database import get_portfolios_collection
+            from ..database import get_portfolios_collection_async
             from ..models.notification import create_notification, NotificationModel
+            from bson import ObjectId
 
             # Get the portfolio
-            portfolios = get_portfolios_collection()
-            portfolio = portfolios.find_one({"_id": portfolio_id})
+            portfolios = get_portfolios_collection_async()
+            portfolio = await portfolios.find_one({"_id": ObjectId(portfolio_id) if isinstance(portfolio_id, str) else portfolio_id})
 
             if not portfolio:
                 logger.error(f"Portfolio {portfolio_id} not found")

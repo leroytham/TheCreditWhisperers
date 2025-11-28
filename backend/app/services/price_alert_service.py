@@ -66,9 +66,9 @@ class PriceAlertService:
         # If portfolio_id is not provided and not global, try to get user's primary portfolio
         if not portfolio_id and not is_global:
             try:
-                from ..database import get_portfolios_collection
-                portfolios = get_portfolios_collection()
-                primary = portfolios.find_one({
+                from ..database import get_portfolios_collection_async
+                portfolios = get_portfolios_collection_async()
+                primary = await portfolios.find_one({
                     "username": user_id,  # Using username as user_id for now
                     "is_primary": True,
                     "is_active": True
@@ -134,7 +134,7 @@ class PriceAlertService:
         Get set of all tickers being monitored across all users.
         Uses caching to avoid excessive database queries.
         """
-        from ..database import get_price_alerts_collection
+        from ..database import get_price_alerts_collection_async
         from datetime import timedelta
 
         # Check if cache is still valid (5 minutes)
@@ -145,14 +145,14 @@ class PriceAlertService:
             return self._ticker_cache
 
         # Query database for all unique tickers with active alerts
-        collection = get_price_alerts_collection()
+        collection = get_price_alerts_collection_async()
         pipeline = [
             {"$match": {"is_active": True, "triggered": False}},
             {"$group": {"_id": "$ticker"}},
         ]
 
         tickers = set()
-        for doc in collection.aggregate(pipeline):
+        async for doc in collection.aggregate(pipeline):
             tickers.add(doc["_id"])
 
         # Update cache
@@ -411,9 +411,10 @@ class PriceAlertService:
         )
 
         # Get target portfolio info
-        from ..database import get_portfolios_collection
-        portfolios = get_portfolios_collection()
-        target_portfolio = portfolios.find_one({"_id": to_portfolio_id})
+        from ..database import get_portfolios_collection_async
+        from bson import ObjectId
+        portfolios = get_portfolios_collection_async()
+        target_portfolio = await portfolios.find_one({"_id": ObjectId(to_portfolio_id)})
 
         if not target_portfolio:
             logger.error(f"Target portfolio {to_portfolio_id} not found")

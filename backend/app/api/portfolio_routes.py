@@ -22,7 +22,7 @@ from app.models.portfolio_model import (
     set_primary_portfolio
 )
 
-from app.database import get_portfolios_collection
+from app.database import get_motor_database
 from app.schemas.portfolio import (
     PortfolioResponse,
     PortfolioListResponse,
@@ -53,7 +53,7 @@ async def list_user_portfolios(
     try:
         # For now, using username as user_id
         portfolios = await get_user_portfolios(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             username=user_id,
             include_inactive=include_inactive
         )
@@ -93,7 +93,7 @@ async def get_primary_portfolio(user_id: str = Depends(get_current_user)):
     """
     try:
         portfolio = await get_user_primary_portfolio(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             username=user_id
         )
 
@@ -134,7 +134,7 @@ async def get_portfolio_details(
             raise HTTPException(status_code=400, detail="Invalid portfolio ID format")
 
         portfolio = await get_portfolio_by_id(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             portfolio_id=portfolio_id
         )
 
@@ -181,7 +181,7 @@ async def get_portfolio_holdings(
 
         # Get portfolio to verify ownership
         portfolio = await get_portfolio_by_id(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             portfolio_id=portfolio_id
         )
 
@@ -232,7 +232,7 @@ async def set_portfolio_as_primary(
 
         # Verify portfolio ownership
         portfolio = await get_portfolio_by_id(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             portfolio_id=portfolio_id
         )
 
@@ -244,7 +244,7 @@ async def set_portfolio_as_primary(
 
         # Set as primary
         success = await set_primary_portfolio(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             username=user_id,
             portfolio_id=portfolio_id
         )
@@ -280,7 +280,7 @@ async def refresh_portfolio_cache(
 
         # Verify portfolio ownership
         portfolio = await get_portfolio_by_id(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             portfolio_id=portfolio_id
         )
 
@@ -299,7 +299,7 @@ async def refresh_portfolio_cache(
 
         # Update cache
         success = await update_portfolio_holdings_cache(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             portfolio_id=portfolio_id,
             holdings=holdings
         )
@@ -331,7 +331,7 @@ async def get_portfolio_by_account_name(
     """
     try:
         portfolio = await get_portfolio_by_account(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             username=user_id,
             account_name=account_name
         )
@@ -381,7 +381,7 @@ async def create_new_portfolio(
 
         # Save to database
         portfolio_id = await create_portfolio(
-            db=get_portfolios_collection().database,
+            db=get_motor_database(),
             portfolio=portfolio
         )
 

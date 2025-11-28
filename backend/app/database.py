@@ -173,6 +173,27 @@ def get_transactions_collection_async() -> AsyncIOMotorCollection:
     return get_motor_collection("Transactions")
 
 
+# Async collection helpers for notifications/portfolios
+def get_notifications_collection_async() -> AsyncIOMotorCollection:
+    """Get notifications collection (async)."""
+    return get_motor_collection("notifications")
+
+
+def get_notification_preferences_collection_async() -> AsyncIOMotorCollection:
+    """Get notification preferences collection (async)."""
+    return get_motor_collection("notification_preferences")
+
+
+def get_price_alerts_collection_async() -> AsyncIOMotorCollection:
+    """Get price alerts collection (async)."""
+    return get_motor_collection("price_alerts")
+
+
+def get_portfolios_collection_async() -> AsyncIOMotorCollection:
+    """Get portfolios collection (async)."""
+    return get_motor_collection("portfolios")
+
+
 async def close_motor_connection():
     """Close async Motor connection (thread-safe cleanup)."""
     global _motor_client, _motor_database
@@ -241,3 +262,62 @@ def create_indexes():
     portfolios.create_index("tickers")  # For queries by ticker
 
     logger.info("Created database indexes for notifications and portfolios")
+
+
+async def create_indexes_async():
+    """
+    Create database indexes asynchronously.
+
+    This is the preferred method for creating indexes in async contexts.
+    Call during application startup in the lifespan context manager.
+    """
+    db = get_motor_database()
+
+    # Notifications indexes
+    notifications = db["notifications"]
+    await notifications.create_index([("user_id", 1), ("is_read", 1), ("is_archived", 1)])
+    await notifications.create_index([("user_id", 1), ("created_at", -1)])
+    await notifications.create_index([("created_at", -1)])
+    await notifications.create_index([("user_id", 1), ("category", 1)])
+
+    # Portfolio-aware indexes
+    await notifications.create_index([("user_id", 1), ("portfolio_id", 1), ("created_at", -1)])
+    await notifications.create_index([("portfolio_id", 1), ("is_read", 1), ("created_at", -1)])
+    await notifications.create_index([("user_id", 1), ("is_global", 1), ("created_at", -1)])
+    await notifications.create_index([("portfolio_id", 1), ("category", 1)])
+    await notifications.create_index("affected_tickers")
+
+    # TTL index for automatic expiration
+    await notifications.create_index(
+        "expires_at",
+        expireAfterSeconds=0,
+        sparse=True
+    )
+
+    # Notification preferences indexes
+    preferences = db["notification_preferences"]
+    await preferences.create_index("user_id", unique=True)
+    await preferences.create_index("enabled_portfolios")
+
+    # Price alerts indexes
+    alerts = db["price_alerts"]
+    await alerts.create_index([("user_id", 1), ("is_active", 1)])
+    await alerts.create_index([("ticker", 1), ("is_active", 1)])
+    await alerts.create_index([("user_id", 1), ("ticker", 1), ("is_active", 1)])
+
+    # Portfolio-aware price alert indexes
+    await alerts.create_index([("portfolio_id", 1), ("is_active", 1)])
+    await alerts.create_index([("user_id", 1), ("portfolio_id", 1), ("is_active", 1)])
+    await alerts.create_index([("portfolio_id", 1), ("ticker", 1), ("is_active", 1)])
+    await alerts.create_index([("is_global", 1), ("is_active", 1)])
+
+    # Portfolio collection indexes
+    portfolios = db["portfolios"]
+    await portfolios.create_index("username")
+    await portfolios.create_index([("username", 1), ("account_name", 1)], unique=True)
+    await portfolios.create_index([("username", 1), ("is_primary", -1)])
+    await portfolios.create_index([("username", 1), ("is_active", 1)])
+    await portfolios.create_index("created_at")
+    await portfolios.create_index("tickers")
+
+    logger.info("Created database indexes asynchronously")
