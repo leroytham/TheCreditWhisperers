@@ -2,8 +2,6 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks, Response, Depends
 import yfinance as yf
 from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorClient
-import certifi
 import asyncio
 import uuid
 import secrets
@@ -31,6 +29,12 @@ from app.core.config import settings
 from app.core.http_client import http_client
 from app.core.circuit_breakers import get_all_status, reset_circuit_breaker
 from app.core.auth import get_current_user
+from app.database import (
+    get_motor_client,
+    get_motor_database,
+    get_accounts_collection_async,
+    get_holdings_collection_async,
+)
 
 # Import scoring configuration
 from app.config.scoring import get_score_definitions
@@ -44,31 +48,6 @@ if not CLIENT_ID or CLIENT_ID == "<your-client-id>":
     print("WARNING: Azure CLIENT_ID (APPLICATION_ID) is not configured. Azure authentication will not work.")
 if not CLIENT_SECRET:
     print("WARNING: Azure CLIENT_SECRET is not configured. Azure authentication will not work.")
-
-
-mongo_uri = os.getenv("MONGO_URI")
-# Configure Motor client with Azure-optimized settings
-client = AsyncIOMotorClient(
-    mongo_uri,
-    tls=True,
-    tlsCAFile=certifi.where(),
-    # Connection pool settings
-    maxPoolSize=50,              # Maximum number of connections in the pool
-    minPoolSize=10,              # Minimum number of connections to maintain
-    maxIdleTimeMS=45000,         # Close idle connections after 45 seconds
-    # Timeout settings
-    serverSelectionTimeoutMS=5000,  # 5 second timeout for server selection
-    connectTimeoutMS=10000,         # 10 second timeout for initial connection
-    socketTimeoutMS=30000,          # 30 second timeout for socket operations
-    # Retry and keep-alive settings
-    retryWrites=True,            # Automatically retry write operations
-    retryReads=True,             # Automatically retry read operations
-    heartbeatFrequencyMS=10000,  # Send heartbeat every 10 seconds to keep connection alive
-    appname="FYP-Backend"        # Application name for MongoDB logs
-)
-db = client["FYP"]
-accounts_col = db["Account_Details"]
-holdings_col = db["Stock_Holding"]
 
 
 router = APIRouter()
@@ -92,7 +71,7 @@ async def health_check():
     try:
         # Ping MongoDB with 3 second timeout
         await asyncio.wait_for(
-            client.admin.command('ping'),
+            get_motor_client().admin.command('ping'),
             timeout=3.0
         )
         health_status["checks"]["mongodb"] = {
@@ -1910,7 +1889,7 @@ async def save_portfolio(data: dict):
         account_no = account["accountNumber"].strip()
 
         # 1️. Check if account already exists
-        existing_account = await accounts_col.find_one({
+        existing_account = await get_accounts_collection_async().find_one({
             "username": username,
             "account_no": account_no
         })
@@ -1954,7 +1933,7 @@ async def save_portfolio(data: dict):
             "open_date": account["openDate"],
             "created_at": datetime.utcnow()
         }
-        await accounts_col.insert_one(account_record)
+        await get_accounts_collection_async().insert_one(account_record)
 
         # 5️. Insert holdings or merge if exists
         holdings_added, holdings_updated = 0, 0
@@ -1965,7 +1944,7 @@ async def save_portfolio(data: dict):
             purchase_price = float(h["purchasePrice"])
             purchase_date = h["purchaseDate"]
 
-            existing_holding = await holdings_col.find_one({
+            existing_holding = await get_holdings_collection_async().find_one({
                 "username": username,
                 "client_account_name": account_name,
                 "account_no": account_no,
@@ -1995,7 +1974,7 @@ async def save_portfolio(data: dict):
                 existing_purchase_date = existing_holding.get("purchase_date", purchase_date)
                 earliest_date = min(existing_purchase_date, purchase_date) if existing_purchase_date else purchase_date
 
-                await holdings_col.update_one(
+                await get_holdings_collection_async().update_one(
                     {
                         "username": username,
                         "client_account_name": account_name,
@@ -2036,7 +2015,7 @@ async def save_portfolio(data: dict):
                     "lots": [first_lot],  # Initialize lots array
                     "created_at": datetime.utcnow()
                 }
-                await holdings_col.insert_one(holding_record)
+                await get_holdings_collection_async().insert_one(holding_record)
                 holdings_added += 1
 
         return {
@@ -2063,7 +2042,7 @@ async def get_accounts_for_user(username: str):
     Returns client_account_name and account_no.
     """
     try:
-        cursor = accounts_col.find(
+        cursor = get_accounts_collection_async().find(
             {"username": username},
             {"_id": 0, "client_account_name": 1, "account_no": 1}
         )
@@ -2086,7 +2065,7 @@ async def get_portfolio_details(username: str, account_name: str):
     """
     try:
         # Fetch account details
-        account = await accounts_col.find_one(
+        account = await get_accounts_collection_async().find_one(
             {"username": username, "client_account_name": account_name},
             {"_id": 0}
         )
@@ -2094,7 +2073,7 @@ async def get_portfolio_details(username: str, account_name: str):
             raise HTTPException(status_code=404, detail="Account not found")
 
         # Fetch holdings
-        cursor = holdings_col.find(
+        cursor = get_holdings_collection_async().find(
             {"username": username, "client_account_name": account_name},
             {"_id": 0}
         )
@@ -2143,7 +2122,7 @@ async def update_portfolio(data: dict):
             )
 
         # Step 2: Update the account details
-        result = await accounts_col.update_one(
+        result = await get_accounts_collection_async().update_one(
             {"username": username, "client_account_name": account["accountName"]},
             {"$set": {
                 "account_no": account.get("accountNumber"),
@@ -2156,7 +2135,7 @@ async def update_portfolio(data: dict):
             raise HTTPException(status_code=404, detail="Account not found")
 
         # Step 3: Clear old holdings for this account
-        await holdings_col.delete_many({
+        await get_holdings_collection_async().delete_many({
             "username": username,
             "client_account_name": account["accountName"]
         })
@@ -2175,7 +2154,7 @@ async def update_portfolio(data: dict):
             })
 
         if new_holdings:
-            await holdings_col.insert_many(new_holdings)
+            await get_holdings_collection_async().insert_many(new_holdings)
 
         return {"message": "Portfolio updated successfully!"}
 
@@ -2206,7 +2185,7 @@ async def get_portfolio_holdings(username: str, account_name: str):
     try:
         # Query MongoDB for holdings
         logger.debug(f"[PORTFOLIO-HOLDINGS-DB] Querying holdings: username={username}, account={account_name}")
-        holdings_cursor = holdings_col.find({
+        holdings_cursor = get_holdings_collection_async().find({
             "username": username,
             "client_account_name": account_name
         })
@@ -2445,7 +2424,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
 
         # Fetch ALL current holdings
         logger.debug(f"[PORTFOLIO-PERF-DB] Querying holdings: username={username}, account={account_name}")
-        holdings_cursor = holdings_col.find({
+        holdings_cursor = get_holdings_collection_async().find({
             "username": username,
             "client_account_name": account_name
         })
@@ -2679,7 +2658,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
         # Timeframe is configurable via query parameter (1D, 1W, 1M, 6M, YTD, 1Y, 3Y, 5Y)
         try:
             # Fetch account info to get open_date
-            account_info = await accounts_col.find_one({
+            account_info = await get_accounts_collection_async().find_one({
                 "username": username,
                 "client_account_name": account_name
             })
@@ -2691,7 +2670,7 @@ async def get_portfolio_performance(username: str, account_name: str, timeframe:
                 holdings_list=holdings_list,
                 timeframe=timeframe,
                 open_date=open_date,
-                db=db,  # Pass db for capital flow tracking
+                db=get_motor_database(),  # Pass db for capital flow tracking
                 username=username,
                 account_name=account_name
             )
@@ -2847,7 +2826,7 @@ async def get_portfolio_news(username: str, account_name: str):
         print(f"Username: {username}, Account: {account_name}")
 
         # Fetch holdings
-        cursor = holdings_col.find({
+        cursor = get_holdings_collection_async().find({
             "username": username,
             "client_account_name": account_name
         })
@@ -3013,7 +2992,7 @@ async def get_portfolio_sentiment(username: str, account_name: str):
         print(f"Username: {username}, Account: {account_name}")
 
         # Fetch holdings with sector data
-        cursor = holdings_col.find({
+        cursor = get_holdings_collection_async().find({
             "username": username,
             "client_account_name": account_name
         })
@@ -3180,7 +3159,7 @@ async def get_portfolio_daily_sentiment(
         print(f"Timeframe: {timeframe}, Days: {days}")
 
         # Fetch holdings
-        cursor = holdings_col.find({
+        cursor = get_holdings_collection_async().find({
             "username": username,
             "client_account_name": account_name
         })
@@ -3270,7 +3249,7 @@ async def get_portfolio_rolling_sentiment(
         print(f"Timeframe: {timeframe}")
 
         # Fetch holdings
-        cursor = holdings_col.find({
+        cursor = get_holdings_collection_async().find({
             "username": username,
             "client_account_name": account_name
         })
@@ -3456,7 +3435,7 @@ async def create_transaction_endpoint(username: str, transaction_data: dict):
         )
 
         # Create transaction
-        transaction_id = await create_transaction(db, username, transaction_request)
+        transaction_id = await create_transaction(get_motor_database(), username, transaction_request)
 
         return {
             "message": "Transaction created successfully",
@@ -3515,7 +3494,7 @@ async def get_transactions_endpoint(
 
         # Fetch transactions
         transactions = await get_transactions(
-            db,
+            get_motor_database(),
             username,
             account_name,
             start_date=start_date_obj,
@@ -3567,7 +3546,7 @@ async def get_transaction_stats_endpoint(
         end_date_obj = date.fromisoformat(end_date) if end_date else None
 
         stats = await get_transaction_stats(
-            db,
+            get_motor_database(),
             username,
             account_name,
             start_date=start_date_obj,
@@ -3591,7 +3570,7 @@ async def delete_transaction_endpoint(username: str, transaction_id: str):
     try:
         from app.models.transaction import delete_transaction
 
-        success = await delete_transaction(db, transaction_id, username)
+        success = await delete_transaction(get_motor_database(), transaction_id, username)
 
         if not success:
             raise HTTPException(status_code=404, detail="Transaction not found or you don't have permission")
@@ -3666,7 +3645,7 @@ async def get_portfolio_performance_twr(
             start_date = end_date - timedelta(days=365 * 5)
         elif timeframe == "ITD":
             # Get portfolio inception date
-            account = await accounts_col.find_one({
+            account = await get_accounts_collection_async().find_one({
                 "username": username,
                 "client_account_name": account_name
             })
