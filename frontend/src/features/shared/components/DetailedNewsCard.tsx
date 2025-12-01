@@ -4,7 +4,11 @@ import React, { useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronUp, TrendingUp, BarChart3 } from 'lucide-react';
 import SentimentBadge from './SentimentBadge';
 import { formatRelativeTime } from '../utils/dateFormatters';
-import { SENTIMENT_THRESHOLDS } from '../../../config/constants';
+import {
+  createSentimentScoreOrNeutral,
+  getSentimentColorClasses,
+  formatSentimentScore,
+} from '../../../types/valueObjects';
 
 // Type definitions
 interface TopicItem {
@@ -76,14 +80,11 @@ const DetailedNewsCard: React.FC<DetailedNewsCardProps> = ({
     });
   };
 
-  const getSentimentColor = (score: number | string): string => {
+  // Helper to get sentiment color classes from a score (handles string | number)
+  const getSentimentClasses = (score: number | string): string => {
     const numScore = typeof score === 'string' ? parseFloat(score) : score;
     if (isNaN(numScore)) return 'text-gray-600 bg-gray-50 border-gray-200';
-    if (numScore >= SENTIMENT_THRESHOLDS.BULLISH) return 'text-green-600 bg-green-50 border-green-200';
-    if (numScore >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'text-lime-600 bg-lime-50 border-lime-200';
-    if (numScore > SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'text-gray-600 bg-gray-50 border-gray-200';
-    if (numScore > SENTIMENT_THRESHOLDS.BEARISH) return 'text-orange-600 bg-orange-50 border-orange-200';
-    return 'text-red-600 bg-red-50 border-red-200';
+    return getSentimentColorClasses(numScore).combined;
   };
 
   const getRelevanceColor = (score: number | string): string => {
@@ -158,12 +159,15 @@ const DetailedNewsCard: React.FC<DetailedNewsCardProps> = ({
 
             {/* Overall Sentiment & Topics */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              {overall_sentiment_score !== undefined && (
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getSentimentColor(overall_sentiment_score)}`}>
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Overall: {overall_sentiment_label} ({overall_sentiment_score.toFixed(3)})
-                </span>
-              )}
+              {overall_sentiment_score !== undefined && (() => {
+                const sentiment = createSentimentScoreOrNeutral(overall_sentiment_score);
+                return (
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getSentimentColorClasses(sentiment).combined}`}>
+                    <TrendingUp className="w-3 h-3 mr-1" />
+                    Overall: {sentiment.label} ({sentiment.value.toFixed(3)})
+                  </span>
+                );
+              })()}
               
               {topics && topics.length > 0 && topics.slice(0, 3).map((topic, idx) => (
                 <span
@@ -182,7 +186,7 @@ const DetailedNewsCard: React.FC<DetailedNewsCardProps> = ({
                 {ticker_sentiment.slice(0, 4).map((ts, idx) => (
                   <span
                     key={idx}
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSentimentColor(ts.ticker_sentiment_score)}`}
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSentimentClasses(ts.ticker_sentiment_score)}`}
                     title={`Relevance: ${(parseFloat(String(ts.relevance_score)) * 100).toFixed(1)}%`}
                   >
                     {ts.ticker}: {ts.ticker_sentiment_label}
@@ -273,7 +277,7 @@ const DetailedNewsCard: React.FC<DetailedNewsCardProps> = ({
                         </td>
                         <td className="px-3 py-2 text-gray-700">{parseFloat(String(ts.ticker_sentiment_score)).toFixed(3)}</td>
                         <td className="px-3 py-2">
-                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getSentimentColor(parseFloat(String(ts.ticker_sentiment_score)))}`}>
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${getSentimentClasses(ts.ticker_sentiment_score)}`}>
                             {ts.ticker_sentiment_label}
                           </span>
                         </td>

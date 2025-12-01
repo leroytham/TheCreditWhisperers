@@ -131,38 +131,38 @@ export function getSentimentColorClasses(score: SentimentScore | number): {
   switch (label) {
     case 'Bullish':
       return {
-        text: 'text-green-700',
-        bg: 'bg-green-100',
+        text: 'text-green-600',
+        bg: 'bg-green-50',
         border: 'border-green-200',
-        combined: 'text-green-700 bg-green-100 border-green-200',
+        combined: 'text-green-600 bg-green-50 border-green-200',
       };
     case 'Somewhat-Bullish':
       return {
-        text: 'text-green-600',
-        bg: 'bg-green-50',
-        border: 'border-green-100',
-        combined: 'text-green-600 bg-green-50 border-green-100',
+        text: 'text-lime-600',
+        bg: 'bg-lime-50',
+        border: 'border-lime-200',
+        combined: 'text-lime-600 bg-lime-50 border-lime-200',
       };
     case 'Neutral':
       return {
         text: 'text-gray-600',
-        bg: 'bg-gray-100',
+        bg: 'bg-gray-50',
         border: 'border-gray-200',
-        combined: 'text-gray-600 bg-gray-100 border-gray-200',
+        combined: 'text-gray-600 bg-gray-50 border-gray-200',
       };
     case 'Somewhat-Bearish':
       return {
-        text: 'text-red-600',
-        bg: 'bg-red-50',
-        border: 'border-red-100',
-        combined: 'text-red-600 bg-red-50 border-red-100',
+        text: 'text-orange-600',
+        bg: 'bg-orange-50',
+        border: 'border-orange-200',
+        combined: 'text-orange-600 bg-orange-50 border-orange-200',
       };
     case 'Bearish':
       return {
-        text: 'text-red-700',
-        bg: 'bg-red-100',
+        text: 'text-red-600',
+        bg: 'bg-red-50',
         border: 'border-red-200',
-        combined: 'text-red-700 bg-red-100 border-red-200',
+        combined: 'text-red-600 bg-red-50 border-red-200',
       };
   }
 }
