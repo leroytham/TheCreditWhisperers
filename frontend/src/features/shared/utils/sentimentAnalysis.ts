@@ -271,8 +271,8 @@ export const generateSentimentInsights = (
 export const formatSentimentLabel = (score: number): string => {
   if (score >= SENTIMENT_THRESHOLDS.BULLISH) return 'Bullish';
   if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'Somewhat Bullish';
-  if (score >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'Neutral';
-  if (score >= SENTIMENT_THRESHOLDS.BEARISH) return 'Somewhat Bearish';
+  if (score > SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'Neutral';
+  if (score > SENTIMENT_THRESHOLDS.BEARISH) return 'Somewhat Bearish';
   return 'Bearish';
 };
 
@@ -282,8 +282,8 @@ export const formatSentimentLabel = (score: number): string => {
 export const getSentimentColorByScore = (score: number): string => {
   if (score >= SENTIMENT_THRESHOLDS.BULLISH) return 'green';
   if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'yellow';
-  if (score >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'gray';
-  if (score >= SENTIMENT_THRESHOLDS.BEARISH) return 'yellow';
+  if (score > SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'gray';
+  if (score > SENTIMENT_THRESHOLDS.BEARISH) return 'yellow';
   return 'red';
 };
 
