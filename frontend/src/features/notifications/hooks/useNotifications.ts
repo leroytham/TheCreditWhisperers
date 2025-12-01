@@ -9,6 +9,12 @@ import { normalizeNotification, normalizeNotificationResponse } from '../utils/n
 import useAppStore from '../../../store/useAppStore';
 import { useCallback } from 'react';
 
+// Import and re-export server-side price alerts hook for backward compatibility
+import { usePriceAlertsAPI, PRICE_ALERT_API_QUERY_KEYS } from './usePriceAlertsAPI';
+export { usePriceAlertsAPI, PRICE_ALERT_API_QUERY_KEYS };
+// Re-export as usePriceAlerts for backward compatibility (alias)
+export { usePriceAlertsAPI as usePriceAlerts };
+
 // Type definitions
 interface Notification {
   id: string;
@@ -40,24 +46,12 @@ interface NotificationResponse {
   has_more: boolean;
 }
 
-interface PriceAlert {
-  id: string;
-  [key: string]: unknown;
-}
-
-interface PriceAlertResponse {
-  alerts: PriceAlert[];
-  total_count: number;
-}
-
-// Query Keys
+// Query Keys (price alert keys moved to usePriceAlertsAPI.ts)
 export const QUERY_KEYS = {
   notifications: ['notifications'],
   notificationDetail: (id: string) => ['notifications', id],
   unreadCount: ['notifications', 'unread-count'],
   preferences: ['notifications', 'preferences'],
-  priceAlerts: ['price-alerts'],
-  priceAlert: (id: string) => ['price-alerts', id],
 };
 
 /**
@@ -375,121 +369,6 @@ export const useNotificationPreferences = () => {
 };
 
 /**
- * Hook to manage price alerts
- */
-export const usePriceAlerts = (filters: Record<string, unknown> = {}) => {
-  const queryClient = useQueryClient();
-
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: [...QUERY_KEYS.priceAlerts, filters],
-    queryFn: async () => {
-      const response = await apiService.priceAlerts.getAll(filters);
-      return response.data;
-    },
-    staleTime: 30 * 1000, // 30 seconds
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async (alert: Record<string, any>) => {
-      const response = await apiService.priceAlerts.create(alert);
-      return response.data;
-    },
-    onSuccess: (newAlert) => {
-      // Add the new alert to the cache
-      queryClient.setQueryData([...QUERY_KEYS.priceAlerts, filters], (old: any) => {
-        if (!old) return { alerts: [newAlert], total_count: 1 };
-        return {
-          alerts: [newAlert, ...old.alerts],
-          total_count: old.total_count + 1,
-        };
-      });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.priceAlerts });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ alertId, updates }: { alertId: string; updates: Record<string, any> }) => {
-      const response = await apiService.priceAlerts.update(alertId, updates);
-      return response.data;
-    },
-    onMutate: async ({ alertId, updates }: { alertId: string; updates: Record<string, any> }) => {
-      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.priceAlerts });
-
-      const previousAlerts = queryClient.getQueryData([...QUERY_KEYS.priceAlerts, filters]);
-
-      queryClient.setQueryData([...QUERY_KEYS.priceAlerts, filters], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          alerts: old.alerts.map((alert: PriceAlert) =>
-            alert.id === alertId ? { ...alert, ...updates } : alert
-          ),
-        };
-      });
-
-      return { previousAlerts };
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousAlerts) {
-        queryClient.setQueryData([...QUERY_KEYS.priceAlerts, filters], context.previousAlerts);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.priceAlerts });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (alertId: string) => {
-      const response = await apiService.priceAlerts.delete(alertId);
-      return response.data;
-    },
-    onMutate: async (alertId: string) => {
-      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.priceAlerts });
-
-      const previousAlerts = queryClient.getQueryData([...QUERY_KEYS.priceAlerts, filters]);
-
-      queryClient.setQueryData([...QUERY_KEYS.priceAlerts, filters], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          alerts: old.alerts.filter((alert: PriceAlert) => alert.id !== alertId),
-          total_count: old.total_count - 1,
-        };
-      });
-
-      return { previousAlerts };
-    },
-    onError: (err, alertId, context) => {
-      if (context?.previousAlerts) {
-        queryClient.setQueryData([...QUERY_KEYS.priceAlerts, filters], context.previousAlerts);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.priceAlerts });
-    },
-  });
-
-  return {
-    alerts: data?.alerts || [],
-    totalCount: data?.total_count || 0,
-    isLoading,
-    error,
-    refetch,
-    // Mutations
-    createAlert: createMutation.mutate,
-    updateAlert: updateMutation.mutate,
-    deleteAlert: deleteMutation.mutate,
-    // Mutation states
-    isCreating: createMutation.isPending,
-    isUpdating: updateMutation.isPending,
-    isDeleting: deleteMutation.isPending,
-  };
-};
-
-/**
  * Hook to sync server notifications with local toast display
  *
  * When a new notification arrives (e.g., via WebSocket):
@@ -542,6 +421,6 @@ export default {
   useInfiniteNotifications,
   useUnreadCount,
   useNotificationPreferences,
-  usePriceAlerts,
+  usePriceAlerts: usePriceAlertsAPI,
   useNotificationSync,
 };
