@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { usePortfolioOverview } from '../hooks/usePortfolioOverview';
 import LoadingSpinner from '../../../components/LoadingSpinner';
+import {
+  createPercentageFromDisplay,
+  getPercentageColorClass,
+  type Percentage,
+} from '../../../types/valueObjects';
 
 // Type definitions
 interface Holding {
@@ -131,35 +136,38 @@ const TopHoldingsTable: React.FC<TopHoldingsTableProps> = ({ onViewAllHoldings }
                   {holding.marketPrice ? `$${holding.marketPrice}` : '-'}
                 </td>
                 <td className="py-4 text-right">
-                  <span
-                    className={`text-sm font-medium ${
-                      holding.isPositive === true ? 'text-green-600' :
-                      holding.isPositive === false ? 'text-red-600' :
-                      'text-gray-400'
-                    }`}
-                  >
-                    {holding.profitLoss !== null ? `$${holding.profitLoss}` : '—'}
-                  </span>
+                  {(() => {
+                    const gainLoss = holding.gainLossPercent !== null
+                      ? createPercentageFromDisplay(holding.gainLossPercent)
+                      : null;
+                    return (
+                      <span className={`text-sm font-medium ${gainLoss ? getPercentageColorClass(gainLoss) : 'text-gray-400'}`}>
+                        {holding.profitLoss !== null ? `$${holding.profitLoss}` : '—'}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="py-4 text-right">
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded-md text-sm font-medium ${
-                      holding.isPositive === true
-                        ? 'bg-green-100 text-green-800'
-                        : holding.isPositive === false
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {holding.isPositive === true ? (
-                      <TrendingUp className="w-4 h-4 mr-1" />
-                    ) : holding.isPositive === false ? (
-                      <TrendingDown className="w-4 h-4 mr-1" />
-                    ) : null}
-                    {holding.gainLossPercent !== null
-                      ? `${holding.gainLossPercent}%`
-                      : '—'}
-                  </span>
+                  {(() => {
+                    const gainLoss = holding.gainLossPercent !== null
+                      ? createPercentageFromDisplay(holding.gainLossPercent)
+                      : null;
+                    return (
+                      <span
+                        className={`inline-flex items-center px-2 py-1 rounded-md text-sm font-medium ${
+                          gainLoss?.isPositive
+                            ? 'bg-green-100 text-green-800'
+                            : gainLoss?.isNegative
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {gainLoss?.isPositive && <TrendingUp className="w-4 h-4 mr-1" />}
+                        {gainLoss?.isNegative && <TrendingDown className="w-4 h-4 mr-1" />}
+                        {gainLoss ? gainLoss.formatted : '—'}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="py-4 text-right">{holding.newsVolume}</td>
                 <td className="py-4 text-right">{holding.sentiment}</td>

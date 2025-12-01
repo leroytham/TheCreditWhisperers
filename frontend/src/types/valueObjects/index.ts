@@ -21,4 +21,5 @@ export {
   createPercentageFromDisplay,
   formatPercentage,
   formatPercentageWithSign,
+  getPercentageColorClass,
 } from './Percentage';
