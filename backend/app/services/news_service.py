@@ -72,6 +72,168 @@ class NewsService:
         # Format: {ticker}:{timeframe} -> asyncio.Task
         self._active_fetch_tasks = {}
 
+    # --- Helper methods for _fetch_alpha_vantage_news ---
+
+    def _parse_av_datetime(self, time_published: str) -> Optional[Tuple[datetime, str]]:
+        """
+        Parse Alpha Vantage datetime format.
+
+        Args:
+            time_published: Time string in format "YYYYMMDDTHHMMSS"
+
+        Returns:
+            Tuple of (datetime with UTC timezone, date string in YYYY-MM-DD format) or None if invalid
+        """
+        if not time_published:
+            return None
+        try:
+            pub_datetime = datetime.strptime(time_published, "%Y%m%dT%H%M%S")
+            pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+            pub_date = pub_datetime.strftime('%Y-%m-%d')
+            return pub_datetime, pub_date
+        except ValueError:
+            return None
+
+    def _process_ticker_sentiments(self, ticker_sentiments: List[Dict]) -> List[Dict]:
+        """
+        Convert all ticker sentiment scores to floats.
+
+        Args:
+            ticker_sentiments: List of ticker sentiment dictionaries from Alpha Vantage
+
+        Returns:
+            List of processed ticker sentiment dictionaries with float scores
+        """
+        processed = []
+        for ts in ticker_sentiments:
+            try:
+                processed_ts = {
+                    "ticker": ts.get("ticker", ""),
+                    "ticker_sentiment_score": float(ts.get("ticker_sentiment_score", "0")),
+                    "ticker_sentiment_label": ts.get("ticker_sentiment_label", "Neutral"),
+                    "relevance_score": float(ts.get("relevance_score", "0")) if ts.get("relevance_score") else 0.0
+                }
+                processed.append(processed_ts)
+            except (ValueError, TypeError):
+                continue
+        return processed
+
+    def _build_sector_mode_article(
+        self,
+        article: Dict,
+        pub_datetime: datetime,
+        pub_date: str,
+        processed_sentiments: List[Dict],
+        body_content: str
+    ) -> Dict:
+        """
+        Build article dict for sector mode (preserve_all_tickers=True).
+
+        Args:
+            article: Raw article from Alpha Vantage
+            pub_datetime: Parsed publish datetime
+            pub_date: Formatted publish date string
+            processed_sentiments: Pre-processed ticker sentiments
+            body_content: Article body/summary content
+
+        Returns:
+            Formatted article dictionary for sector mode
+        """
+        # Get overall sentiment from article
+        overall_sentiment_score = article.get("overall_sentiment_score")
+        if overall_sentiment_score is not None:
+            try:
+                overall_sentiment_score = float(overall_sentiment_score)
+            except (ValueError, TypeError):
+                overall_sentiment_score = 0.0
+        else:
+            overall_sentiment_score = 0.0
+
+        return {
+            "title": article.get("title"),
+            "url": article.get("url"),
+            "link": article.get("url"),  # Backwards compatibility
+            "source": article.get("source"),
+            "provider": article.get("source"),  # Backwards compatibility
+            "source_domain": article.get("source_domain"),
+            "time_published": article.get("time_published", ""),
+            "publish_date": pub_date,
+            "publish_timestamp": pub_datetime.isoformat(),
+            "summary": body_content,
+            "body": body_content,  # Backwards compatibility
+            "banner_image": article.get("banner_image"),
+            "category_within_source": article.get("category_within_source"),
+            "authors": article.get("authors", []),
+            "ticker_sentiment": processed_sentiments,
+            "overall_sentiment_score": overall_sentiment_score,
+            "overall_sentiment_label": article.get("overall_sentiment_label", "Neutral"),
+            "topics": article.get("topics", [])
+        }
+
+    def _build_single_ticker_article(
+        self,
+        article: Dict,
+        pub_datetime: datetime,
+        pub_date: str,
+        ticker: str,
+        body_content: str
+    ) -> Optional[Dict]:
+        """
+        Build article dict for single ticker mode.
+
+        Args:
+            article: Raw article from Alpha Vantage
+            pub_datetime: Parsed publish datetime
+            pub_date: Formatted publish date string
+            ticker: Target ticker symbol
+            body_content: Article body/summary content
+
+        Returns:
+            Formatted article dictionary or None if ticker not found in sentiment
+        """
+        ticker_sentiments = article.get("ticker_sentiment", [])
+        ticker_sentiment_score = None
+        ticker_sentiment_label = "Neutral"
+        ticker_relevance_score = None
+
+        # Case-insensitive ticker matching
+        for ts in ticker_sentiments:
+            if ts.get("ticker", "").upper() == ticker.upper():
+                try:
+                    ticker_sentiment_score = float(ts.get("ticker_sentiment_score", "0"))
+                except (ValueError, TypeError):
+                    ticker_sentiment_score = 0.0
+
+                ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
+
+                relevance_str = ts.get("relevance_score")
+                if relevance_str is not None:
+                    try:
+                        ticker_relevance_score = float(relevance_str)
+                    except (ValueError, TypeError):
+                        ticker_relevance_score = None
+                break
+
+        # Skip articles without sentiment score for this ticker
+        if ticker_sentiment_score is None:
+            return None
+
+        return {
+            "title": article.get("title"),
+            "link": article.get("url"),
+            "provider": article.get("source"),
+            "publish_date": pub_date,
+            "publish_timestamp": pub_datetime.isoformat(),
+            "body": body_content,
+            "ticker_sentiment_score": ticker_sentiment_score,
+            "ticker_sentiment_label": ticker_sentiment_label,
+            "ticker_relevance_score": ticker_relevance_score,
+            "image": article.get("banner_image"),
+            "topics": article.get("topics", [])
+        }
+
+    # --- End helper methods ---
+
     async def _fetch_alpha_vantage_news(
         self,
         session: aiohttp.ClientSession,
@@ -136,119 +298,29 @@ class NewsService:
 
             news_list = []
             for article in raw_data:
-                # Parse publish date and timestamp
-                time_published = article.get("time_published", "")
-                if not time_published:
+                # Parse publish date and timestamp using helper
+                parsed = self._parse_av_datetime(article.get("time_published", ""))
+                if not parsed:
                     continue
+                pub_datetime, pub_date = parsed
 
-                try:
-                    # Parse the full datetime with timezone awareness
-                    pub_datetime = datetime.strptime(time_published, "%Y%m%dT%H%M%S")
-                    pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
-                    pub_date = pub_datetime.strftime('%Y-%m-%d')
-                except ValueError:
-                    continue
-
-                ticker_sentiments = article.get("ticker_sentiment", [])
-
-                # Use Alpha Vantage's summary instead of web scraping
                 body_content = article.get("summary", "")
 
                 if preserve_all_tickers:
-                    # SECTOR MODE: Preserve all ticker sentiments for multi-ticker processing
-                    # Convert all ticker sentiment scores to floats for easier processing
-                    processed_ticker_sentiments = []
-                    for ts in ticker_sentiments:
-                        try:
-                            processed_ts = {
-                                "ticker": ts.get("ticker", ""),
-                                "ticker_sentiment_score": float(ts.get("ticker_sentiment_score", "0")),
-                                "ticker_sentiment_label": ts.get("ticker_sentiment_label", "Neutral"),
-                                "relevance_score": float(ts.get("relevance_score", "0")) if ts.get("relevance_score") else 0.0
-                            }
-                            processed_ticker_sentiments.append(processed_ts)
-                        except (ValueError, TypeError):
-                            continue
-
-                    # Get overall sentiment from article
-                    overall_sentiment_score = article.get("overall_sentiment_score")
-                    overall_sentiment_label = article.get("overall_sentiment_label", "Neutral")
-
-                    # Convert overall_sentiment_score to float if it exists
-                    if overall_sentiment_score is not None:
-                        try:
-                            overall_sentiment_score = float(overall_sentiment_score)
-                        except (ValueError, TypeError):
-                            overall_sentiment_score = 0.0
-                    else:
-                        overall_sentiment_score = 0.0
-
-                    # Include article with normalized field names for frontend compatibility
-                    news_list.append({
-                        "title": article.get("title"),
-                        "url": article.get("url"),  # Normalized from 'link' to 'url'
-                        "link": article.get("url"),  # Keep for backwards compatibility
-                        "source": article.get("source"),  # Normalized from 'provider' to 'source'
-                        "provider": article.get("source"),  # Keep for backwards compatibility
-                        "source_domain": article.get("source_domain"),  # Add for modal
-                        "time_published": time_published,  # Add for CompactNewsCard
-                        "publish_date": pub_date,
-                        "publish_timestamp": pub_datetime.isoformat(),
-                        "summary": body_content,  # Normalized from 'body' to 'summary'
-                        "body": body_content,  # Keep for backwards compatibility
-                        "banner_image": article.get("banner_image"),
-                        "category_within_source": article.get("category_within_source"),  # Add for modal
-                        "authors": article.get("authors", []),  # Add for modal
-                        "ticker_sentiment": processed_ticker_sentiments,  # Full array!
-                        "overall_sentiment_score": overall_sentiment_score,  # Add for CompactNewsCard
-                        "overall_sentiment_label": overall_sentiment_label,  # Add for CompactNewsCard
-                        "topics": article.get("topics", [])
-                    })
+                    # SECTOR MODE: Use helper to process ticker sentiments and build article
+                    processed_sentiments = self._process_ticker_sentiments(
+                        article.get("ticker_sentiment", [])
+                    )
+                    news_list.append(self._build_sector_mode_article(
+                        article, pub_datetime, pub_date, processed_sentiments, body_content
+                    ))
                 else:
-                    # SINGLE TICKER MODE: Extract sentiment for queried ticker only (original behavior)
-                    ticker_sentiment_score = None
-                    ticker_sentiment_label = "Neutral"
-                    ticker_relevance_score = None
-
-                    # Case-insensitive ticker matching
-                    for ts in ticker_sentiments:
-                        if ts.get("ticker", "").upper() == ticker.upper():
-                            # Convert string score to float
-                            score_str = ts.get("ticker_sentiment_score", "0")
-                            try:
-                                ticker_sentiment_score = float(score_str)
-                            except (ValueError, TypeError):
-                                ticker_sentiment_score = 0.0
-
-                            ticker_sentiment_label = ts.get("ticker_sentiment_label", "Neutral")
-
-                            # Extract relevance score if available
-                            relevance_str = ts.get("relevance_score")
-                            if relevance_str is not None:
-                                try:
-                                    ticker_relevance_score = float(relevance_str)
-                                except (ValueError, TypeError):
-                                    ticker_relevance_score = None
-
-                            break
-
-                    # Skip articles without sentiment score for this ticker
-                    if ticker_sentiment_score is None:
-                        continue
-
-                    news_list.append({
-                        "title": article.get("title"),
-                        "link": article.get("url"),
-                        "provider": article.get("source"),
-                        "publish_date": pub_date,
-                        "publish_timestamp": pub_datetime.isoformat(),
-                        "body": body_content,
-                        "ticker_sentiment_score": ticker_sentiment_score,
-                        "ticker_sentiment_label": ticker_sentiment_label,
-                        "ticker_relevance_score": ticker_relevance_score,
-                        "image": article.get("banner_image"),
-                        "topics": article.get("topics", [])
-                    })
+                    # SINGLE TICKER MODE: Use helper to build article
+                    article_dict = self._build_single_ticker_article(
+                        article, pub_datetime, pub_date, ticker, body_content
+                    )
+                    if article_dict:  # Only add if ticker was found in sentiment
+                        news_list.append(article_dict)
 
             return news_list
 

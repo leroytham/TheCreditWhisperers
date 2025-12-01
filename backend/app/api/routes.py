@@ -24,6 +24,7 @@ from app.services.sector_sentiment_service import sector_sentiment_service
 from app.services.earnings_service import earnings_service
 from app.services.portfolio_timeseries_service import portfolio_timeseries_service
 from app.services.portfolio_sentiment_service import portfolio_sentiment_service
+from app.services.holding_enrichment_service import holding_enrichment_service
 from app.services.portfolio_performance_service import (
     calculate_period_boundaries,
     calculate_itd_start_date,
@@ -2213,146 +2214,25 @@ async def get_portfolio_holdings(
 
         logger.info(f"[PORTFOLIO-HOLDINGS-DB] Aggregated to {len(aggregated)} unique symbols from {len(holdings_list)} holdings")
 
-        # Helper function to fetch all data for a single symbol in parallel
-        async def fetch_holding_data(symbol: str, total_qty: float, avg_cost: float):
-            """Fetch market price, news, and sector data in parallel for a symbol."""
-            logger.debug(f"[PORTFOLIO-HOLDINGS-FETCH] Starting parallel fetch for {symbol}")
-            try:
-                # Create parallel tasks for this symbol
-                market_price_task = stock_data_service.get_current_market_price(symbol)
-                news_task = get_news_data(symbol, timeframe="1W")
-                # Note: get_ticker_sector_info is synchronous, but it's cached so it's fast
-                # We'll call it separately after the parallel tasks
-
-                # Execute market price and news fetching in parallel
-                market_data, news_data = await asyncio.gather(
-                    market_price_task,
-                    news_task,
-                    return_exceptions=True
-                )
-
-                # Process market data
-                if isinstance(market_data, Exception) or market_data is None:
-                    logger.warning(f"[PORTFOLIO-HOLDINGS-FETCH] Market data failed for {symbol}: {market_data if isinstance(market_data, Exception) else 'No data'}")
-                    market_price = None
-                    day_change_value = None
-                    day_change_percent = None
-                    previous_close = None
-                    fifty_two_week_high = None
-                    fifty_two_week_low = None
-                else:
-                    market_price = round(market_data.get("market_price", 0), 2)
-                    day_change_value = round(market_data.get("day_change_value", 0), 2) if market_data.get("day_change_value") is not None else None
-                    day_change_percent = round(market_data.get("day_change_percent", 0), 2) if market_data.get("day_change_percent") is not None else None
-                    previous_close = market_data.get("previous_close")
-                    fifty_two_week_high = market_data.get("fifty_two_week_high")
-                    fifty_two_week_low = market_data.get("fifty_two_week_low")
-                    logger.debug(f"[PORTFOLIO-HOLDINGS-FETCH] Market data OK for {symbol}: ${market_price:.2f}")
-
-                # Calculate profit/loss
-                if market_price:
-                    pl_absolute = round((market_price - avg_cost) * total_qty, 2)
-                    pl_percent = round(((market_price - avg_cost) / avg_cost) * 100, 2) if avg_cost > 0 else 0
-                    is_positive = pl_absolute >= 0
-                else:
-                    pl_absolute, pl_percent, is_positive = None, None, None
-
-                # Process news data
-                if isinstance(news_data, Exception) or news_data is None:
-                    logger.warning(f"[PORTFOLIO-HOLDINGS-FETCH] News fetch failed for {symbol}: {news_data if isinstance(news_data, Exception) else 'No data'}")
-                    avg_score = 0
-                    sentiment_label = "N/A"
-                    news_volume = 0
-                    sentiment_momentum = None
-                else:
-                    avg_score = news_data.get("avg_score", 0)
-                    articles = news_data.get("news", [])
-                    sentiment_momentum = news_data.get("sentiment_momentum")
-
-                    # Derive qualitative sentiment label
-                    if avg_score > 0.2:
-                        sentiment_label = "Positive"
-                    elif avg_score < -0.2:
-                        sentiment_label = "Negative"
-                    else:
-                        sentiment_label = "Neutral"
-
-                    news_volume = len(articles)
-                    logger.debug(f"[PORTFOLIO-HOLDINGS-FETCH] News fetched for {symbol}: {news_volume} articles, sentiment={avg_score:.2f}")
-
-                # Fetch sector info (cached, so fast)
-                try:
-                    sector_info = stock_data_service.get_ticker_sector_info(symbol)
-                    sector = sector_info.get("sector", "N/A")
-                    industry = sector_info.get("industry", "N/A")
-                except Exception as e:
-                    logger.warning("Sector fetch failed for %s: %s", symbol, e)
-                    sector, industry = "N/A", "N/A"
-
-                # Create range52week object if both values exist
-                range52week = None
-                if fifty_two_week_high is not None and fifty_two_week_low is not None:
-                    range52week = {
-                        "low": float(fifty_two_week_low),
-                        "high": float(fifty_two_week_high)
-                    }
-
-                # Return formatted holding data
-                return {
-                    "symbol": symbol,
-                    "quantity": round(total_qty, 2),
-                    "averageCostPrice": f"{avg_cost:,.1f}",
-                    "marketPrice": f"{market_price:,.1f}" if market_price else None,
-                    "profitLoss": f"{pl_absolute:,.1f}" if pl_absolute is not None else None,
-                    "gainLossPercent": float(pl_percent) if pl_percent is not None else None,
-                    "isPositive": bool(is_positive) if is_positive is not None else None,
-                    "newsVolume": news_volume,
-                    "sentiment": f"{float(avg_score):,.2f}" if avg_score is not None else "0.00",
-                    "sentimentMomentum": float(sentiment_momentum) if sentiment_momentum is not None else None,
-                    "range52week": range52week,
-                    "position": f"{market_price * total_qty:,.1f}" if market_price else f"{avg_cost * total_qty:,.1f}",
-                    "day_change_percent": float(day_change_percent) if day_change_percent is not None else None,
-                    "day_change_value": float(day_change_value) if day_change_value is not None else None,
-                    "previous_close": float(previous_close) if previous_close is not None else None,
-                    "sector": sector,
-                    "industry": industry
-                }
-
-            except Exception as e:
-                logger.error(f"[PORTFOLIO-HOLDINGS-ERROR] Processing failed for {symbol}: {e}", exc_info=True)
-                # Return minimal data on error
-                return {
-                    "symbol": symbol,
-                    "quantity": round(total_qty, 2),
-                    "averageCostPrice": f"{avg_cost:,.1f}",
-                    "marketPrice": None,
-                    "profitLoss": None,
-                    "gainLossPercent": None,
-                    "isPositive": None,
-                    "newsVolume": 0,
-                    "sentiment": "0.00",
-                    "position": f"{avg_cost * total_qty:,.1f}",
-                    "day_change_percent": None,
-                    "day_change_value": None,
-                    "previous_close": None,
-                    "sector": "N/A",
-                    "industry": "N/A"
-                }
-
-        # Create tasks for all symbols and execute in parallel
-        logger.info(f"[PORTFOLIO-HOLDINGS] Starting parallel data fetch for {len(aggregated)} unique symbols")
-        fetch_start = time.time()
-        tasks = [
-            fetch_holding_data(
-                symbol,
-                data["total_qty"],
-                round(data["total_cost"] / data["total_qty"], 2) if data["total_qty"] > 0 else 0.0
-            )
+        # Build holdings list for batch enrichment
+        holdings_to_enrich = [
+            {
+                "symbol": symbol,
+                "quantity": data["total_qty"],
+                "avg_cost": round(data["total_cost"] / data["total_qty"], 2) if data["total_qty"] > 0 else 0.0
+            }
             for symbol, data in aggregated.items()
         ]
 
-        # Execute all tasks in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Use HoldingEnrichmentService for parallel data fetching
+        logger.info(f"[PORTFOLIO-HOLDINGS] Starting parallel data fetch for {len(aggregated)} unique symbols")
+        fetch_start = time.time()
+
+        results = await holding_enrichment_service.enrich_holdings_batch(
+            holdings_to_enrich,
+            news_fetcher=get_news_data,
+            news_timeframe="1W"
+        )
 
         # Filter out any exceptions
         holdings_results = [r for r in results if not isinstance(r, Exception)]
