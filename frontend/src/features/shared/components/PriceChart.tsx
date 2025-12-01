@@ -6,57 +6,20 @@ import {
   calculatePriceChange,
   calculateChartPath,
   calculateFillPath,
-  findEventPosition,
   formatTooltipDateTime,
   calculateTradingDayElapsed
 } from '../utils/chartHelpers';
-import type { ChartDataPoint, PriceRange, ChartEvent } from '../utils/chartHelpers';
-import {
-  formatPrice,
-  getChartLineColor
-} from '../utils/formatters';
+import type { ChartDataPoint, PriceRange } from '../utils/chartHelpers';
 import { SECTOR_CHART_CONFIG } from '../utils/constants';
 import NewsDetailModal from './NewsDetailModal';
+import { EventMarkersGroup } from './charts/EventMarkersGroup';
+import type { DisplayEvent, HoveredEventState } from './charts/EventMarkersGroup';
+import { EventClickTooltip } from './charts/EventClickTooltip';
+import { PriceHoverTooltip } from './charts/PriceHoverTooltip';
 import type { PriceDataPoint, NewsArticle } from '../../../types';
 
-// Extended event type with additional display properties
-interface DisplayEvent {
-  start_date: string;
-  trend: string;
-  total_move_pct?: number;
-  link?: string;
-  url?: string;
-  news?: NewsArticle[];
-}
-
-// Hovered point state
-interface HoveredPointState {
-  x: number;
-  y: number;
-  xIndex: number;
-  index: number;
-  price: number;
-  date: string;
-  time?: string;
-}
-
-// Hovered event state
-interface HoveredEventState extends DisplayEvent {
-  xPos: number;
-  iconY: number;
-  chartWidth: number;
-  paddingLeft: number;
-}
-
-// Event position with display coordinates
-interface EventPositionWithDisplay {
-  event: DisplayEvent;
-  xPos: number;
-  originalXPos?: number;
-  iconY: number;
-  dataY: number;
-  index: number;
-}
+// Hovered point state (local, used for chart hover)
+import type { HoveredPointState } from './charts/PriceHoverTooltip';
 
 interface PriceChartProps {
   priceData?: PriceDataPoint[];
@@ -511,333 +474,39 @@ const PriceChart = ({
         ))}
 
         {/* Entity mode: Significant Event Markers - Bloomberg style */}
-        {detectedMode === 'entity' && (() => {
-          // Calculate positions and detect collisions
-          const eventPositions: EventPositionWithDisplay[] = [];
-          significantEvents.forEach((event: DisplayEvent, i: number) => {
-            const eventPos = findEventPosition({ start_date: event.start_date, trend: event.trend, total_move_pct: event.total_move_pct }, chartData, chartWidth, paddingLeft);
-            if (eventPos) {
-              // Use the matched pricePoint/index from findEventPosition when available
-              let dataPoint: ChartDataPoint | null = eventPos.pricePoint || null;
-              if ((!dataPoint || dataPoint.index === undefined) && chartData && chartData.length) {
-                // Fallback: find by YYYY-MM-DD comparison
-                const matchedIndex = chartData.findIndex((d: ChartDataPoint) => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
-                const displayIndex = matchedIndex > 0 ? matchedIndex - 1 : matchedIndex;
-                dataPoint = displayIndex >= 0 ? chartData[displayIndex] : null;
-              }
+        {detectedMode === 'entity' && (
+          <EventMarkersGroup
+            events={significantEvents}
+            chartData={chartData}
+            chartWidth={chartWidth}
+            chartHeight={chartHeight}
+            paddingLeft={paddingLeft}
+            paddingTop={paddingTop}
+            priceRange={priceRange}
+            priceChangePercent={priceChangePercent ?? 0}
+            hoveredEvent={hoveredEvent}
+            setHoveredEvent={setHoveredEvent}
+            onEventClick={onEventClick}
+            mode="entity"
+          />
+        )}
 
-              const dataY = dataPoint
-                ? (paddingTop + chartHeight) - (((dataPoint.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
-                : paddingTop;
-
-              eventPositions.push({ event, ...eventPos, dataY, index: i, iconY: 0 });
-            }
-          });
-
-          // Sort by xPos for collision detection
-          eventPositions.sort((a: EventPositionWithDisplay, b: EventPositionWithDisplay) => a.xPos - b.xPos);
-
-          // All icons at same vertical level - no stacking
-          const baseIconY = paddingTop + chartHeight - 15;
-          const OVERLAP_THRESHOLD = 25; // Icons within 25px are considered overlapping
-          const SPREAD_SPACING = 18; // Horizontal spacing between overlapping icons
-
-          // Apply horizontal spreading for overlapping icons
-          eventPositions.forEach((pos: EventPositionWithDisplay, i: number) => {
-            pos.iconY = baseIconY;
-            // Store original xPos BEFORE spreading for dotted line positioning
-            pos.originalXPos = pos.xPos;
-
-            // Find all previous icons that overlap with this one
-            const overlappingGroup: EventPositionWithDisplay[] = [];
-            for (let j = 0; j < i; j++) {
-              if (Math.abs(pos.xPos - eventPositions[j].xPos) < OVERLAP_THRESHOLD) {
-                overlappingGroup.push(eventPositions[j]);
-              }
-            }
-
-            // If overlapping, spread icons horizontally
-            if (overlappingGroup.length > 0) {
-              const groupSize = overlappingGroup.length + 1;
-              const totalWidth = (groupSize - 1) * SPREAD_SPACING;
-              const startX = pos.xPos - (totalWidth / 2);
-
-              // Adjust positions of all icons in the overlapping group
-              overlappingGroup.forEach((overlapped: EventPositionWithDisplay, idx: number) => {
-                overlapped.xPos = startX + (idx * SPREAD_SPACING);
-              });
-
-              // Position current icon at the end of the group
-              pos.xPos = startX + (overlappingGroup.length * SPREAD_SPACING);
-            }
-          });
-
-          return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }: EventPositionWithDisplay) => {
-            const handleClick = () => {
-              const url = event.link || event.url;
-              if (url) {
-                window.open(url, '_blank', 'noopener,noreferrer');
-              }
-            };
-
-            return (
-              <g
-                key={`event-${index}`}
-                className="cursor-pointer group"
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  // Toggle tooltip: if clicking same icon, close it; otherwise open new one
-                  if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
-                    setHoveredEvent(null);
-                  } else {
-                    setHoveredEvent({ ...event, xPos, iconY, chartWidth: chartWidth, paddingLeft });
-                    // Notify parent component that an event was clicked
-                    if (onEventClick) {
-                      onEventClick(event);
-                    }
-                  }
-                }}
-              >
-                {/* Dot at data point on chart line - matches chart color */}
-                <circle
-                  cx={originalXPos}
-                  cy={dataY}
-                  r="6"
-                  fill={(priceChangePercent ?? 0) >= 0 ? '#00a850' : '#ef4444'}
-                  stroke="white"
-                  strokeWidth="2"
-                />
-                {/* Vertical dotted line - starts below the dot */}
-                <line
-                  x1={originalXPos}
-                  y1={dataY + 8}
-                  x2={originalXPos}
-                  y2={paddingTop + chartHeight}
-                  stroke="#6b7280"
-                  strokeWidth="1.5"
-                  strokeDasharray="3,3"
-                  opacity="1"
-                />
-                {/* Connector line if icon is offset */}
-                {iconY !== baseIconY && (
-                  <line
-                    x1={xPos}
-                    y1={paddingTop + chartHeight}
-                    x2={xPos}
-                    y2={iconY + 14}
-                    stroke="#9ca3af"
-                    strokeWidth="1"
-                    strokeDasharray="2,3"
-                    opacity="0.6"
-                  />
-                )}
-                {/* Background blurred glow circle - larger for visible halo */}
-                <circle
-                  cx={xPos}
-                  cy={iconY}
-                  r="18"
-                  fill="white"
-                  fillOpacity="0.5"
-                  stroke="#9ca3af"
-                  strokeWidth="2"
-                  filter="url(#iconCircleGlow)"
-                />
-
-                {/* Foreground crisp circle - thin BLACK border, NO blur */}
-                <circle
-                  cx={xPos}
-                  cy={iconY}
-                  r="15"
-                  fill="white"
-                  fillOpacity="0.9"
-                  stroke="black"
-                  strokeWidth="0.5"
-                  className="group-hover:fill-opacity-95 transition-all"
-                />
-                {/* Document icon - Bloomberg style with WHITE fill */}
-                <g>
-                  {/* Main document body - WHITE */}
-                  <path
-                    d={`M ${xPos - 5} ${iconY - 6} L ${xPos - 5} ${iconY + 6} L ${xPos + 5} ${iconY + 6} L ${xPos + 5} ${iconY - 3} L ${xPos + 2} ${iconY - 6} Z`}
-                    fill="white"
-                    stroke="#374151"
-                    strokeWidth="1"
-                  />
-                  {/* Folded corner flap - medium gray for shadow */}
-                  <path
-                    d={`M ${xPos + 2} ${iconY - 6} L ${xPos + 2} ${iconY - 3} L ${xPos + 5} ${iconY - 3} Z`}
-                    fill="#9ca3af"
-                    stroke="#6b7280"
-                    strokeWidth="0.5"
-                  />
-                  {/* Horizontal lines inside document - BLACK for visibility */}
-                  <line x1={xPos - 3} y1={iconY - 1} x2={xPos + 3} y2={iconY - 1} stroke="#374151" strokeWidth="0.8" />
-                  <line x1={xPos - 3} y1={iconY + 1} x2={xPos + 3} y2={iconY + 1} stroke="#374151" strokeWidth="0.8" />
-                  <line x1={xPos - 3} y1={iconY + 3} x2={xPos + 1} y2={iconY + 3} stroke="#374151" strokeWidth="0.8" />
-                </g>
-
-                {/* Transparent clickable area - ensures reliable clicking */}
-                <rect
-                  x={xPos - 17}
-                  y={iconY - 17}
-                  width="34"
-                  height="34"
-                  fill="transparent"
-                  className="cursor-pointer"
-                  onClick={handleClick}
-                />
-              </g>
-            );
-          });
-        })()}
-
-        {/* Sector mode: Event markers - Bloomberg style (same structure as entity mode) */}
-        {detectedMode === 'sector' && showEvents && topEvents && topEvents.length > 0 && (() => {
-          // Calculate positions and detect collisions (same logic as entity mode)
-          const eventPositions: EventPositionWithDisplay[] = [];
-          topEvents.forEach((event: DisplayEvent, i: number) => {
-            const eventPos = findEventPosition({ start_date: event.start_date, trend: event.trend, total_move_pct: event.total_move_pct }, chartData, chartWidth, paddingLeft);
-            if (eventPos) {
-              // Prefer the matched pricePoint/index from findEventPosition
-              let dataPoint: ChartDataPoint | null = eventPos.pricePoint || null;
-              if ((!dataPoint || dataPoint.index === undefined) && chartData && chartData.length) {
-                const matchedIndex = chartData.findIndex((d: ChartDataPoint) => (new Date(d.date)).toISOString().slice(0,10) === (new Date(event.start_date)).toISOString().slice(0,10));
-                dataPoint = matchedIndex >= 0 ? chartData[matchedIndex] : null;
-              }
-
-              const dataY = dataPoint
-                ? (paddingTop + chartHeight) - (((dataPoint.y ?? 0) - priceRange.min) / (priceRange.max - priceRange.min) * chartHeight)
-                : paddingTop;
-
-              eventPositions.push({ event, ...eventPos, dataY, index: i, iconY: 0 });
-            }
-          });
-
-          eventPositions.sort((a: EventPositionWithDisplay, b: EventPositionWithDisplay) => a.xPos - b.xPos);
-
-          const baseIconY = paddingTop + chartHeight - 15;
-          const OVERLAP_THRESHOLD = 25;
-          const SPREAD_SPACING = 18;
-
-          eventPositions.forEach((pos: EventPositionWithDisplay, i: number) => {
-            pos.iconY = baseIconY;
-            pos.originalXPos = pos.xPos;
-
-            const overlappingGroup: EventPositionWithDisplay[] = [];
-            for (let j = 0; j < i; j++) {
-              if (Math.abs(pos.xPos - eventPositions[j].xPos) < OVERLAP_THRESHOLD) {
-                overlappingGroup.push(eventPositions[j]);
-              }
-            }
-
-            if (overlappingGroup.length > 0) {
-              const groupSize = overlappingGroup.length + 1;
-              const totalWidth = (groupSize - 1) * SPREAD_SPACING;
-              const startX = pos.xPos - (totalWidth / 2);
-
-              overlappingGroup.forEach((overlapped: EventPositionWithDisplay, idx: number) => {
-                overlapped.xPos = startX + (idx * SPREAD_SPACING);
-              });
-
-              pos.xPos = startX + (overlappingGroup.length * SPREAD_SPACING);
-            }
-          });
-
-          return eventPositions.map(({ event, xPos, iconY, dataY, originalXPos, index }: EventPositionWithDisplay) => {
-            const handleClick = (): void => {
-              const url = event.link || event.url;
-              if (url) {
-                window.open(url, '_blank', 'noopener,noreferrer');
-              }
-            };
-
-            return (
-              <g
-                key={`event-${index}`}
-                className="cursor-pointer group"
-                onClick={(e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  if (hoveredEvent && hoveredEvent.start_date === event.start_date) {
-                    setHoveredEvent(null);
-                  } else {
-                    setHoveredEvent({ ...event, xPos, iconY, chartWidth: chartWidth, paddingLeft });
-                  }
-                }}
-              >
-                {/* Dot at data point */}
-                <circle
-                  cx={originalXPos}
-                  cy={dataY}
-                  r="6"
-                  fill={(priceChangePercent ?? 0) >= 0 ? '#00a850' : '#ef4444'}
-                  stroke="white"
-                  strokeWidth="2"
-                />
-                {/* Vertical dotted line */}
-                <line
-                  x1={originalXPos}
-                  y1={dataY + 8}
-                  x2={originalXPos}
-                  y2={paddingTop + chartHeight}
-                  stroke="#6b7280"
-                  strokeWidth="1.5"
-                  strokeDasharray="3,3"
-                  opacity="1"
-                />
-                {/* Background blurred circle */}
-                <circle
-                  cx={xPos}
-                  cy={iconY}
-                  r="18"
-                  fill="white"
-                  fillOpacity="0.5"
-                  stroke="#9ca3af"
-                  strokeWidth="2"
-                  filter="url(#iconCircleGlow)"
-                />
-                {/* Foreground circle */}
-                <circle
-                  cx={xPos}
-                  cy={iconY}
-                  r="15"
-                  fill="white"
-                  fillOpacity="0.9"
-                  stroke="black"
-                  strokeWidth="0.5"
-                  className="group-hover:fill-opacity-95 transition-all"
-                />
-                {/* Document icon */}
-                <g>
-                  <path
-                    d={`M ${xPos - 5} ${iconY - 6} L ${xPos - 5} ${iconY + 6} L ${xPos + 5} ${iconY + 6} L ${xPos + 5} ${iconY - 3} L ${xPos + 2} ${iconY - 6} Z`}
-                    fill="white"
-                    stroke="#374151"
-                    strokeWidth="1"
-                  />
-                  <path
-                    d={`M ${xPos + 2} ${iconY - 6} L ${xPos + 2} ${iconY - 3} L ${xPos + 5} ${iconY - 3} Z`}
-                    fill="#9ca3af"
-                    stroke="#6b7280"
-                    strokeWidth="0.5"
-                  />
-                  <line x1={xPos - 3} y1={iconY - 1} x2={xPos + 3} y2={iconY - 1} stroke="#374151" strokeWidth="0.8" />
-                  <line x1={xPos - 3} y1={iconY + 1} x2={xPos + 3} y2={iconY + 1} stroke="#374151" strokeWidth="0.8" />
-                  <line x1={xPos - 3} y1={iconY + 3} x2={xPos + 1} y2={iconY + 3} stroke="#374151" strokeWidth="0.8" />
-                </g>
-                {/* Clickable area */}
-                <rect
-                  x={xPos - 17}
-                  y={iconY - 17}
-                  width="34"
-                  height="34"
-                  fill="transparent"
-                  className="cursor-pointer"
-                  onClick={handleClick}
-                />
-              </g>
-            );
-          });
-        })()}
+        {/* Sector mode: Event markers - Bloomberg style */}
+        {detectedMode === 'sector' && showEvents && topEvents && topEvents.length > 0 && (
+          <EventMarkersGroup
+            events={topEvents}
+            chartData={chartData}
+            chartWidth={chartWidth}
+            chartHeight={chartHeight}
+            paddingLeft={paddingLeft}
+            paddingTop={paddingTop}
+            priceRange={priceRange}
+            priceChangePercent={priceChangePercent ?? 0}
+            hoveredEvent={hoveredEvent}
+            setHoveredEvent={setHoveredEvent}
+            mode="sector"
+          />
+        )}
 
         {/* PREV CLOSE Label Box - rendered LAST to appear on top (1D view only) */}
         {timeframe === '1D' && prevClose && (() => {
@@ -889,133 +558,38 @@ const PriceChart = ({
 
       {/* Entity mode: Price hover tooltip - Bloomberg style */}
       {detectedMode === 'entity' && hoveredPoint && !hoveredEvent && (
-        <div
-          className="absolute bg-white border border-gray-300 rounded pointer-events-none"
-          style={{
-            left: `${Math.max(paddingLeft + 10, Math.min(hoveredPoint.x - 60, paddingLeft + chartWidth - 120))}px`,
-            top: `${paddingTop + 10}px`,
-            padding: '6px 10px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            zIndex: 20
-          }}
-        >
-          <div className="text-sm font-bold text-gray-900">
-            {formatPrice(hoveredPoint.price)} {currency}
-          </div>
-          <div className="text-xs text-gray-600 mt-0.5">
-            {formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time)}
-          </div>
-        </div>
+        <PriceHoverTooltip
+          hoveredPoint={hoveredPoint}
+          paddingLeft={paddingLeft}
+          paddingTop={paddingTop}
+          chartWidth={chartWidth}
+          timeframe={timeframe}
+          currency={currency}
+          mode="entity"
+        />
       )}
 
       {/* Event click tooltip - Bloomberg style with article list (works for both entity and sector modes) */}
       {hoveredEvent && (
-        <div
-          className="absolute bg-white border border-gray-300 rounded shadow-lg"
-          style={{
-            left: `${Math.min(hoveredEvent.xPos - 110, (hoveredEvent.chartWidth || chartWidth) - 220)}px`,
-            top: `${hoveredEvent.iconY - 260}px`,
-            width: '220px',
-            maxHeight: '240px',
-            overflowY: 'scroll',
-            padding: '10px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-            zIndex: 100,
-            pointerEvents: 'auto'
-          }}
-          onClick={(e) => {
-            // Prevent clicks inside tooltip from closing it
-            e.stopPropagation();
-          }}
-        >
-          {/* Close button */}
-          <button
-            onClick={() => setHoveredEvent(null)}
-            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-
-          {/* Bloomberg format: Date on top, then price movement */}
-          <div className="text-xs text-gray-500 mb-1">
-            {hoveredEvent.start_date}
-          </div>
-          <div
-            className="text-sm font-semibold mb-2"
-            style={{
-              color: hoveredEvent.trend === 'Downward' ? '#dc2626' : '#00a850'
-            }}
-          >
-            {hoveredEvent.trend === 'Downward' ? '↓' : '↑'} {Math.abs(hoveredEvent.total_move_pct ?? 0).toFixed(2)}% {hoveredEvent.trend}
-          </div>
-
-          {/* Divider line */}
-          <div className="border-t border-gray-300 mb-3"></div>
-
-          {/* Article List - Bloomberg style with article dates */}
-          {hoveredEvent.news && hoveredEvent.news.length > 0 ? (
-            <div>
-              {hoveredEvent.news.map((article: NewsArticle, i: number) => (
-                <div key={i}>
-                  {/* Article publish date */}
-                  {article.publish_date && (
-                    <div className="text-xs text-gray-500 mb-0.5">
-                      {new Date(article.publish_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  )}
-                  {/* Article title button */}
-                  <button
-                    onClick={(e) => handleArticleClick(article, e)}
-                    className="block w-full text-left text-xs text-blue-600 hover:underline hover:text-blue-800 leading-snug cursor-pointer"
-                  >
-                    {article.title || 'View Article'}
-                  </button>
-                  {/* Divider line (not for last article) */}
-                  {hoveredEvent.news && i < hoveredEvent.news.length - 1 && (
-                    <div className="border-t border-gray-200 my-3"></div>
-                  )}
-                </div>
-              ))}
-              <div className="text-xs text-gray-500 mt-1">
-                {hoveredEvent.news?.length ?? 0} related article{(hoveredEvent.news?.length ?? 0) !== 1 ? 's' : ''}
-              </div>
-            </div>
-          ) : hoveredEvent.link || hoveredEvent.url ? (
-            <a
-              href={hoveredEvent.link || hoveredEvent.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-xs text-blue-600 hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              View Article
-            </a>
-          ) : null}
-        </div>
+        <EventClickTooltip
+          hoveredEvent={hoveredEvent}
+          chartWidth={chartWidth}
+          onClose={() => setHoveredEvent(null)}
+          onArticleClick={handleArticleClick}
+        />
       )}
 
       {/* Sector mode: Hover tooltip - Bloomberg style */}
       {detectedMode === 'sector' && hoveredPoint && !hoveredEvent && (
-        <div
-          className="absolute bg-white border border-gray-300 rounded pointer-events-none"
-          style={{
-            left: `${Math.max(paddingLeft + 10, Math.min(hoveredPoint.x - 60, paddingLeft + chartWidth - 120))}px`,
-            top: `${paddingTop + 10}px`,
-            padding: '6px 10px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            zIndex: 50
-          }}
-        >
-          <div className="text-sm font-bold text-gray-900">
-            {Number(hoveredPoint.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency || 'USD'}
-          </div>
-          <div className="text-xs text-gray-600 mt-0.5">
-            {formatTooltipDateTime(hoveredPoint.date, timeframe, hoveredPoint.time)}
-          </div>
-        </div>
+        <PriceHoverTooltip
+          hoveredPoint={hoveredPoint}
+          paddingLeft={paddingLeft}
+          paddingTop={paddingTop}
+          chartWidth={chartWidth}
+          timeframe={timeframe}
+          currency={currency}
+          mode="sector"
+        />
       )}
 
       {/* News Detail Modal */}

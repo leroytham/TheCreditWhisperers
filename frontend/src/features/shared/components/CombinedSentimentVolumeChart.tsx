@@ -7,6 +7,8 @@ import {
   addDaysInTimezone
 } from '../utils/formatters';
 import { ChartDetailPanel } from './charts/ChartDetailPanel';
+import { SentimentRegimeFills } from './charts/SentimentRegimeFills';
+import { VolumeAreaChart } from './charts/VolumeAreaChart';
 import {
   aggregateDataByTimeframe,
   calculateXAxisPoints,
@@ -661,199 +663,28 @@ const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> 
               </g>
 
               {/* Volume Area Chart (rendered first, as background) */}
-              {(() => {
-                const baseline = topPadding + chartHeight;
-
-                if (!processedData || processedData.length === 0) {
-                  return null;
-                }
-
-                // Pre-compute bar bounds so we can clamp to the plot area cleanly
-                const barSegments = processedData.map((point, i) => {
-                  const barHeight = point.volume > 0
-                    ? (point.volume / volumeMax) * chartHeight
-                    : 0;
-                  const y = baseline - barHeight;
-
-                  if (processedData.length === 1) {
-                    const centerX = getXPosition(i);
-                    const halfWidth = Math.min(chartWidth * 0.2, 60);
-                    const xLeft = Math.max(leftPadding, centerX - halfWidth);
-                    const xRight = Math.min(leftPadding + chartWidth, centerX + halfWidth);
-                    return { xLeft, xRight, y };
-                  }
-
-                  const centerX = getXPosition(i);
-                  const maxHalfWidth = stepWidth / 2;
-                  const desiredHalfWidth = Math.min(maxHalfWidth, Math.min(24, stepWidth * 0.45));
-
-                  let xLeft = centerX - desiredHalfWidth;
-                  let xRight = centerX + desiredHalfWidth;
-
-                  if (i === 0) {
-                    xLeft = leftPadding;
-                  }
-                  if (i === processedData.length - 1) {
-                    xRight = leftPadding + chartWidth;
-                  }
-
-                  xLeft = Math.max(leftPadding, xLeft);
-                  xRight = Math.min(leftPadding + chartWidth, xRight);
-
-                  if (xRight <= xLeft) {
-                    // Ensure a visible bar when points are extremely dense
-                    const fallbackHalfWidth = Math.max(0.5, maxHalfWidth * 0.4);
-                    const adjustedCenter = Math.min(leftPadding + chartWidth, Math.max(leftPadding, centerX));
-                    xLeft = Math.max(leftPadding, adjustedCenter - fallbackHalfWidth);
-                    xRight = Math.min(leftPadding + chartWidth, adjustedCenter + fallbackHalfWidth);
-                  }
-
-                  return { xLeft, xRight, y };
-                });
-
-                let pathD = `M ${barSegments[0].xLeft} ${baseline}`;
-
-                barSegments.forEach((segment, index) => {
-                  if (index > 0) {
-                    pathD += ` L ${segment.xLeft} ${baseline}`;
-                  }
-
-                  pathD += ` L ${segment.xLeft} ${segment.y}`;
-                  pathD += ` L ${segment.xRight} ${segment.y}`;
-                  pathD += ` L ${segment.xRight} ${baseline}`;
-                });
-
-                pathD += ' Z';
-
-                return (
-                  <path
-                    d={pathD}
-                    fill="#3b82f6"
-                    fillOpacity="0.15"
-                    stroke="#3b82f6"
-                    strokeWidth="2"
-                    strokeOpacity="0.4"
-                    className="pointer-events-none"
-                  />
-                );
-              })()}
+              <VolumeAreaChart
+                processedData={processedData}
+                chartHeight={chartHeight}
+                chartWidth={chartWidth}
+                topPadding={topPadding}
+                leftPadding={leftPadding}
+                volumeMax={volumeMax}
+                stepWidth={stepWidth}
+                getXPosition={getXPosition}
+              />
 
               {/* Sentiment Regime Color Fills */}
-              {(() => {
-                let positivePath = '';
-                let negativePath = '';
-                let isInPositive = false;
-                let isInNegative = false;
-
-                processedData.forEach((point, i) => {
-                  const x = getXPosition(i);
-                  const sentiment = point.sentiment;
-                  const normalizedSentiment = (sentimentMax - sentiment) / sentimentRange;
-                  const y = topPadding + (normalizedSentiment * chartHeight);
-
-                  // Handle zero crossings between consecutive points
-                  if (i > 0) {
-                    const prevPoint = processedData[i - 1];
-                    const prevX = getXPosition(i - 1);
-                    const prevSentiment = prevPoint.sentiment;
-
-                    // Check if sentiment crosses zero between previous and current point
-                    const crossesZero = (prevSentiment > 0 && sentiment < 0) ||
-                                        (prevSentiment < 0 && sentiment > 0);
-
-                    if (crossesZero) {
-                      // Calculate exact X-coordinate where sentiment crosses zero using linear interpolation
-                      const xCross = prevX + (x - prevX) * (0 - prevSentiment) / (sentiment - prevSentiment);
-
-                      // Close current region at the crossing point
-                      if (isInPositive) {
-                        positivePath += `L ${xCross} ${zeroY} Z `;
-                        isInPositive = false;
-                      }
-                      if (isInNegative) {
-                        negativePath += `L ${xCross} ${zeroY} Z `;
-                        isInNegative = false;
-                      }
-
-                      // Start new region from the crossing point
-                      if (sentiment > 0) {
-                        positivePath += `M ${xCross} ${zeroY} L ${x} ${y} `;
-                        isInPositive = true;
-                      } else if (sentiment < 0) {
-                        negativePath += `M ${xCross} ${zeroY} L ${x} ${y} `;
-                        isInNegative = true;
-                      }
-                    } else {
-                      // No zero crossing, handle normally
-                      if (sentiment > 0) {
-                        if (!isInPositive) {
-                          positivePath += `M ${x} ${zeroY} L ${x} ${y} `;
-                          isInPositive = true;
-                        } else {
-                          positivePath += `L ${x} ${y} `;
-                        }
-                      } else if (sentiment < 0) {
-                        if (!isInNegative) {
-                          negativePath += `M ${x} ${zeroY} L ${x} ${y} `;
-                          isInNegative = true;
-                        } else {
-                          negativePath += `L ${x} ${y} `;
-                        }
-                      } else {
-                        // Sentiment exactly at zero, close any open paths
-                        if (isInPositive) {
-                          positivePath += `L ${x} ${zeroY} Z `;
-                          isInPositive = false;
-                        }
-                        if (isInNegative) {
-                          negativePath += `L ${x} ${zeroY} Z `;
-                          isInNegative = false;
-                        }
-                      }
-                    }
-                  } else {
-                    // First point - start a region if sentiment is non-zero
-                    if (sentiment > 0) {
-                      positivePath += `M ${x} ${zeroY} L ${x} ${y} `;
-                      isInPositive = true;
-                    } else if (sentiment < 0) {
-                      negativePath += `M ${x} ${zeroY} L ${x} ${y} `;
-                      isInNegative = true;
-                    }
-                  }
-                });
-
-                // Close any remaining open paths at the end
-                if (isInPositive) {
-                  const lastX = getXPosition(processedData.length - 1);
-                  positivePath += `L ${lastX} ${zeroY} Z`;
-                }
-                if (isInNegative) {
-                  const lastX = getXPosition(processedData.length - 1);
-                  negativePath += `L ${lastX} ${zeroY} Z`;
-                }
-
-                return (
-                  <>
-                    {positivePath && (
-                      <path
-                        d={positivePath}
-                        fill="#10B981"
-                        fillOpacity="0.15"
-                        className="pointer-events-none"
-                      />
-                    )}
-                    {negativePath && (
-                      <path
-                        d={negativePath}
-                        fill="#EF4444"
-                        fillOpacity="0.15"
-                        className="pointer-events-none"
-                      />
-                    )}
-                  </>
-                );
-              })()}
+              <SentimentRegimeFills
+                processedData={processedData}
+                chartHeight={chartHeight}
+                topPadding={topPadding}
+                sentimentMax={sentimentMax}
+                sentimentMin={sentimentMin}
+                sentimentRange={sentimentRange}
+                zeroY={zeroY}
+                getXPosition={getXPosition}
+              />
 
               {/* Zero reference line for sentiment */}
               <line

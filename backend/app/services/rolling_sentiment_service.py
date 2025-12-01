@@ -225,3 +225,138 @@ def build_empty_response(
         "message": message,
         **score_defs
     }
+
+
+class RollingSentimentService:
+    """
+    Service class for calculating rolling sentiment data.
+
+    Provides a high-level interface for routes.py to calculate rolling
+    sentiment for stocks, integrating news fetching and sentiment analysis.
+
+    This class wraps the module-level functions and adds service dependencies
+    for a cleaner API in route handlers.
+    """
+
+    def __init__(self, news_service=None, sentiment_service=None):
+        """
+        Initialize with optional service dependencies.
+
+        Args:
+            news_service: News service instance (lazy-loaded if None)
+            sentiment_service: Sentiment service instance (lazy-loaded if None)
+        """
+        self._news_service = news_service
+        self._sentiment_service = sentiment_service
+
+    @property
+    def news_service(self):
+        """Lazy-load news service."""
+        if self._news_service is None:
+            from app.services.news_service import news_service_instance
+            self._news_service = news_service_instance
+        return self._news_service
+
+    @property
+    def sentiment_service(self):
+        """Lazy-load sentiment service."""
+        if self._sentiment_service is None:
+            from app.services.sentiment_service import sentiment_service
+            self._sentiment_service = sentiment_service
+        return self._sentiment_service
+
+    async def get_stock_rolling_sentiment(
+        self,
+        ticker: str,
+        timeframe: str = "1W",
+        score_defs: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate rolling sentiment for a stock ticker.
+
+        Fetches news, analyzes sentiment, and generates rolling window data points.
+        This is the main method routes.py should call for stock rolling sentiment.
+
+        Args:
+            ticker: Stock ticker symbol
+            timeframe: Timeframe string (1D, 1W, 1M, 3M, 6M, YTD, 1Y, 5Y, 10Y, MAX)
+            score_defs: Score definitions to include in response (optional)
+
+        Returns:
+            Dict with rolling sentiment data points and metadata
+        """
+        logger.info("Calculating stock rolling sentiment for: %s (timeframe: %s)", ticker, timeframe)
+
+        # Get timeframe configuration
+        config = get_timeframe_config(timeframe)
+
+        # Fetch news articles
+        news_articles = await self.news_service.get_ticker_news_for_timeframe(
+            ticker,
+            timeframe=timeframe,
+            trigger_progressive=True
+        )
+
+        logger.debug("Rolling sentiment: received %d articles from news service",
+                     len(news_articles) if news_articles else 0)
+
+        # Handle empty response
+        if not news_articles:
+            logger.debug("Rolling sentiment: no articles found for %s", ticker)
+            return build_empty_response(
+                ticker,
+                timeframe,
+                score_defs or {},
+                "No news articles found"
+            )
+
+        # Analyze sentiment for all articles
+        sentiment_results = self.sentiment_service.analyze_sentiment_with_weights(news_articles)
+        articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+        # Calculate rolling data points
+        data_points, source_earliest_dates = calculate_rolling_stock_sentiment(
+            articles_with_sentiment,
+            timeframe,
+            config
+        )
+
+        logger.debug("Rolling sentiment: generated %d data points", len(data_points))
+
+        # Build response
+        return build_rolling_sentiment_response(
+            ticker,
+            timeframe,
+            data_points,
+            source_earliest_dates,
+            score_defs or {}
+        )
+
+    def calculate_data_points_for_articles(
+        self,
+        articles_with_sentiment: List[Dict[str, Any]],
+        timeframe: str
+    ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, str]]]:
+        """
+        Calculate rolling sentiment data points from pre-analyzed articles.
+
+        Use this when you already have articles with sentiment scores
+        and just need the rolling calculations.
+
+        Args:
+            articles_with_sentiment: Articles with sentiment_score_raw field
+            timeframe: Timeframe string
+
+        Returns:
+            Tuple of (data_points, source_earliest_dates)
+        """
+        config = get_timeframe_config(timeframe)
+        return calculate_rolling_stock_sentiment(
+            articles_with_sentiment,
+            timeframe,
+            config
+        )
+
+
+# Create singleton instance
+rolling_sentiment_service = RollingSentimentService()

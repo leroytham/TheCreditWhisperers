@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import PriceChart from '../../../shared/components/PriceChart';
-import TimeRangeSelector from '../../../shared/components/TimeRangeSelector';
 import LoadingSpinner from '../../../../components/LoadingSpinner';
 import { InlineError } from '../../../../components/ErrorDisplay';
 import { useSelectedAccount } from '../../../../hooks/useSelectedAccount';
-import { formatCurrency, formatPercentage, normalizeToPercentageReturn, normalizeToPercentageReturnWithCapitalFlows, normalizeToTWR, normalizeToHybridReturn } from '../../../../utils/formatters';
+import { normalizeToPercentageReturn, normalizeToPercentageReturnWithCapitalFlows, normalizeToTWR, normalizeToHybridReturn } from '../../../../utils/formatters';
 import { parseExchangeDate } from '../../../shared/utils/formatters';
 import apiService from '../../../../services/api';
 import useAppStore from '../../../../store/useAppStore';
+import { PerformanceSummaryCards } from './PerformanceSummaryCards';
+import { PerformanceChartControls } from './PerformanceChartControls';
+import { PerformanceWarningBanners } from './PerformanceWarningBanners';
+import { PerformanceAttribution } from './PerformanceAttribution';
 
 // Types for price data points
 interface PriceDataPoint {
@@ -455,105 +458,23 @@ const PortfolioPerformanceDetail: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Performance Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div>
-            <p className="text-sm text-gray-500">Portfolio Value</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {formatCurrency(performanceData?.currentValue || 0)}
-            </p>
-            {performanceData?.adjustedAbsoluteReturn !== undefined && (
-              <p className={`text-sm mt-1 ${performanceData.adjustedAbsoluteReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {performanceData.adjustedAbsoluteReturn >= 0 ? '+' : ''}
-                {formatCurrency(performanceData.adjustedAbsoluteReturn)}
-                {performanceData?.cumulativeCapitalFlow !== 0 && (
-                  <span className="text-gray-500 text-xs ml-1" title="Capital flows netted out">
-                    (net of {formatCurrency(Math.abs(performanceData.cumulativeCapitalFlow))} {performanceData.cumulativeCapitalFlow > 0 ? 'deposits' : 'withdrawals'})
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-500">{performanceData?.period || 'Period'} Return</p>
-              {performanceData?.hasCashFlows && performanceData?.twrReturn !== null && (
-                <span
-                  className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded"
-                  title="Time-Weighted Return: accounts for deposits/withdrawals"
-                >
-                  TWR
-                </span>
-              )}
-            </div>
-            <p className={`text-2xl font-bold ${(() => {
-              // Use chart's calculated value when in percent mode for alignment
-              const returnValue = displayMode === 'percent' && chartDisplayData?.chartDisplayReturn !== null && chartDisplayData?.chartDisplayReturn !== undefined
-                ? chartDisplayData.chartDisplayReturn
-                : (performanceData?.displayReturn || performanceData?.percentReturn || 0);
-              return returnValue >= 0 ? 'text-green-600' : 'text-red-600';
-            })()}`}>
-              {(() => {
-                // Use chart's calculated value when in percent mode for alignment
-                const returnValue = displayMode === 'percent' && chartDisplayData?.chartDisplayReturn !== null && chartDisplayData?.chartDisplayReturn !== undefined
-                  ? chartDisplayData.chartDisplayReturn
-                  : (performanceData?.displayReturn || performanceData?.percentReturn || 0);
-                return formatPercentage(returnValue);
-              })()}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              {formatCurrency(performanceData?.absoluteReturn || 0)}
-              {performanceData?.hasCashFlows && performanceData?.twrReturn !== performanceData?.percentReturn && (
-                <span className="ml-2 text-xs text-gray-400">
-                  (Simple: {formatPercentage(performanceData?.percentReturn || 0)})
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div>
-            <p className="text-sm text-gray-500">S&P 500 Return</p>
-            <p className={`text-2xl font-bold ${(performanceData?.benchmarkReturn ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatPercentage(performanceData?.benchmarkReturn || 0)}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div>
-            <p className="text-sm text-gray-500">Outperformance</p>
-            <p className={`text-2xl font-bold ${(() => {
-              // Use chart-based outperformance when available (e.g., hybrid mode), otherwise use original
-              const outperformanceValue = chartDisplayData?.chartOutperformance !== null && chartDisplayData?.chartOutperformance !== undefined
-                ? chartDisplayData.chartOutperformance
-                : (performanceData?.outperformance || 0);
-              return outperformanceValue >= 0 ? 'text-green-600' : 'text-red-600';
-            })()}`}>
-              {formatPercentage((() => {
-                // Use chart-based outperformance when available (e.g., hybrid mode), otherwise use original
-                const outperformanceValue = chartDisplayData?.chartOutperformance !== null && chartDisplayData?.chartOutperformance !== undefined
-                  ? chartDisplayData.chartOutperformance
-                  : (performanceData?.outperformance || 0);
-                return outperformanceValue;
-              })())}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div>
-            <p className="text-sm text-gray-500">Holdings</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {performanceData?.holdingsCount || 0}
-            </p>
-          </div>
-        </div>
-      </div>
+      <PerformanceSummaryCards
+        currentValue={performanceData?.currentValue || 0}
+        adjustedAbsoluteReturn={performanceData?.adjustedAbsoluteReturn}
+        cumulativeCapitalFlow={performanceData?.cumulativeCapitalFlow}
+        period={performanceData?.period}
+        hasCashFlows={performanceData?.hasCashFlows}
+        twrReturn={performanceData?.twrReturn}
+        displayReturn={performanceData?.displayReturn}
+        percentReturn={performanceData?.percentReturn}
+        absoluteReturn={performanceData?.absoluteReturn}
+        benchmarkReturn={performanceData?.benchmarkReturn}
+        outperformance={performanceData?.outperformance}
+        holdingsCount={performanceData?.holdingsCount}
+        chartDisplayReturn={chartDisplayData?.chartDisplayReturn}
+        chartOutperformance={chartDisplayData?.chartOutperformance}
+        displayMode={displayMode}
+      />
 
       {/* Main Performance Chart */}
       <div className="bg-white rounded-lg shadow">
@@ -589,153 +510,25 @@ const PortfolioPerformanceDetail: React.FC = () => {
             </div>
 
             {/* Controls */}
-            <div className="flex items-center space-x-4">
-              {/* Display Mode Toggle - Button Group */}
-              <div className="inline-flex rounded-md shadow-sm" role="group">
-                <button
-                  type="button"
-                  onClick={() => setDisplayMode('value')}
-                  className={`px-4 py-2 text-sm font-medium border ${
-                    displayMode === 'value'
-                      ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  } rounded-l-md focus:z-10 focus:ring-2 focus:ring-gray-500`}
-                >
-                  $ Value
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDisplayMode('percent')}
-                  className={`px-4 py-2 text-sm font-medium border-t border-b border-r ${
-                    displayMode === 'percent'
-                      ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  } rounded-r-md focus:z-10 focus:ring-2 focus:ring-gray-500`}
-                >
-                  % Return
-                </button>
-              </div>
-
-              {/* Show S&P 500 Benchmark Toggle - Only visible in percent mode */}
-              {displayMode === 'percent' && (
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm text-gray-700">S&P 500</label>
-                  <button
-                    onClick={() => setShowBenchmark(!showBenchmark)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 ${
-                      showBenchmark ? 'bg-gray-900' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        showBenchmark ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              )}
-
-              {/* Show Events Toggle */}
-              <div className="flex items-center space-x-2">
-                <label className="text-sm text-gray-700">Events</label>
-                <button
-                  onClick={() => setShowEvents(!showEvents)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 ${
-                    showEvents ? 'bg-gray-900' : 'bg-gray-200'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      showEvents ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Timeframe Selector */}
-              <TimeRangeSelector
-                activeTimeframe={timeframe}
-                onTimeframeChange={setTimeframe}
-                timeframes={['1M', '3M', '6M', 'YTD', '1Y']}
-              />
-            </div>
+            <PerformanceChartControls
+              displayMode={displayMode}
+              setDisplayMode={setDisplayMode}
+              showBenchmark={showBenchmark}
+              setShowBenchmark={setShowBenchmark}
+              showEvents={showEvents}
+              setShowEvents={setShowEvents}
+              timeframe={timeframe}
+              setTimeframe={setTimeframe}
+            />
           </div>
 
-          {/* Zero-Baseline Information Banner */}
-          {displayMode === 'percent' && chartDisplayData?.chartPriceData?.[0]?.isZeroBaseline && (() => {
-            const firstPoint = chartDisplayData.chartPriceData[0];
-            const hasNoInvestments = firstPoint.hasNoInvestments;
-            const baselineValue = firstPoint.baselineValue;
-            const baselineDate = firstPoint.baselineDate;
-
-            // If no investments at all, show warning
-            if (hasNoInvestments) {
-              return (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <div>
-                      <h4 className="text-sm font-semibold text-amber-900">No Investments Found</h4>
-                      <p className="text-xs text-amber-700 mt-1">
-                        Portfolio has no non-zero values in this period. Switch to "Value" mode to see absolute dollar amounts.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            // Otherwise, show informational banner with baseline details
-            return (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <h4 className="text-sm font-semibold text-blue-900">Percentage Returns Re-based</h4>
-                    <p className="text-xs text-blue-700 mt-1">
-                      Portfolio started at $0. Percentage returns are calculated from the first investment of{' '}
-                      <span className="font-semibold">${baselineValue?.toFixed(2)}</span>
-                      {baselineDate && (
-                        <span> on {parseExchangeDate(baselineDate, DEFAULT_EXCHANGE)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                      )}.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Missing Symbols Warning - Shows when chart has partial data */}
-          {chartDisplayData && (() => {
-            const missingSymbols = chartDisplayData?.missingSymbols || performanceData?.missingSymbols || [];
-            const hasChartPoints = Array.isArray(chartDisplayData.chartPriceData)
-              && chartDisplayData.chartPriceData.length > 0;
-
-            // Show warning when chart renders but some symbols are missing
-            if (hasChartPoints && missingSymbols.length > 0) {
-              return (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <svg className="w-5 h-5 text-amber-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    <div>
-                      <h4 className="text-sm font-semibold text-amber-900">Incomplete Price Data</h4>
-                      <p className="text-xs text-amber-700 mt-1">
-                        Missing historical prices for: <span className="font-semibold">{missingSymbols.join(', ')}</span>.
-                        Performance shown reflects only holdings with available data.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          })()}
+          {/* Warning Banners */}
+          <PerformanceWarningBanners
+            displayMode={displayMode}
+            chartPriceData={chartDisplayData?.chartPriceData}
+            missingSymbols={chartDisplayData?.missingSymbols || performanceData?.missingSymbols}
+            exchange={DEFAULT_EXCHANGE}
+          />
 
           {/* Chart Container */}
           <div className="h-96">
@@ -802,86 +595,14 @@ const PortfolioPerformanceDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Performance Attribution - Uses actual top gainers/losers from portfolio */}
-      {performanceData && (() => {
-        // Only show attribution when timeframe exactly matches API period
-        // 1M maps to MTD (mismatch), 1Y maps to YTD (mismatch), only YTD is exact match
-        const hasMatchingAttribution = timeframe === 'YTD';
-
-        if (!hasMatchingAttribution) {
-          return (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Performance Attribution
-              </h3>
-              <p className="text-gray-500 text-sm">
-                Detailed holding-level attribution is available for standard reporting periods (YTD).
-                The current view shows a {timeframe} rolling period. Switch to YTD view to see top contributors and detractors.
-              </p>
-            </div>
-          );
-        }
-
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Top Contributors
-              </h3>
-              <div className="space-y-3">
-                {performanceData.apiData?.top_gainers && performanceData.apiData.top_gainers.length > 0 ? (
-                  performanceData.apiData.top_gainers.slice(0, 3).map((holding, index) => (
-                    <div key={`gainer-${holding.symbol}-${index}`} className="flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-gray-900">{holding.symbol}</p>
-                        <p className="text-sm text-gray-500">{holding.quantity} shares</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-green-600">
-                          {formatPercentage(holding.return_percent || 0)}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatCurrency(holding.gain_loss || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-sm">No attribution data available for this period</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Top Detractors
-              </h3>
-              <div className="space-y-3">
-                {performanceData.apiData?.top_losers && performanceData.apiData.top_losers.length > 0 ? (
-                  performanceData.apiData.top_losers.slice(0, 3).map((holding, index) => (
-                    <div key={`loser-${holding.symbol}-${index}`} className="flex justify-between items-center">
-                      <div>
-                        <p className="font-medium text-gray-900">{holding.symbol}</p>
-                        <p className="text-sm text-gray-500">{holding.quantity} shares</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-red-600">
-                          {formatPercentage(holding.return_percent || 0)}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {formatCurrency(holding.gain_loss || 0)}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-sm">No attribution data available for this period</p>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Performance Attribution */}
+      {performanceData && (
+        <PerformanceAttribution
+          timeframe={timeframe}
+          topGainers={performanceData.apiData?.top_gainers}
+          topLosers={performanceData.apiData?.top_losers}
+        />
+      )}
     </div>
   );
 };

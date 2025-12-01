@@ -1452,6 +1452,115 @@ class NewsService:
             logger.error("Failed to fetch sector news for '%s': %s", sector_key, e)
             raise ValueError(f"Failed to fetch sector news: {str(e)}")
 
+    async def aggregate_portfolio_news(
+        self,
+        tickers: List[str],
+        limit: int = 1000
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Aggregate news from multiple portfolio tickers with deduplication.
+
+        Fetches raw Alpha Vantage data for all tickers in parallel and returns
+        both the full feed and a simplified news array for backward compatibility.
+
+        Extracted from routes.py get_portfolio_news endpoint for reusability.
+
+        Args:
+            tickers: List of unique ticker symbols
+            limit: Maximum articles per ticker (default: 1000)
+
+        Returns:
+            Tuple of (all_raw_articles, simplified_news):
+            - all_raw_articles: Full Alpha Vantage feed with all metadata, deduplicated
+            - simplified_news: Simplified format for backward compatibility
+        """
+        try:
+            logger.info("Fetching portfolio news for %d tickers: %s", len(tickers), tickers)
+
+            # Fetch raw Alpha Vantage data for all tickers in parallel
+            session = await http_client.get_session()
+            raw_feed_tasks = [
+                self._fetch_alpha_vantage_news(
+                    session, ticker, limit=limit, preserve_all_tickers=True
+                )
+                for ticker in tickers
+            ]
+            raw_feed_results = await asyncio.gather(*raw_feed_tasks, return_exceptions=True)
+
+            # Collect all raw feed articles with full metadata
+            all_raw_articles = []
+            seen_urls = set()  # Deduplicate by URL
+
+            for ticker, raw_articles in zip(tickers, raw_feed_results):
+                if isinstance(raw_articles, Exception):
+                    logger.warning("Error fetching raw feed for %s: %s", ticker, raw_articles)
+                    continue
+
+                if not raw_articles:
+                    continue
+
+                # Add articles to feed, deduplicating by URL
+                for article in raw_articles:
+                    url = article.get("url") or article.get("link")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        all_raw_articles.append(article)
+
+            # Sort by time_published (most recent first)
+            all_raw_articles.sort(
+                key=lambda x: x.get("time_published", ""),
+                reverse=True
+            )
+
+            # Create simplified news array for backward compatibility
+            simplified_news = []
+            for article in all_raw_articles:
+                # Extract primary ticker from ticker_sentiment array
+                ticker_sentiment_array = article.get("ticker_sentiment", [])
+                primary_ticker = ""
+                sentiment_score = article.get("overall_sentiment_score", 0)
+                sentiment_label = article.get("overall_sentiment_label", "Neutral")
+                relevance_score = 0.0
+
+                # Find the ticker with highest relevance score in our portfolio
+                if ticker_sentiment_array:
+                    portfolio_ticker_sentiments = [
+                        ts for ts in ticker_sentiment_array
+                        if ts.get("ticker", "").upper() in tickers
+                    ]
+                    if portfolio_ticker_sentiments:
+                        # Use ticker with highest relevance
+                        best_match = max(
+                            portfolio_ticker_sentiments,
+                            key=lambda x: x.get("relevance_score", 0)
+                        )
+                        primary_ticker = best_match.get("ticker", "")
+                        relevance_score = best_match.get("relevance_score", 0)
+                        # Use ticker-specific sentiment if available
+                        sentiment_score = best_match.get("ticker_sentiment_score", sentiment_score)
+                        sentiment_label = best_match.get("ticker_sentiment_label", sentiment_label)
+
+                simplified_news.append({
+                    "ticker": primary_ticker,
+                    "title": article.get("title", ""),
+                    "provider": article.get("provider") or article.get("source", "Unknown"),
+                    "sentiment_score": sentiment_score,
+                    "sentiment_label": sentiment_label,
+                    "link": article.get("link") or article.get("url", ""),
+                    "publish_date": article.get("publish_date", ""),
+                    "publish_timestamp": article.get("publish_timestamp", ""),
+                    "image": article.get("banner_image", ""),
+                    "relevance_score": relevance_score
+                })
+
+            logger.info("Aggregated %d unique articles from %d tickers", len(all_raw_articles), len(tickers))
+
+            return all_raw_articles, simplified_news
+
+        except Exception as e:
+            logger.error("Error in portfolio news aggregation: %s", e, exc_info=True)
+            raise
+
 
 # Create a single, shared instance of the service that the whole app can use.
 news_service_instance = NewsService()

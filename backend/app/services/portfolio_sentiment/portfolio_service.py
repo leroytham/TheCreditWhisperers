@@ -9,11 +9,14 @@ by position size.
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
+
+import yfinance as yf
 
 from app.services.sentiment_service import sentiment_service
 from app.services.news_service import news_service_instance
+from app.services.stock_data_service import stock_data_service
 
 from .holding_fetcher import (
     fetch_holding_daily_sentiment,
@@ -471,6 +474,169 @@ class PortfolioSentimentService:
         return await fetch_holding_rolling_sentiment(
             ticker, self.sentiment_service, self.news_service, timeframe
         )
+
+    async def aggregate_sentiment_by_sector(
+        self,
+        holdings_list: List[Dict],
+    ) -> Dict:
+        """
+        Aggregate sentiment analysis by sector for a portfolio.
+
+        This method fetches market data and sentiment for each holding,
+        then aggregates by sector with value-weighted sentiment scores.
+
+        Extracted from routes.py get_portfolio_sentiment endpoint for reusability.
+
+        Args:
+            holdings_list: List of holdings with symbol, quantity fields
+
+        Returns:
+            Dictionary with:
+            - overall_sentiment: Portfolio-weighted average sentiment score
+            - sentiment_by_sector: Sector breakdown with sentiment, holdings count, value, and weight
+            - total_portfolio_value: Sum of all holding market values
+        """
+        try:
+            logger.info("Aggregating portfolio sentiment by sector")
+
+            # Aggregate holdings by symbol and fetch sector + sentiment data
+            symbol_data = {}  # {symbol: {sector, industry, quantity, market_value, sentiment}}
+
+            for holding in holdings_list:
+                symbol = holding.get("symbol", "").upper()
+                if not symbol:
+                    continue
+
+                quantity = float(holding.get("quantity", 0))
+                if quantity == 0:
+                    continue
+
+                # Get market price
+                try:
+                    ticker = yf.Ticker(symbol)
+                    info = ticker.info
+                    market_price = info.get("currentPrice") or info.get("regularMarketPrice")
+
+                    if not market_price:
+                        logger.warning("No market price for %s, skipping", symbol)
+                        continue
+
+                    market_value = quantity * float(market_price)
+
+                    # Get sector info
+                    sector_info = stock_data_service.get_ticker_sector_info(symbol)
+                    sector = sector_info.get("sector", "N/A")
+                    industry = sector_info.get("industry", "N/A")
+
+                    # Initialize or update symbol data
+                    if symbol not in symbol_data:
+                        symbol_data[symbol] = {
+                            "sector": sector,
+                            "industry": industry,
+                            "quantity": 0,
+                            "market_value": 0,
+                            "sentiment": None
+                        }
+
+                    symbol_data[symbol]["quantity"] += quantity
+                    symbol_data[symbol]["market_value"] += market_value
+
+                except Exception as e:
+                    logger.warning("Error processing %s: %s", symbol, e)
+                    continue
+
+            # Fetch sentiment for each symbol in parallel
+            async def fetch_symbol_sentiment(symbol: str) -> Tuple[str, Optional[float]]:
+                try:
+                    news_articles = await self.news_service.get_ticker_news(symbol)
+                    if news_articles:
+                        sentiment_results = self.sentiment_service.analyze_sentiment_with_momentum(news_articles)
+                        return symbol, sentiment_results.get("overall_weighted_score")
+                except Exception as e:
+                    logger.warning("Sentiment fetch failed for %s: %s", symbol, e)
+                return symbol, None
+
+            sentiment_tasks = [fetch_symbol_sentiment(symbol) for symbol in symbol_data.keys()]
+            sentiment_results = await asyncio.gather(*sentiment_tasks)
+
+            # Update symbol_data with sentiment scores
+            for symbol, sentiment_score in sentiment_results:
+                if symbol in symbol_data:
+                    symbol_data[symbol]["sentiment"] = sentiment_score
+
+            # Aggregate by sector
+            sector_aggregates = defaultdict(lambda: {
+                "sentiment_score": 0,
+                "holdings_count": 0,
+                "total_value": 0,
+                "weight_in_portfolio": 0,
+                "weighted_sentiment_sum": 0,
+                "sentiment_weight_sum": 0
+            })
+
+            total_portfolio_value = sum(data["market_value"] for data in symbol_data.values())
+            overall_weighted_sentiment = 0
+            overall_sentiment_weight = 0
+
+            for symbol, data in symbol_data.items():
+                sector = data["sector"]
+                if sector == "N/A":
+                    continue
+
+                market_value = data["market_value"]
+                sentiment = data["sentiment"]
+
+                sector_aggregates[sector]["holdings_count"] += 1
+                sector_aggregates[sector]["total_value"] += market_value
+
+                # Weight sentiment by market value
+                if sentiment is not None:
+                    sector_aggregates[sector]["weighted_sentiment_sum"] += sentiment * market_value
+                    sector_aggregates[sector]["sentiment_weight_sum"] += market_value
+
+                    overall_weighted_sentiment += sentiment * market_value
+                    overall_sentiment_weight += market_value
+
+            # Calculate final sector metrics
+            sentiment_by_sector = {}
+            for sector, data in sector_aggregates.items():
+                weight_in_portfolio = data["total_value"] / total_portfolio_value if total_portfolio_value > 0 else 0
+
+                # Calculate weighted average sentiment for sector
+                if data["sentiment_weight_sum"] > 0:
+                    sector_sentiment = data["weighted_sentiment_sum"] / data["sentiment_weight_sum"]
+                else:
+                    sector_sentiment = None
+
+                sentiment_by_sector[sector] = {
+                    "sentiment_score": round(sector_sentiment, 4) if sector_sentiment is not None else None,
+                    "holdings_count": data["holdings_count"],
+                    "total_value": round(data["total_value"], 2),
+                    "weight_in_portfolio": round(weight_in_portfolio, 4)
+                }
+
+            # Calculate overall portfolio sentiment
+            if overall_sentiment_weight > 0:
+                overall_sentiment = overall_weighted_sentiment / overall_sentiment_weight
+            else:
+                overall_sentiment = None
+
+            logger.info(
+                "Processed %d holdings across %d sectors. Overall sentiment: %s",
+                len(symbol_data), len(sentiment_by_sector), overall_sentiment
+            )
+
+            return {
+                "overall_sentiment": round(overall_sentiment, 4) if overall_sentiment is not None else None,
+                "sentiment_by_sector": sentiment_by_sector,
+                "total_portfolio_value": round(total_portfolio_value, 2),
+                "holdings_processed": len(symbol_data),
+                "sectors_count": len(sentiment_by_sector)
+            }
+
+        except Exception as e:
+            logger.error("Error in sector sentiment aggregation: %s", e, exc_info=True)
+            raise
 
 
 # Create singleton instance
