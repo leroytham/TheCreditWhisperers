@@ -76,7 +76,8 @@ class OptimizedPortfolioService:
                 return cached_result
 
             # Import here to avoid circular dependency
-            from app.api.routes import holdings_col
+            from app.database import get_holdings_collection_async
+            holdings_col = get_holdings_collection_async()
 
             # Step 1: Fetch and aggregate holdings from database
             holdings_data = await self._fetch_and_aggregate_holdings(
@@ -295,7 +296,7 @@ class OptimizedPortfolioService:
         async with self._semaphore:  # Limit concurrent news fetches
             try:
                 # Import here to avoid circular dependency
-                from app.api.routes import get_news_data
+                from app.api.news_routes import get_news_data
 
                 news_result = await get_news_data(symbol, timeframe="1W")
 

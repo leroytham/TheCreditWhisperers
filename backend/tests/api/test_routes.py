@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 from app.main import app
 
 # Patch the new modular services
-news_service_patch = patch('app.api.routes.news_service_instance', new_callable=MagicMock)
-sentiment_service_patch = patch('app.api.routes.sentiment_service', new_callable=MagicMock)
-market_analysis_service_patch = patch('app.api.routes.market_analysis_service', new_callable=MagicMock)
+news_service_patch = patch('app.services.news_service.news_service_instance', new_callable=MagicMock)
+sentiment_service_patch = patch('app.services.sentiment_service.sentiment_service', new_callable=MagicMock)
+market_analysis_service_patch = patch('app.services.market_analysis_service.market_analysis_service', new_callable=MagicMock)
 
 # The client will make requests to our FastAPI app
 client = TestClient(app)

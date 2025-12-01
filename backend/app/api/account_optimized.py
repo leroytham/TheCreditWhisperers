@@ -65,7 +65,9 @@ class OptimizedAccountService:
 
         try:
             # Import here to avoid circular dependency
-            from app.api.routes import holdings_col, accounts_col
+            from app.database import get_holdings_collection_async, get_accounts_collection_async
+            holdings_col = get_holdings_collection_async()
+            accounts_col = get_accounts_collection_async()
 
             # Fetch account info
             account_info = await accounts_col.find_one({

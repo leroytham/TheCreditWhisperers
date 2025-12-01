@@ -7,18 +7,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 import uuid
-from .api import routes as api_routes
+# Modular route imports (routes.py monolith removed - see portfolio_legacy_routes.py)
 from .api.notification_routes import router as notification_router
 from .api.portfolio_routes import router as portfolio_router
 from .api.health_routes import router as health_router
 from .api.metrics_routes import router as metrics_router
-# New modular route imports
 from .api.auth_routes import router as auth_router
 from .api.stock_routes import router as stock_router
 from .api.sector_routes import router as sector_router
 from .api.news_routes import router as news_router
 from .api.transaction_routes import router as transaction_router
 from .api.utility_routes import router as utility_router
+from .api.portfolio_legacy_routes import router as portfolio_legacy_router
 from .api.websocket import websocket_endpoint, manager as ws_manager
 from .database import create_indexes_async
 from .core.config import settings
@@ -390,7 +390,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # Include the API routers
 # NOTE: The frontend proxy (setupProxy.js in dev, nginx in prod) strips the /api prefix,
 # so backend routes are registered without /api prefix.
-app.include_router(api_routes.router)
+# NOTE: routes.py monolith removed - all endpoints now served by modular route files
 app.include_router(notification_router)
 app.include_router(portfolio_router)
 app.include_router(health_router)
@@ -401,6 +401,7 @@ app.include_router(sector_router)  # /sectors/{sector}/*
 app.include_router(news_router)  # /news, /price, /daily-sentiment, /rolling-sentiment
 app.include_router(transaction_router)  # /transactions/*, /accounts/*/performance-twr
 app.include_router(utility_router)  # /circuit-breakers, /search-ticker
+app.include_router(portfolio_legacy_router)  # /portfolio/*, /accounts/* (username-based legacy routes)
 
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/notifications/{client_id}")

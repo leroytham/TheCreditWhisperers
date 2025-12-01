@@ -71,7 +71,8 @@ async def readiness(response: Response):
 
     # Check MongoDB (required dependency)
     try:
-        from app.api.routes import client as motor_client
+        from app.database import get_motor_client
+        motor_client = get_motor_client()
         await asyncio.wait_for(
             motor_client.admin.command('ping'),
             timeout=2.0
