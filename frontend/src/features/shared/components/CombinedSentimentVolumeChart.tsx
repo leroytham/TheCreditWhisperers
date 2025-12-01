@@ -1,32 +1,23 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { getExchangeTimezone, getTimezoneAbbreviation, parseExchangeDate, parseExchangeTimestamp, getWeekStartInTimezone, getMonthKeyInTimezone, getMonthStartInTimezone, addDaysInTimezone } from '../utils/formatters';
-
-// Type definitions for the chart data
-interface SentimentHeadline {
-  link?: string;
-  title?: string;
-  sentiment_score?: number;
-  relevance_score?: number;
-  source?: string;
-  provider?: string;
-}
-
-interface ChartDataPoint {
-  timestamp?: string;
-  date?: string;
-  label?: string;
-  volume: number;
-  sentiment: number;
-  score?: number;
-  count?: number;
-  headlines?: SentimentHeadline[];
-}
-
-interface AggregatedDataPoint extends ChartDataPoint {
-  weekStart?: string;
-  monthKey?: string;
-  monthStart?: string;
-}
+import {
+  getExchangeTimezone,
+  getTimezoneAbbreviation,
+  parseExchangeTimestamp,
+  parseExchangeDate,
+  addDaysInTimezone
+} from '../utils/formatters';
+import { ChartDetailPanel } from './charts/ChartDetailPanel';
+import {
+  aggregateDataByTimeframe,
+  calculateXAxisPoints,
+  getChartTitle,
+  getSentimentColor,
+  getSentimentLabel,
+  hasTimeComponent,
+  type ChartDataPoint,
+  type AggregatedDataPoint,
+  type SentimentHeadline
+} from './charts/chartDataUtils';
 
 interface SourceEarliestDates {
   [key: string]: string;
@@ -42,48 +33,6 @@ interface CombinedSentimentVolumeChartProps {
   ticker?: string;
   className?: string;
 }
-
-/**
- * Helper to detect if a timestamp contains a time component
- * @param {string} timestamp - Timestamp string
- * @returns {boolean} True if timestamp has time component (e.g., "2024-11-01T14:30:00"), false for date-only (e.g., "2024-11-01")
- */
-const hasTimeComponent = (timestamp: string): boolean => {
-  return Boolean(timestamp && typeof timestamp === 'string' && timestamp.includes('T'));
-};
-
-/**
- * Helper to process aggregated headlines: deduplicate, score, rank, and limit
- * @param {Array} headlinesList - Array of headlines to process
- * @param {number} maxHeadlines - Maximum number of headlines to return (default: 15)
- * @returns {Array} Processed array of top headlines
- */
-const processAggregatedHeadlines = (headlinesList: SentimentHeadline[], maxHeadlines: number = 15): SentimentHeadline[] => {
-  if (!headlinesList || headlinesList.length === 0) {
-    return [];
-  }
-
-  // Deduplicate headlines by link using a Map
-  const uniqueHeadlines = new Map<string, SentimentHeadline>();
-  headlinesList.forEach((headline: SentimentHeadline) => {
-    if (headline && headline.link && !uniqueHeadlines.has(headline.link)) {
-      uniqueHeadlines.set(headline.link, headline);
-    }
-  });
-
-  // Score each headline and sort by impact
-  // Score = abs(sentiment_score) * (relevance_score || 1)
-  const scoredHeadlines = Array.from(uniqueHeadlines.values())
-    .map((headline: SentimentHeadline) => ({
-      ...headline,
-      _score: Math.abs(headline.sentiment_score || 0) * (headline.relevance_score || 1)
-    }))
-    .sort((a, b) => b._score - a._score)
-    .slice(0, maxHeadlines)
-    .map(({ _score, ...headline }) => headline); // Remove the temporary _score field
-
-  return scoredHeadlines;
-};
 
 /**
  * CombinedSentimentVolumeChart Component
@@ -156,189 +105,9 @@ const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> 
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  // Helper function to get sentiment label based on score
-  const getSentimentLabel = (sentiment: number): string => {
-    if (sentiment >= 0.35) return 'Bullish';
-    if (sentiment >= 0.15) return 'Somewhat-Bullish';
-    if (sentiment >= -0.15) return 'Neutral';
-    if (sentiment >= -0.35) return 'Somewhat-Bearish';
-    return 'Bearish';
-  };
 
-  // Helper function to get sentiment color based on score
-  const getSentimentColor = (sentiment: number): string => {
-    if (sentiment >= 0.35) return '#10b981'; // Bullish - green-500
-    if (sentiment >= 0.15) return '#34d399'; // Somewhat-Bullish - green-400
-    if (sentiment >= -0.15) return '#9ca3af'; // Neutral - gray-400
-    if (sentiment >= -0.35) return '#fb923c'; // Somewhat-Bearish - orange-400
-    return '#ef4444'; // Bearish - red-500
-  };
-
-  // Adaptive aggregation based on timeframe
-  const aggregateDataByTimeframe = (rawData: ChartDataPoint[]): AggregatedDataPoint[] => {
-    // Ensure all data has proper label format for display with exchange timezone
-    const normalizeData = (dataArray: ChartDataPoint[]): AggregatedDataPoint[] => {
-      return dataArray.map((point: ChartDataPoint) => {
-        // For 1D timeframe, distinguish between intraday (hourly) and daily data
-        if (timeframe === '1D' && point.timestamp) {
-          const timezone = getExchangeTimezone(exchange);
-
-          // Check if timestamp has a time component (intraday data) or is date-only (daily data)
-          if (hasTimeComponent(point.timestamp)) {
-            // Intraday data: show time of day
-            const date = parseExchangeTimestamp(point.timestamp, exchange);
-            return {
-              ...point,
-              label: date?.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true,
-                timeZone: timezone
-              }) ?? point.timestamp
-            };
-          } else {
-            // Daily data: show date
-            const date = parseExchangeDate(point.timestamp, exchange);
-            return {
-              ...point,
-              label: date?.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                timeZone: timezone
-              }) ?? point.timestamp
-            };
-          }
-        }
-        return point as AggregatedDataPoint;
-      });
-    };
-
-    // For short timeframes, use raw data but normalize labels
-    if (['1D', '1W', '1M'].includes(timeframe)) {
-      return normalizeData(rawData);
-    }
-
-    // For medium timeframes (3M, 6M, YTD), aggregate by week
-    if (['3M', '6M', 'YTD'].includes(timeframe)) {
-      const weeklyData: AggregatedDataPoint[] = [];
-      interface WeekAggregation {
-        timestamp: string;
-        volumes: number[];
-        sentiments: number[];
-        headlinesList: SentimentHeadline[];
-      }
-      const weekMap = new Map<string, WeekAggregation>();
-
-      rawData.forEach((point: ChartDataPoint) => {
-        const date = parseExchangeDate(point.timestamp || '', exchange);
-        // Get week start (Monday) in exchange timezone
-        const weekStart = date ? getWeekStartInTimezone(date, exchange) : null;
-        const weekKey = weekStart?.toISOString() || '';
-
-        if (weekKey && !weekMap.has(weekKey)) {
-          weekMap.set(weekKey, {
-            timestamp: weekStart?.toISOString() || '',
-            volumes: [],
-            sentiments: [],
-            headlinesList: []
-          });
-        }
-
-        const weekData = weekMap.get(weekKey);
-        if (weekData) {
-          weekData.volumes.push(point.volume);
-          weekData.sentiments.push(point.sentiment);
-          if (point.headlines && point.headlines.length > 0) {
-            weekData.headlinesList.push(...point.headlines);
-          }
-        }
-      });
-
-      weekMap.forEach((weekData: WeekAggregation) => {
-        const avgVolume = weekData.volumes.reduce((a: number, b: number) => a + b, 0) / weekData.volumes.length;
-        const avgSentiment = weekData.sentiments.reduce((a: number, b: number) => a + b, 0) / weekData.sentiments.length;
-
-        weeklyData.push({
-          timestamp: weekData.timestamp,
-          label: new Date(weekData.timestamp).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            timeZone: getExchangeTimezone(exchange)
-          }),
-          volume: Math.round(avgVolume),
-          sentiment: avgSentiment,
-          headlines: processAggregatedHeadlines(weekData.headlinesList) // Process and preserve top headlines
-        });
-      });
-
-      return weeklyData.sort((a: AggregatedDataPoint, b: AggregatedDataPoint) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
-    }
-
-    // For long timeframes (1Y), aggregate by month
-    if (['1Y'].includes(timeframe)) {
-      const monthlyData: AggregatedDataPoint[] = [];
-      interface MonthAggregation {
-        timestamp: string;
-        volumes: number[];
-        sentiments: number[];
-        headlinesList: SentimentHeadline[];
-      }
-      const monthMap = new Map<string, MonthAggregation>();
-
-      rawData.forEach((point: ChartDataPoint) => {
-        const date = parseExchangeDate(point.timestamp || '', exchange);
-        // Get month key in exchange timezone (YYYY-MM format)
-        const monthKey = date ? getMonthKeyInTimezone(date, exchange) : null;
-
-        if (monthKey && !monthMap.has(monthKey)) {
-          // Parse year and month from monthKey to create month start timestamp
-          const [year, month] = monthKey.split('-').map(Number);
-          const monthStart = getMonthStartInTimezone(year, month - 1, exchange); // month - 1 because JS months are 0-indexed
-
-          monthMap.set(monthKey, {
-            timestamp: monthStart?.toISOString() || '',
-            volumes: [],
-            sentiments: [],
-            headlinesList: []
-          });
-        }
-
-        const monthData = monthMap.get(monthKey || '');
-        if (monthData) {
-          monthData.volumes.push(point.volume);
-          monthData.sentiments.push(point.sentiment);
-          if (point.headlines && point.headlines.length > 0) {
-            monthData.headlinesList.push(...point.headlines);
-          }
-        }
-      });
-
-      monthMap.forEach((monthData: MonthAggregation) => {
-        const avgVolume = monthData.volumes.reduce((a: number, b: number) => a + b, 0) / monthData.volumes.length;
-        const avgSentiment = monthData.sentiments.reduce((a: number, b: number) => a + b, 0) / monthData.sentiments.length;
-
-        monthlyData.push({
-          timestamp: monthData.timestamp,
-          label: new Date(monthData.timestamp).toLocaleDateString('en-US', {
-            month: 'short',
-            year: 'numeric',
-            timeZone: getExchangeTimezone(exchange)
-          }),
-          volume: Math.round(avgVolume),
-          sentiment: avgSentiment,
-          headlines: processAggregatedHeadlines(monthData.headlinesList) // Process and preserve top headlines
-        });
-      });
-
-      return monthlyData.sort((a: AggregatedDataPoint, b: AggregatedDataPoint) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
-    }
-
-    // Default: return raw data
-    return rawData;
-  };
-
-  // Apply aggregation to data
-  const processedData = aggregateDataByTimeframe(data);
+  // Apply aggregation to data using extracted utility
+  const processedData = aggregateDataByTimeframe(data, timeframe, exchange);
 
   // Set initial hover to the latest (last) data point with delay
   // Delay allows users time to move mouse from chart to detail panel
@@ -425,74 +194,11 @@ const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> 
     return leftPadding + (index * stepWidth);
   };
 
-  // Determine number of X-axis labels based on timeframe and data length
-  const getXAxisPoints = () => {
-    if (!processedData || processedData.length === 0) return [];
+  // Calculate X-axis points using extracted utility
+  const xAxisPoints = calculateXAxisPoints(processedData, timeframe);
 
-    let step;
-    // Adjust label density based on timeframe and data points
-    if (timeframe === '1D') {
-      // For 1D: show labels every few hours to avoid crowding
-      // Aim for ~6-8 labels across the day
-      step = Math.max(1, Math.floor(processedData.length / 7));
-    } else if (timeframe === '1W') {
-      // 28 six-hourly points: show every 4th point (7 labels)
-      step = Math.max(1, Math.floor(processedData.length / 7));
-    } else if (timeframe === '1M') {
-      // Show ~6-8 labels for 1M
-      step = Math.max(1, Math.floor(processedData.length / 7));
-    } else if (timeframe === '3M') {
-      // 90 daily points: show every 15th day (6 labels)
-      step = 15;
-    } else if (timeframe === '6M') {
-      // 180 daily points: show every 30th day (6 labels)
-      step = 30;
-    } else if (timeframe === 'YTD' || timeframe === '1Y') {
-      // 365 daily points: show every 60th day (~6 labels)
-      step = 60;
-    } else {
-      // Default: ~7-8 labels
-      step = Math.max(1, Math.floor(processedData.length / 7));
-    }
-
-    const points = [];
-    for (let i = 0; i < processedData.length; i += step) {
-      points.push({
-        index: i,
-        label: processedData[i].label,
-        timestamp: processedData[i].timestamp
-      });
-    }
-
-    // Always include the last point to show the end time
-    if (points.length > 0 && points[points.length - 1].index !== processedData.length - 1) {
-      const lastIndex = processedData.length - 1;
-      points.push({
-        index: lastIndex,
-        label: processedData[lastIndex].label,
-        timestamp: processedData[lastIndex].timestamp
-      });
-    }
-
-    return points;
-  };
-
-  const xAxisPoints = getXAxisPoints();
-
-  // Chart title based on timeframe with accurate granularity
-  const getChartTitle = () => {
-    // Determine aggregation level based on actual viewMode
-    if (viewMode === 'monthly' || (['1Y'].includes(timeframe))) {
-      return `Sentiment & Volume (${timeframe}) - Monthly Averages`;
-    } else if (viewMode === 'weekly' || (['3M', '6M', 'YTD'].includes(timeframe))) {
-      return `Sentiment & Volume (${timeframe}) - Weekly Averages`;
-    } else if (viewMode === 'rolling') {
-      return `Sentiment & Volume (${timeframe}) - Rolling 24h Windows`;
-    } else {
-      // viewMode === 'daily' for 1D, 1W, 1M
-      return `Sentiment & Volume (${timeframe}) - Daily Data`;
-    }
-  };
+  // Get chart title using extracted utility
+  const chartTitle = getChartTitle(timeframe, viewMode);
 
   // Detail Panel Component
   interface DetailPanelDataPoint extends AggregatedDataPoint {
@@ -808,7 +514,7 @@ const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> 
     return (
       <div className={className}>
         <h3 className="text-lg font-semibold mb-4">
-          {getChartTitle()}
+          {chartTitle}
         </h3>
         <div className="bg-white border border-gray-200 rounded-lg shadow-md p-6" style={{ minHeight: '500px' }}>
           <div className="flex items-center justify-center h-full">
@@ -834,7 +540,7 @@ const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> 
     return (
       <div className={className}>
         <h3 className="text-lg font-semibold mb-4">
-          {getChartTitle()}
+          {chartTitle}
         </h3>
         <div className="bg-white border border-gray-200 rounded-lg shadow-md p-6" style={{ minHeight: '500px' }}>
           <div className="flex items-center justify-center h-full text-gray-400">
@@ -851,7 +557,7 @@ const CombinedSentimentVolumeChart: React.FC<CombinedSentimentVolumeChartProps> 
   return (
     <div className={className}>
       <h3 className="text-lg font-semibold mb-4">
-        {getChartTitle()}
+        {chartTitle}
       </h3>
       
       {/* Source Coverage Notice */}

@@ -27,39 +27,144 @@ from app.services.analytics import (
 )
 
 
-def calculate_aggregated_score_with_decay(
+# ============================================================================
+# Core Calculation Functions (extracted for modularity and testability)
+# ============================================================================
+
+
+def calculate_weighted_score(
+    weighted_total: float,
+    weight_sum: float
+) -> Tuple[Optional[float], str]:
+    """
+    Calculate weighted average score and determine data quality.
+
+    Args:
+        weighted_total: Sum of (score * combined_weight) for all articles
+        weight_sum: Sum of all combined weights
+
+    Returns:
+        Tuple of (aggregated_score, data_quality)
+        - aggregated_score: Weighted average or None if insufficient data
+        - data_quality: "good", "low_confidence", or "insufficient_recent_data"
+    """
+    if weight_sum >= 0.1:
+        return weighted_total / weight_sum, "good"
+    elif weight_sum > 0:
+        return weighted_total / weight_sum, "low_confidence"
+    else:
+        return None, "insufficient_recent_data"
+
+
+def calculate_volatility(
+    articles_with_metadata: List[Dict],
+    aggregated_score: Optional[float],
+    weight_sum: float
+) -> Optional[float]:
+    """
+    Calculate weighted volatility (standard deviation) of sentiment scores.
+
+    Measures the dispersion of sentiment across articles, weighted by their
+    combined relevance and recency weights.
+
+    Args:
+        articles_with_metadata: List of article dicts with 'sentiment_score_raw'
+                               and 'combined_weight' fields
+        aggregated_score: The weighted mean score (or None)
+        weight_sum: Sum of all combined weights
+
+    Returns:
+        Weighted standard deviation, or None if insufficient data
+    """
+    if aggregated_score is None or weight_sum <= 0:
+        return None
+
+    variance_sum = 0.0
+    for article_meta in articles_with_metadata:
+        diff = article_meta["sentiment_score_raw"] - aggregated_score
+        variance_sum += article_meta["combined_weight"] * (diff ** 2)
+
+    variance = variance_sum / weight_sum
+    return math.sqrt(variance)
+
+
+def calculate_breadth(
+    articles_with_metadata: List[Dict],
+    bullish_threshold: float = DEFAULT_BULLISH_THRESHOLD,
+    bearish_threshold: float = DEFAULT_BEARISH_THRESHOLD,
+    min_relevance: float = DEFAULT_MIN_RELEVANCE_THRESHOLD
+) -> Dict:
+    """
+    Calculate sentiment breadth (bull/bear ratio).
+
+    Breadth measures the consensus among articles: are most bullish or bearish?
+    A high breadth (close to +1 or -1) indicates strong consensus.
+    A low breadth (close to 0) indicates mixed sentiment.
+
+    Args:
+        articles_with_metadata: List of article dicts with 'sentiment_score_raw'
+                               and 'relevance_score' fields
+        bullish_threshold: Score threshold for bullish classification
+        bearish_threshold: Score threshold for bearish classification
+        min_relevance: Minimum relevance to include article in breadth calculation
+
+    Returns:
+        Dictionary with:
+        - breadth_score: Value between -1.0 (100% bears) and +1.0 (100% bulls)
+        - num_bullish: Count of bullish articles
+        - num_bearish: Count of bearish articles
+        - total_directional: Total articles with clear direction (bullish + bearish)
+    """
+    num_bullish = 0
+    num_bearish = 0
+
+    for article_meta in articles_with_metadata:
+        score = article_meta["sentiment_score_raw"]
+        relevance = article_meta["relevance_score"]
+
+        # Only count articles that pass minimum relevance threshold
+        if relevance >= min_relevance:
+            if score >= bullish_threshold:
+                num_bullish += 1
+            elif score <= bearish_threshold:
+                num_bearish += 1
+
+    total_directional = num_bullish + num_bearish
+
+    # Calculate breadth score bounded between -1.0 (100% bears) and +1.0 (100% bulls)
+    if total_directional > 0:
+        breadth_score = (num_bullish - num_bearish) / total_directional
+    else:
+        breadth_score = 0.0
+
+    return {
+        "breadth_score": breadth_score,
+        "num_bullish": num_bullish,
+        "num_bearish": num_bearish,
+        "total_directional": total_directional
+    }
+
+
+def process_article_weights(
     news_articles: List[Dict],
     decay_constant: float,
-    now_utc: datetime = None,
+    now_utc: datetime,
     analyze_article_func: callable = None
-) -> Tuple[Optional[float], float, str, List[Dict], Optional[float], Dict]:
+) -> Tuple[float, float, List[Dict]]:
     """
-    Calculate aggregated sentiment score with exponential decay, weighted volatility, and breadth.
+    Process articles and calculate their weights and metadata.
 
-    This is the reusable core that powers both single-score and momentum calculations.
-    It applies the full weighting formula: CombinedWeight = relevance × e^(-k × age_hours)
+    Applies the full weighting formula: CombinedWeight = relevance × e^(-k × age_hours)
 
     Args:
         news_articles: List of news article dictionaries
-        decay_constant: The k value for exponential decay (k = ln(2) / half_life_hours)
-        now_utc: Current UTC time for age calculation (defaults to datetime.utcnow())
+        decay_constant: The k value for exponential decay
+        now_utc: Current UTC time for age calculation
         analyze_article_func: Optional function to analyze articles without pre-calculated scores
 
     Returns:
-        Tuple of (aggregated_score, total_weight, data_quality, articles_with_metadata, volatility, breadth_data)
-        - aggregated_score: Weighted average score (or None if insufficient data)
-        - total_weight: Sum of all combined weights
-        - data_quality: "good", "low_confidence", "insufficient_recent_data", or "no_data"
-        - articles_with_metadata: List of articles with added weight/age metadata
-        - volatility: Weighted standard deviation (or None if insufficient data)
-        - breadth_data: Dict with breadth_score, num_bullish, num_bearish, total_directional
+        Tuple of (weighted_total, weight_sum, articles_with_metadata)
     """
-    if not news_articles:
-        return (None, 0.0, "no_data", [], None, {})
-
-    if now_utc is None:
-        now_utc = datetime.utcnow()
-
     weighted_total = 0.0
     weight_sum = 0.0
     articles_with_metadata = []
@@ -123,62 +228,60 @@ def calculate_aggregated_score_with_decay(
         })
         articles_with_metadata.append(article_meta)
 
-    # Calculate overall weighted average and determine data quality
-    data_quality = "good"
-    aggregated_score = None
-    volatility = None
+    return weighted_total, weight_sum, articles_with_metadata
 
-    if weight_sum >= 0.1:
-        aggregated_score = weighted_total / weight_sum
-        data_quality = "good"
-    elif weight_sum > 0:
-        aggregated_score = weighted_total / weight_sum
-        data_quality = "low_confidence"
-    else:
-        aggregated_score = None
-        data_quality = "insufficient_recent_data"
 
-    # Calculate weighted volatility (standard deviation)
-    if aggregated_score is not None and weight_sum > 0:
-        variance_sum = 0.0
-        for article_meta in articles_with_metadata:
-            diff = article_meta["sentiment_score_raw"] - aggregated_score
-            variance_sum += article_meta["combined_weight"] * (diff ** 2)
+# ============================================================================
+# Main Aggregation Function
+# ============================================================================
 
-        variance = variance_sum / weight_sum
-        volatility = math.sqrt(variance)
-    else:
-        volatility = None
 
-    # Calculate sentiment breadth (bull/bear ratio)
-    num_bullish = 0
-    num_bearish = 0
+def calculate_aggregated_score_with_decay(
+    news_articles: List[Dict],
+    decay_constant: float,
+    now_utc: datetime = None,
+    analyze_article_func: callable = None
+) -> Tuple[Optional[float], float, str, List[Dict], Optional[float], Dict]:
+    """
+    Calculate aggregated sentiment score with exponential decay, weighted volatility, and breadth.
 
-    for article_meta in articles_with_metadata:
-        score = article_meta["sentiment_score_raw"]
-        relevance = article_meta["relevance_score"]
+    This is the reusable core that powers both single-score and momentum calculations.
+    It applies the full weighting formula: CombinedWeight = relevance × e^(-k × age_hours)
 
-        # Only count articles that pass minimum relevance threshold
-        if relevance >= DEFAULT_MIN_RELEVANCE_THRESHOLD:
-            if score >= DEFAULT_BULLISH_THRESHOLD:
-                num_bullish += 1
-            elif score <= DEFAULT_BEARISH_THRESHOLD:
-                num_bearish += 1
+    Args:
+        news_articles: List of news article dictionaries
+        decay_constant: The k value for exponential decay (k = ln(2) / half_life_hours)
+        now_utc: Current UTC time for age calculation (defaults to datetime.utcnow())
+        analyze_article_func: Optional function to analyze articles without pre-calculated scores
 
-    total_directional = num_bullish + num_bearish
+    Returns:
+        Tuple of (aggregated_score, total_weight, data_quality, articles_with_metadata, volatility, breadth_data)
+        - aggregated_score: Weighted average score (or None if insufficient data)
+        - total_weight: Sum of all combined weights
+        - data_quality: "good", "low_confidence", "insufficient_recent_data", or "no_data"
+        - articles_with_metadata: List of articles with added weight/age metadata
+        - volatility: Weighted standard deviation (or None if insufficient data)
+        - breadth_data: Dict with breadth_score, num_bullish, num_bearish, total_directional
+    """
+    if not news_articles:
+        return (None, 0.0, "no_data", [], None, {})
 
-    # Calculate breadth score bounded between -1.0 (100% bears) and +1.0 (100% bulls)
-    if total_directional > 0:
-        breadth_score = (num_bullish - num_bearish) / total_directional
-    else:
-        breadth_score = 0.0
+    if now_utc is None:
+        now_utc = datetime.utcnow()
 
-    breadth_data = {
-        "breadth_score": breadth_score,
-        "num_bullish": num_bullish,
-        "num_bearish": num_bearish,
-        "total_directional": total_directional
-    }
+    # Step 1: Process articles and calculate weights
+    weighted_total, weight_sum, articles_with_metadata = process_article_weights(
+        news_articles, decay_constant, now_utc, analyze_article_func
+    )
+
+    # Step 2: Calculate weighted score and data quality
+    aggregated_score, data_quality = calculate_weighted_score(weighted_total, weight_sum)
+
+    # Step 3: Calculate weighted volatility
+    volatility = calculate_volatility(articles_with_metadata, aggregated_score, weight_sum)
+
+    # Step 4: Calculate sentiment breadth
+    breadth_data = calculate_breadth(articles_with_metadata)
 
     return (aggregated_score, weight_sum, data_quality, articles_with_metadata, volatility, breadth_data)
 

@@ -12,6 +12,7 @@ from app.models.notification import (
     NotificationPriority,
     AlertCondition
 )
+from app.core.alert_validators import validate_alert_condition
 
 
 # Request Schemas
@@ -94,15 +95,7 @@ class PriceAlertCreateRequest(BaseModel):
     @validator('condition')
     def validate_condition_fields(cls, v, values):
         """Validate required fields for condition type."""
-        if v in [AlertCondition.ABOVE, AlertCondition.BELOW]:
-            if 'target_price' not in values or values['target_price'] is None:
-                raise ValueError(f"target_price is required for {v} condition")
-        elif v in [AlertCondition.PERCENT_INCREASE, AlertCondition.PERCENT_DECREASE]:
-            if 'percent_change' not in values or values['percent_change'] is None:
-                raise ValueError(f"percent_change is required for {v} condition")
-            if 'base_price' not in values or values['base_price'] is None:
-                raise ValueError(f"base_price is required for {v} condition")
-        return v
+        return validate_alert_condition(v, values)
 
 
 class PriceAlertUpdateRequest(BaseModel):

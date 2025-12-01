@@ -24,6 +24,15 @@ from app.services.sector_sentiment_service import sector_sentiment_service
 from app.services.earnings_service import earnings_service
 from app.services.portfolio_timeseries_service import portfolio_timeseries_service
 from app.services.portfolio_sentiment_service import portfolio_sentiment_service
+from app.services.portfolio_performance_service import (
+    calculate_period_boundaries,
+    calculate_itd_start_date,
+    fetch_current_prices_batch,
+    calculate_holding_performance,
+    fetch_sp500_return,
+    aggregate_portfolio_performance,
+    generate_portfolio_events,
+)
 from app.core.cache import redis_cache, async_cache_result, cache_result
 from app.core.config import settings
 from app.core.http_client import http_client
@@ -2379,49 +2388,14 @@ async def get_portfolio_performance(
     HYBRID LOGIC - SMART PERFORMANCE CALCULATION:
     Uses COST BASIS for recent purchases, MARKET PRICE for older holdings.
 
-    For each holding, determine start price:
-    - IF purchase_date >= period_start → Use YOUR purchase_price (cost basis)
-    - IF purchase_date < period_start → Use market_price on period_start
-
-    Then calculate:
-    Portfolio Return = (Current Value - Start Value) / Start Value × 100
-    Where:
-    - Current Value = Σ(current_price × quantity)
-    - Start Value = Σ(start_price × quantity)
-
-    Example (MTD = Dec 1, 2024 → Today):
-
-    Holding 1: AAPL bought Feb 1, 2024 @ $150
-    - Purchase date (Feb 1) < MTD start (Dec 1)
-    - Use market price on Dec 1: $180
-    - Return: (current $195 - start $180) / $180 = +8.3%
-
-    Holding 2: MSFT bought Dec 15, 2024 @ $370
-    - Purchase date (Dec 15) >= MTD start (Dec 1)
-    - Use YOUR cost basis: $370
-    - Return: (current $385 - cost $370) / $370 = +4.05%
-
-    This shows:
-    - Real gains for recent purchases (YOUR money at risk)
-    - Fair performance for older holdings (comparable to benchmarks)
-
-    S&P 500 uses the same period start dates for fair comparison.
-
     Returns MTD, QTD, YTD, and ITD (Inception-to-Date) performance metrics.
     """
     import time
-    import logging
-    logger = logging.getLogger(__name__)
-
     start_time = time.time()
     logger.info(f"[PORTFOLIO-PERF] Request started - username={username}, account={account_name}, timeframe={timeframe}")
 
     try:
-        from datetime import datetime, timedelta
-        import pandas as pd
-
-        # Fetch ALL current holdings using repository
-        logger.debug(f"[PORTFOLIO-PERF-DB] Querying holdings: username={username}, account={account_name}")
+        # Step 1: Fetch holdings
         holdings_list = await holding_repo.get_holdings_by_account(
             username, account_name, include_closed=True
         )
@@ -2430,370 +2404,134 @@ async def get_portfolio_performance(
         logger.info(f"[PORTFOLIO-PERF-DB] Found {len(holdings_list)} holdings in {db_elapsed_ms:.0f}ms")
 
         if not holdings_list:
-            logger.info(f"[PORTFOLIO-PERF] No holdings found, returning error")
             return {"error": "No holdings found"}
 
-        logger.debug(f"[PORTFOLIO-PERF] Processing {len(holdings_list)} holdings for performance calculation")
-
-        # Get current date
         today = datetime.now()
 
-        # Define time periods - START dates for each period
-        first_day_of_month = today.replace(day=1)
-        first_day_of_year = today.replace(month=1, day=1)
+        # Step 2: Fetch current prices ONCE for all holdings
+        current_prices = await fetch_current_prices_batch(holdings_list)
 
-        # Calculate quarter start (approximate - use 3 months back)
-        quarter_start = today - timedelta(days=90)
-
-        periods = {
-            "MTD": first_day_of_month,      # Month-to-Date
-            "QTD": quarter_start,            # Quarter-to-Date (approx 3 months)
-            "YTD": first_day_of_year,       # Year-to-Date
-            "ITD": None,                     # Will calculate based on holdings
-        }
-
-        logger.debug("Time Periods:")
-        for period_name, start_date in periods.items():
-            if start_date:
-                logger.debug("  %s: %s to %s", period_name, start_date.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d'))
-            else:
-                logger.debug("  %s: From purchase dates to %s", period_name, today.strftime('%Y-%m-%d'))
-
-        # OPTIMIZATION: Fetch current prices ONCE for all holdings (not per period)
-        logger.info("Fetching current prices for %d holdings in parallel...", len(holdings_list))
-        current_prices = {}
-
-        async def fetch_current_price(symbol: str):
-            """Fetch current price using cached async function."""
-            try:
-                price_data = await stock_data_service.get_current_market_price(symbol)
-                if price_data and price_data.get("market_price"):
-                    return symbol, float(price_data["market_price"])
-            except Exception as e:
-                logger.warning("Error fetching current price for %s: %s", symbol, e)
-            return symbol, None
-
-        # Fetch all current prices in parallel
-        unique_symbols = list(set(h.get("symbol", "").upper() for h in holdings_list if h.get("symbol")))
-        current_price_tasks = [fetch_current_price(symbol) for symbol in unique_symbols]
-        current_price_results = await asyncio.gather(*current_price_tasks, return_exceptions=True)
-
-        for result in current_price_results:
-            if not isinstance(result, Exception) and result:
-                symbol, price = result
-                if price is not None:
-                    current_prices[symbol] = price
-
-        logger.info("Fetched current prices for %d holdings", len(current_prices))
-
-        # Calculate portfolio value at each period
+        # Step 3: Calculate performance for each period
+        period_names = ["MTD", "QTD", "YTD", "ITD"]
         results = []
 
-        for period_name, start_date in periods.items():
-            logger.debug("Calculating %s Performance", period_name)
+        for period_name in period_names:
+            # Get period boundaries
+            start_date, _ = calculate_period_boundaries(period_name, today)
 
-            # For ITD, calculate earliest purchase date
+            # For ITD, calculate from earliest purchase
             if period_name == "ITD":
-                earliest_purchase = min(
-                    datetime.strptime(h.get("purchase_date", today.strftime("%Y-%m-%d")), "%Y-%m-%d")
-                    for h in holdings_list
-                )
-                start_date = earliest_purchase
-                logger.debug("ITD Start Date (earliest purchase): %s", start_date.strftime('%Y-%m-%d'))
+                start_date = calculate_itd_start_date(holdings_list, today)
 
-            # Helper function to fetch start price for a holding in this period
-            async def fetch_holding_period_data(holding: dict):
-                """Fetch period start price for a holding using hybrid logic."""
-                symbol = holding.get("symbol", "").upper()
-                quantity = float(holding.get("quantity", 0))
-                purchase_price = float(holding.get("purchase_price", 0))
-                purchase_date_str = holding.get("purchase_date", today.strftime("%Y-%m-%d"))
-                purchase_date = datetime.strptime(purchase_date_str, "%Y-%m-%d")
+            # Calculate performance for each holding in parallel
+            tasks = [
+                calculate_holding_performance(holding, start_date, current_prices, today)
+                for holding in holdings_list
+            ]
+            holdings_performance = await asyncio.gather(*tasks, return_exceptions=True)
 
-                try:
-                    # HYBRID LOGIC: Determine which price to use for period start
-                    if purchase_date >= start_date:
-                        # Stock was bought WITHIN this period - use YOUR cost basis
-                        period_start_price = purchase_price
-                        price_source = "Purchase Price (bought in period)"
-                    else:
-                        # Stock was bought BEFORE this period - use market price at period start
-                        # Use cached async function
-                        start_str = (start_date - timedelta(days=5)).strftime("%Y-%m-%d")
-                        end_str = (start_date + timedelta(days=5)).strftime("%Y-%m-%d")
+            # Filter valid results
+            valid_performance = [
+                h for h in holdings_performance
+                if h is not None and not isinstance(h, Exception)
+            ]
 
-                        hist_data = await stock_data_service.get_historical_price(symbol, start_str, end_str)
+            # Fetch S&P 500 return for comparison
+            sp500_return = await fetch_sp500_return(start_date, today)
 
-                        if hist_data and hist_data.get("start_price"):
-                            period_start_price = float(hist_data["start_price"])
-                            price_source = f"Market Price on {start_date.strftime('%Y-%m-%d')}"
-                        else:
-                            logger.warning("No market data for %s at period start, using purchase price", symbol)
-                            period_start_price = purchase_price
-                            price_source = "Purchase Price (fallback)"
-
-                    # Get current price from pre-fetched cache
-                    current_price = current_prices.get(symbol)
-
-                    if not current_price:
-                        logger.warning("No current price for %s", symbol)
-                        return None
-
-                    # Calculate position values
-                    value_at_start = quantity * period_start_price
-                    value_now = quantity * current_price
-                    holding_return = ((current_price - period_start_price) / period_start_price) * 100
-
-                    return {
-                        "symbol": symbol,
-                        "quantity": quantity,
-                        "start_price": period_start_price,
-                        "current_price": current_price,
-                        "return": holding_return,
-                        "price_source": price_source,
-                        "value_at_start": value_at_start,
-                        "value_now": value_now
-                    }
-
-                except Exception as e:
-                    logger.error("Error fetching data for %s: %s", symbol, e)
-                    return None
-
-            # Fetch period data for all holdings in parallel
-            logger.debug("Fetching period data for %d holdings in parallel...", len(holdings_list))
-            period_tasks = [fetch_holding_period_data(holding) for holding in holdings_list]
-            holdings_details = await asyncio.gather(*period_tasks, return_exceptions=True)
-
-            # Filter out None/exceptions and calculate totals
-            holdings_details = [h for h in holdings_details if h is not None and not isinstance(h, Exception)]
-
-            total_value_at_period_start = sum(h["value_at_start"] for h in holdings_details)
-            total_value_now = sum(h["value_now"] for h in holdings_details)
-
-            logger.debug("Processed %d holdings successfully", len(holdings_details))
-
-            # Step 4: Calculate TOTAL portfolio return for this period
-            if total_value_at_period_start > 0:
-                portfolio_return = ((total_value_now - total_value_at_period_start) / total_value_at_period_start) * 100
-            else:
-                portfolio_return = 0
-
-            logger.debug("Portfolio summary - %s: Start=$%.2f, Now=$%.2f, Return=%.2f%%",
-                        period_name, total_value_at_period_start, total_value_now, portfolio_return)
-
-            # Step 5: Fetch S&P 500 performance for the SAME period
-            try:
-                sp500 = yf.Ticker("^GSPC")
-                # Run blocking yfinance call in thread pool to prevent event loop blocking
-                sp500_hist = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        sp500.history,
-                        start=(start_date - timedelta(days=5)).strftime("%Y-%m-%d"),
-                        end=today.strftime("%Y-%m-%d")
-                    ),
-                    timeout=20.0  # 20 second timeout for S&P 500 data
-                )
-
-                if len(sp500_hist) >= 2:
-                    sp500_start = float(sp500_hist['Close'].iloc[0])
-                    sp500_end = float(sp500_hist['Close'].iloc[-1])
-                    sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
-
-                    logger.debug("S&P 500 %s: Start=$%.2f, Now=$%.2f, Return=%.2f%%",
-                                period_name, sp500_start, sp500_end, sp500_return)
-                else:
-                    sp500_return = 0
-                    logger.warning("Insufficient S&P 500 data for %s", period_name)
-
-            except Exception as e:
-                logger.error("Error fetching S&P 500 data: %s", e)
-                sp500_return = 0
-
-            # Step 6: Calculate outperformance
-            outperformance = portfolio_return - sp500_return
-            logger.debug("Outperformance vs S&P 500 for %s: %.2f%%", period_name, outperformance)
-
-            # Step 7: Calculate top gainers and losers for attribution
-            sorted_holdings = sorted(holdings_details, key=lambda x: x["return"], reverse=True)
-
-            # Top gainers: highest positive returns (up to 5)
-            top_gainers = [h for h in sorted_holdings if h["return"] > 0][:5]
-
-            # Top losers: worst negative returns (up to 5)
-            all_losers = [h for h in sorted_holdings if h["return"] < 0]
-            top_losers = sorted(all_losers, key=lambda x: x["return"])[:5]  # Sort ascending, take worst 5
-
-            # Calculate gain/loss amounts for attribution
-            for holding in top_gainers + top_losers:
-                value_at_start = holding["quantity"] * holding["start_price"]
-                value_now = holding["quantity"] * holding["current_price"]
-                holding["gain_loss"] = round(value_now - value_at_start, 2)
-                holding["return_percent"] = round(holding["return"], 2)
-
-            logger.debug("Top %d Gainers: %s", len(top_gainers), [h['symbol'] for h in top_gainers])
-            logger.debug("Top %d Losers: %s", len(top_losers), [h['symbol'] for h in top_losers])
+            # Aggregate into portfolio-level metrics
+            portfolio_result = aggregate_portfolio_performance(
+                valid_performance, period_name, sp500_return
+            )
 
             results.append({
-                "period": period_name,
-                "return": round(portfolio_return, 2),
-                "sp500": round(sp500_return, 2),
-                "isPositive": portfolio_return >= 0,
-                "outperformance": round(outperformance, 2),
-                "portfolio_value_start": round(total_value_at_period_start, 2),
-                "portfolio_value_current": round(total_value_now, 2),
-                "holdings_count": len(holdings_details),
-                "top_gainers": top_gainers,
-                "top_losers": top_losers
+                "period": portfolio_result.period,
+                "return": portfolio_result.return_percent,
+                "sp500": portfolio_result.sp500_return,
+                "isPositive": portfolio_result.is_positive,
+                "outperformance": portfolio_result.outperformance,
+                "portfolio_value_start": portfolio_result.portfolio_value_start,
+                "portfolio_value_current": portfolio_result.portfolio_value_current,
+                "holdings_count": portfolio_result.holdings_count,
+                "top_gainers": portfolio_result.top_gainers,
+                "top_losers": portfolio_result.top_losers
             })
 
         logger.info("Portfolio performance calculation complete")
 
-        # Feature 1: Generate historical time-series data for chart
-        # Timeframe is configurable via query parameter (1D, 1W, 1M, 6M, YTD, 1Y, 3Y, 5Y)
-        try:
-            # Fetch account info to get open_date
-            account_info = await account_repo.get_by_account_name(username, account_name)
-            open_date = account_info.get("open_date") if account_info else None
+        # Step 4: Generate historical time-series data
+        historical_data, benchmark_data = await _fetch_timeseries_data(
+            holdings_list, timeframe, username, account_name, account_repo
+        )
 
-            # Generate time-series data with requested timeframe
-            # Fetch portfolio and benchmark data in parallel
-            portfolio_task = portfolio_timeseries_service.generate_portfolio_timeseries(
-                holdings_list=holdings_list,
-                timeframe=timeframe,
-                open_date=open_date,
-                db=get_motor_database(),  # Pass db for capital flow tracking
-                username=username,
-                account_name=account_name
-            )
-            benchmark_task = portfolio_timeseries_service.fetch_benchmark_timeseries(
-                timeframe=timeframe,
-                benchmark_ticker="^GSPC"  # S&P 500
-            )
-
-            historical_data, benchmark_data = await asyncio.gather(
-                portfolio_task,
-                benchmark_task,
-                return_exceptions=True
-            )
-
-            # Handle errors from parallel fetching
-            if isinstance(historical_data, Exception):
-                logger.warning("Error generating portfolio time-series: %s", historical_data)
-                historical_data = {"timeframe": timeframe, "data_points": [], "error": str(historical_data)}
-            else:
-                logger.debug("Generated %d time-series data points for %s", len(historical_data.get('data_points', [])), timeframe)
-
-            if isinstance(benchmark_data, Exception):
-                logger.warning("Error fetching benchmark time-series: %s", benchmark_data)
-                benchmark_data = {"timeframe": timeframe, "data_points": [], "error": str(benchmark_data)}
-            else:
-                logger.debug("Generated %d benchmark data points", len(benchmark_data.get('data_points', [])))
-
-        except Exception as e:
-            logger.warning("Error generating time-series data: %s", e)
-            historical_data = {"timeframe": timeframe, "data_points": [], "error": str(e)}
-            benchmark_data = {"timeframe": timeframe, "data_points": [], "error": str(e)}
-
-        # Feature 7: Generate portfolio events timeline
-        events = []
-        try:
-            # Aggregate holdings by symbol to fetch corporate actions
-            unique_symbols = list(set(h.get("symbol", "").upper() for h in holdings_list if h.get("symbol")))
-
-            # Fetch dividends for each holding (last 1 year)
-            one_year_ago = today - timedelta(days=365)
-
-            for symbol in unique_symbols:
-                try:
-                    ticker = yf.Ticker(symbol)
-                    # Get dividend and split history with timeout protection
-
-                    # Fetch dividends in thread pool
-                    dividends = await asyncio.wait_for(
-                        asyncio.to_thread(lambda: ticker.dividends),
-                        timeout=10.0  # 10 second timeout
-                    )
-                    if not dividends.empty:
-                        # Filter to last year and convert to events
-                        recent_divs = dividends[dividends.index >= pd.Timestamp(one_year_ago)]
-                        for div_date, div_amount in recent_divs.items():
-                            # Calculate total dividend received (quantity * div_amount)
-                            holding_qty = sum(float(h.get("quantity", 0)) for h in holdings_list if h.get("symbol", "").upper() == symbol)
-                            total_dividend = holding_qty * float(div_amount)
-
-                            events.append({
-                                "date": div_date.strftime("%Y-%m-%d"),
-                                "type": "dividend",
-                                "description": f"Received dividend from {symbol}",
-                                "ticker": symbol,
-                                "impact_value": round(total_dividend, 2)
-                            })
-
-                    # Get stock splits in thread pool
-                    splits = await asyncio.wait_for(
-                        asyncio.to_thread(lambda: ticker.splits),
-                        timeout=10.0  # 10 second timeout
-                    )
-                    if not splits.empty:
-                        recent_splits = splits[splits.index >= pd.Timestamp(one_year_ago)]
-                        for split_date, split_ratio in recent_splits.items():
-                            events.append({
-                                "date": split_date.strftime("%Y-%m-%d"),
-                                "type": "split",
-                                "description": f"{symbol} stock split {split_ratio}:1",
-                                "ticker": symbol,
-                                "impact_value": None
-                            })
-                except Exception as e:
-                    logger.warning("Error fetching events for %s: %s", symbol, e)
-                    continue
-
-            # Add purchase events from holdings (if purchase_date is available)
-            for holding in holdings_list:
-                purchase_date = holding.get("purchase_date")
-                if purchase_date:
-                    try:
-                        symbol = holding.get("symbol", "").upper()
-                        quantity = float(holding.get("quantity", 0))
-                        purchase_price = float(holding.get("purchase_price", 0))
-                        total_cost = quantity * purchase_price
-
-                        # Only include purchases from last year
-                        purchase_dt = pd.to_datetime(purchase_date).date()
-                        if purchase_dt >= one_year_ago.date():
-                            events.append({
-                                "date": purchase_date,
-                                "type": "purchase",
-                                "description": f"Purchased {quantity:.2f} shares of {symbol}",
-                                "ticker": symbol,
-                                "impact_value": round(total_cost, 2)
-                            })
-                    except Exception as e:
-                        logger.warning("Error processing purchase event: %s", e)
-                        continue
-
-            # Sort events by date (most recent first)
-            events.sort(key=lambda x: x["date"], reverse=True)
-
-            logger.debug("Generated %d portfolio events", len(events))
-
-        except Exception as e:
-            logger.warning("Error generating events timeline: %s", e)
-            events = []
+        # Step 5: Generate portfolio events timeline
+        events = await generate_portfolio_events(holdings_list, today)
 
         return {
             "username": username,
             "account_name": account_name,
             "performance": results,
             "calculation_date": today.strftime("%Y-%m-%d %H:%M:%S"),
-            "historical_data": historical_data,  # Feature 1: Historical time-series
-            "benchmark_data": benchmark_data,  # Benchmark comparison data (S&P 500)
-            "events": events  # Feature 7: Portfolio events timeline
+            "historical_data": historical_data,
+            "benchmark_data": benchmark_data,
+            "events": events
         }
 
     except Exception as e:
         logger.error("Error calculating portfolio performance: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to calculate performance: {str(e)}")
+
+
+async def _fetch_timeseries_data(
+    holdings_list: list,
+    timeframe: str,
+    username: str,
+    account_name: str,
+    account_repo: AccountRepository
+) -> tuple:
+    """
+    Helper to fetch portfolio and benchmark time-series data in parallel.
+
+    Returns:
+        Tuple of (historical_data, benchmark_data)
+    """
+    try:
+        account_info = await account_repo.get_by_account_name(username, account_name)
+        open_date = account_info.get("open_date") if account_info else None
+
+        portfolio_task = portfolio_timeseries_service.generate_portfolio_timeseries(
+            holdings_list=holdings_list,
+            timeframe=timeframe,
+            open_date=open_date,
+            db=get_motor_database(),
+            username=username,
+            account_name=account_name
+        )
+        benchmark_task = portfolio_timeseries_service.fetch_benchmark_timeseries(
+            timeframe=timeframe,
+            benchmark_ticker="^GSPC"
+        )
+
+        historical_data, benchmark_data = await asyncio.gather(
+            portfolio_task, benchmark_task, return_exceptions=True
+        )
+
+        if isinstance(historical_data, Exception):
+            logger.warning("Error generating portfolio time-series: %s", historical_data)
+            historical_data = {"timeframe": timeframe, "data_points": [], "error": str(historical_data)}
+
+        if isinstance(benchmark_data, Exception):
+            logger.warning("Error fetching benchmark time-series: %s", benchmark_data)
+            benchmark_data = {"timeframe": timeframe, "data_points": [], "error": str(benchmark_data)}
+
+        return historical_data, benchmark_data
+
+    except Exception as e:
+        logger.warning("Error generating time-series data: %s", e)
+        return (
+            {"timeframe": timeframe, "data_points": [], "error": str(e)},
+            {"timeframe": timeframe, "data_points": [], "error": str(e)}
+        )
 
 
 @router.get("/portfolio/news/{username}/{account_name}")

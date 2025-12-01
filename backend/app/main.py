@@ -83,44 +83,37 @@ os.environ.setdefault("LOKY_MAX_CPU_COUNT", "2")
 
 
 # =============================================================================
-# APPLICATION LIFESPAN
+# APPLICATION LIFESPAN - Helper Functions
 # =============================================================================
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Application lifespan handler for startup/shutdown.
 
-    This replaces the deprecated @app.on_event("startup") and
-    @app.on_event("shutdown") decorators. Cleanup after yield is
-    GUARANTEED to run, even on exceptions.
-    """
-    # =========================================================================
-    # STARTUP
-    # =========================================================================
-    logger.info("Starting up application...")
 
-    # Initialize OpenTelemetry distributed tracing
-    if settings.OTEL_ENABLED and settings.OTEL_EXPORTER_OTLP_ENDPOINT:
-        try:
-            from .core.telemetry import init_telemetry
-            if init_telemetry(
-                app=app,
-                service_name=settings.OTEL_SERVICE_NAME,
-                otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
-            ):
-                logger.info("OpenTelemetry tracing initialized")
-            else:
-                logger.info("OpenTelemetry tracing not configured")
-        except ImportError:
-            logger.warning("OpenTelemetry packages not installed. Tracing disabled.")
-        except Exception as e:
-            logger.warning("Failed to initialize OpenTelemetry: %s", e)
+async def _startup_telemetry(app: FastAPI) -> None:
+    """Initialize OpenTelemetry distributed tracing."""
+    if not (settings.OTEL_ENABLED and settings.OTEL_EXPORTER_OTLP_ENDPOINT):
+        return
 
+    try:
+        from .core.telemetry import init_telemetry
+        if init_telemetry(
+            app=app,
+            service_name=settings.OTEL_SERVICE_NAME,
+            otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+        ):
+            logger.info("OpenTelemetry tracing initialized")
+        else:
+            logger.info("OpenTelemetry tracing not configured")
+    except ImportError:
+        logger.warning("OpenTelemetry packages not installed. Tracing disabled.")
+    except Exception as e:
+        logger.warning("Failed to initialize OpenTelemetry: %s", e)
+
+
+async def _startup_database() -> None:
+    """Initialize MongoDB connection and create indexes."""
     # Test MongoDB connection
     try:
         from .database import get_motor_client
         motor_client = get_motor_client()
-        # Ping MongoDB to verify connection
         await motor_client.admin.command('ping')
         logger.info("MongoDB connection verified successfully")
     except Exception as e:
@@ -135,14 +128,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Failed to create database indexes: %s", e)
         # Continue startup even if index creation fails
 
-    # Initialize shared HTTP session with connection pooling
+
+async def _startup_http_client() -> None:
+    """Initialize shared HTTP session with connection pooling."""
     try:
         await http_client.get_session()
         logger.info("HTTP connection pool initialized")
     except Exception as e:
         logger.warning("Failed to initialize HTTP connection pool: %s", e)
 
-    # Initialize circuit breaker Prometheus metrics
+
+def _startup_circuit_breakers() -> None:
+    """Initialize circuit breaker Prometheus metrics."""
     try:
         from .core.circuit_breaker_metrics import initialize_circuit_breaker_metrics
         initialize_circuit_breaker_metrics([
@@ -158,27 +155,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("Failed to initialize circuit breaker metrics: %s", e)
 
-    # Initialize Redis Pub/Sub for distributed WebSocket notifications
-    if settings.PUBSUB_ENABLED:
-        try:
-            await ws_manager.initialize_pubsub()
-            logger.info("WebSocket Pub/Sub initialized")
-        except Exception as e:
-            logger.warning("Failed to initialize WebSocket Pub/Sub: %s", e)
-            logger.warning("WebSocket notifications will be local-only (single instance)")
 
-    logger.info("Application startup complete")
+async def _startup_pubsub() -> None:
+    """Initialize Redis Pub/Sub for distributed WebSocket notifications."""
+    if not settings.PUBSUB_ENABLED:
+        return
 
-    # =========================================================================
-    # YIELD - Application runs and handles requests
-    # =========================================================================
-    yield
+    try:
+        await ws_manager.initialize_pubsub()
+        logger.info("WebSocket Pub/Sub initialized")
+    except Exception as e:
+        logger.warning("Failed to initialize WebSocket Pub/Sub: %s", e)
+        logger.warning("WebSocket notifications will be local-only (single instance)")
 
-    # =========================================================================
-    # SHUTDOWN (guaranteed to run, even on exceptions)
-    # =========================================================================
-    logger.info("Shutting down application and cleaning up resources...")
 
+async def _shutdown_resources() -> None:
+    """Close all connections and cleanup resources."""
     # Close shared HTTP session
     try:
         await http_client.close()
@@ -223,11 +215,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         executor.shutdown(wait=True, kill_workers=True)
         logger.info("Loky executor cleaned up")
     except ImportError:
-        # loky not installed or not used
-        pass
+        pass  # loky not installed or not used
     except Exception as e:
         logger.warning("Error during loky cleanup: %s", e)
 
+
+# =============================================================================
+# APPLICATION LIFESPAN
+# =============================================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    Application lifespan handler for startup/shutdown.
+
+    This replaces the deprecated @app.on_event("startup") and
+    @app.on_event("shutdown") decorators. Cleanup after yield is
+    GUARANTEED to run, even on exceptions.
+    """
+    # STARTUP
+    logger.info("Starting up application...")
+    await _startup_telemetry(app)
+    await _startup_database()
+    await _startup_http_client()
+    _startup_circuit_breakers()
+    await _startup_pubsub()
+    logger.info("Application startup complete")
+
+    # YIELD - Application runs and handles requests
+    yield
+
+    # SHUTDOWN (guaranteed to run, even on exceptions)
+    logger.info("Shutting down application and cleaning up resources...")
+    await _shutdown_resources()
     logger.info("Shutdown complete")
 
 

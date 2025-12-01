@@ -385,6 +385,244 @@ class PortfolioTimeseriesService:
             logger.warning("Error calculating lot breakdown for %s: %s", holding.get('symbol'), e)
             return []
 
+    def _prepare_holdings_data(self, holdings_list: List[Dict]) -> List[Dict]:
+        """
+        Aggregate holdings by symbol, handling duplicates and preserving lot-level data.
+
+        Args:
+            holdings_list: Raw list of holdings
+
+        Returns:
+            List of aggregated holdings with calculated average cost
+        """
+        aggregated_holdings = {}
+
+        for h in holdings_list:
+            symbol = h.get("symbol", "").upper()
+            if not symbol:
+                continue
+
+            qty = float(h.get("quantity", 0))
+            purchase_price = float(h.get("purchase_price", 0))
+            purchase_date = h.get("purchase_date")
+            lots = h.get("lots", [])
+
+            if symbol not in aggregated_holdings:
+                aggregated_holdings[symbol] = {
+                    "symbol": symbol,
+                    "quantity": 0,
+                    "total_cost": 0,
+                    "purchase_date": purchase_date,
+                    "lots": []
+                }
+
+            aggregated_holdings[symbol]["quantity"] += qty
+            aggregated_holdings[symbol]["total_cost"] += qty * purchase_price
+
+            # Preserve lot-level data for accurate position tracking
+            if lots:
+                aggregated_holdings[symbol]["lots"].extend(lots)
+            else:
+                # Fallback: Create a single lot from aggregate data
+                aggregated_holdings[symbol]["lots"].append({
+                    "quantity": qty,
+                    "purchase_price": purchase_price,
+                    "purchase_date": purchase_date
+                })
+
+        # Calculate average cost for each holding
+        for symbol, data in aggregated_holdings.items():
+            if data["quantity"] > 0:
+                data["purchase_price"] = data["total_cost"] / data["quantity"]
+
+        holdings = list(aggregated_holdings.values())
+        logger.debug("Aggregated to %d unique holdings", len(holdings))
+        return holdings
+
+    async def _fetch_historical_prices_parallel(
+        self,
+        holdings: List[Dict],
+        start_date: datetime,
+        end_date: datetime,
+        timeframe: str
+    ) -> tuple[Dict[str, pd.DataFrame], List[str]]:
+        """
+        Fetch historical prices for all holdings in parallel.
+
+        Args:
+            holdings: List of aggregated holdings
+            start_date: Start date for historical data
+            end_date: End date for historical data
+            timeframe: Timeframe string
+
+        Returns:
+            Tuple of (price_data_map, missing_symbols_list)
+        """
+        tasks = [
+            self.fetch_historical_prices(h["symbol"], start_date, end_date, timeframe)
+            for h in holdings
+        ]
+
+        historical_prices = await asyncio.gather(*tasks)
+
+        price_data_map: Dict[str, pd.DataFrame] = {}
+        missing_price_symbols: List[str] = []
+
+        for holding, price_df in zip(holdings, historical_prices):
+            symbol = holding["symbol"]
+            if isinstance(price_df, Exception) or price_df is None:
+                missing_price_symbols.append(symbol)
+                continue
+
+            if hasattr(price_df, "empty") and price_df.empty:
+                missing_price_symbols.append(symbol)
+                continue
+
+            price_data_map[symbol] = price_df
+
+        if missing_price_symbols:
+            logger.warning("Missing historical data for symbols: %s", missing_price_symbols)
+
+        logger.info("Successfully fetched price data for %d holdings", len(price_data_map))
+        return price_data_map, missing_price_symbols
+
+    def _calculate_position_timeseries(
+        self,
+        holdings: List[Dict],
+        price_data_map: Dict[str, pd.DataFrame],
+        date_range: pd.DatetimeIndex,
+        start_date: datetime,
+        timeframe: str
+    ) -> List[Dict]:
+        """
+        Calculate portfolio value for each date in the range.
+
+        Args:
+            holdings: List of aggregated holdings
+            price_data_map: Map of symbol to price DataFrame
+            date_range: Pandas date range to iterate over
+            start_date: Period start date for lot breakdown
+            timeframe: Timeframe for output format
+
+        Returns:
+            List of data point dictionaries
+        """
+        data_points = []
+        prev_value = None
+
+        for date in date_range:
+            portfolio_value = 0.0
+            all_lot_breakdowns = []
+
+            for holding in holdings:
+                symbol = holding["symbol"]
+                price_data = price_data_map.get(symbol)
+
+                if price_data is not None:
+                    position_value = self.calculate_position_value(
+                        holding, price_data, date.to_pydatetime()
+                    )
+                    portfolio_value += position_value
+
+                    lot_breakdown = self.calculate_lot_breakdown(
+                        holding, price_data, date.to_pydatetime(), start_date
+                    )
+                    all_lot_breakdowns.extend(lot_breakdown)
+
+            # Calculate daily return
+            daily_return = None
+            if prev_value is not None and prev_value > 0:
+                daily_return = ((portfolio_value - prev_value) / prev_value) * 100
+
+            # Build data point based on timeframe
+            if timeframe in ["1D", "1W"]:
+                data_points.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "time": date.strftime("%H:%M:%S"),
+                    "datetime": date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "portfolio_value": round(portfolio_value, 2),
+                    "daily_return": round(daily_return, 4) if daily_return is not None else None,
+                    "lot_breakdown": all_lot_breakdowns
+                })
+            else:
+                data_points.append({
+                    "date": date.strftime("%Y-%m-%d"),
+                    "portfolio_value": round(portfolio_value, 2),
+                    "daily_return": round(daily_return, 4) if daily_return is not None else None,
+                    "lot_breakdown": all_lot_breakdowns
+                })
+
+            prev_value = portfolio_value
+
+        return data_points
+
+    async def _add_capital_flow_tracking(
+        self,
+        data_points: List[Dict],
+        db,
+        username: str,
+        account_name: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Optional[Dict]:
+        """
+        Add capital flow tracking and calculate TWR.
+
+        Args:
+            data_points: List of data points to augment
+            db: Database connection
+            username: User's username
+            account_name: Account name
+            start_date: Period start date
+            end_date: Period end date
+
+        Returns:
+            TWR calculation result or None
+        """
+        try:
+            from app.models.transaction import get_cash_flows_between_dates
+            from app.services.twr_calculator_service import twr_calculator_service
+            from datetime import date as date_type
+
+            # Get cash flows for the period
+            cash_flows = await get_cash_flows_between_dates(
+                db, username, account_name,
+                start_date.date() if isinstance(start_date, datetime) else start_date,
+                end_date.date() if isinstance(end_date, datetime) else end_date
+            )
+
+            # Create a map of date -> capital_flow
+            capital_flow_map = {}
+            for flow in cash_flows:
+                flow_date = flow["date"]
+                date_str = flow_date.isoformat() if hasattr(flow_date, 'isoformat') else str(flow_date)
+                if date_str not in capital_flow_map:
+                    capital_flow_map[date_str] = 0.0
+                capital_flow_map[date_str] += flow["amount"]
+
+            # Add capital_flow field to each data point
+            for point in data_points:
+                point_date = point["date"]
+                point["capital_flow"] = capital_flow_map.get(point_date, 0.0)
+
+            # Calculate TWR
+            twr_result = await twr_calculator_service.calculate_twr(
+                username, account_name,
+                start_date.date() if isinstance(start_date, datetime) else start_date,
+                end_date.date() if isinstance(end_date, datetime) else end_date,
+                db
+            )
+
+            logger.info("Added capital flow tracking: %d flows", len(cash_flows))
+            if twr_result.get("twr_return") is not None:
+                logger.info("Calculated TWR: %.2f%%", twr_result['twr_return'])
+
+            return twr_result
+
+        except Exception as e:
+            logger.warning("Error adding capital flow/TWR data: %s", e, exc_info=True)
+            return None
+
     async def generate_portfolio_timeseries(
         self,
         holdings_list: List[Dict],
@@ -409,6 +647,7 @@ class PortfolioTimeseriesService:
             Dictionary with timeframe, data_points array, and optional TWR data
         """
         try:
+            # Step 1: Calculate date range
             end_date = datetime.now()
             delta = self.parse_timeframe_to_delta(timeframe)
             start_date = end_date - delta
@@ -416,200 +655,37 @@ class PortfolioTimeseriesService:
             logger.info("Portfolio timeseries generation - Timeframe: %s, Start: %s, End: %s, Holdings: %d",
                         timeframe, start_date.date(), end_date.date(), len(holdings_list))
 
-            # Aggregate holdings by symbol (handle duplicates, preserve lots)
-            aggregated_holdings = {}
-            for h in holdings_list:
-                symbol = h.get("symbol", "").upper()
-                if not symbol:
-                    continue
+            # Step 2: Prepare holdings data (aggregate by symbol)
+            holdings = self._prepare_holdings_data(holdings_list)
 
-                qty = float(h.get("quantity", 0))
-                purchase_price = float(h.get("purchase_price", 0))
-                purchase_date = h.get("purchase_date")
-                lots = h.get("lots", [])  # Get lot-level data
+            # Step 3: Fetch historical prices in parallel
+            price_data_map, missing_price_symbols = await self._fetch_historical_prices_parallel(
+                holdings, start_date, end_date, timeframe
+            )
 
-                if symbol not in aggregated_holdings:
-                    aggregated_holdings[symbol] = {
-                        "symbol": symbol,
-                        "quantity": 0,
-                        "total_cost": 0,
-                        "purchase_date": purchase_date,  # Use earliest purchase date
-                        "lots": []  # Preserve lot-level information
-                    }
-
-                aggregated_holdings[symbol]["quantity"] += qty
-                aggregated_holdings[symbol]["total_cost"] += qty * purchase_price
-
-                # Preserve lot-level data for accurate position tracking
-                if lots:
-                    aggregated_holdings[symbol]["lots"].extend(lots)
-                else:
-                    # Fallback: If no lots array, create a single lot from aggregate data
-                    # This handles backward compatibility with existing holdings
-                    aggregated_holdings[symbol]["lots"].append({
-                        "quantity": qty,
-                        "purchase_price": purchase_price,
-                        "purchase_date": purchase_date
-                    })
-
-            # Calculate average cost for each holding
-            for symbol, data in aggregated_holdings.items():
-                if data["quantity"] > 0:
-                    data["purchase_price"] = data["total_cost"] / data["quantity"]
-
-            holdings = list(aggregated_holdings.values())
-            logger.debug("Aggregated to %d unique holdings", len(holdings))
-
-            # Fetch historical prices for all holdings in parallel
-            tasks = [
-                self.fetch_historical_prices(h["symbol"], start_date, end_date, timeframe)
-                for h in holdings
-            ]
-
-            historical_prices = await asyncio.gather(*tasks)
-
-            price_data_map: Dict[str, pd.DataFrame] = {}
-            missing_price_symbols: List[str] = []
-
-            for holding, price_df in zip(holdings, historical_prices):
-                symbol = holding["symbol"]
-                if isinstance(price_df, Exception) or price_df is None:
-                    missing_price_symbols.append(symbol)
-                    continue
-
-                if hasattr(price_df, "empty") and price_df.empty:
-                    missing_price_symbols.append(symbol)
-                    continue
-
-                price_data_map[symbol] = price_df
-
-            if missing_price_symbols:
-                logger.warning("Missing historical data for symbols: %s", missing_price_symbols)
-
-            logger.info("Successfully fetched price data for %d holdings", len(price_data_map))
-
-            # Generate date range (business days only)
+            # Step 4: Calculate position values for each date
             date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+            data_points = self._calculate_position_timeseries(
+                holdings, price_data_map, date_range, start_date, timeframe
+            )
 
-            # Calculate portfolio value for each date
-            data_points = []
-            prev_value = None
-
-            for date in date_range:
-                # Calculate total portfolio value for this date
-                portfolio_value = 0.0
-                all_lot_breakdowns = []  # Collect lot breakdowns for all holdings
-
-                for holding in holdings:
-                    symbol = holding["symbol"]
-                    price_data = price_data_map.get(symbol)
-
-                    if price_data is not None:
-                        position_value = self.calculate_position_value(
-                            holding,
-                            price_data,
-                            date.to_pydatetime()
-                        )
-                        portfolio_value += position_value
-
-                        # Calculate lot breakdown for this holding
-                        lot_breakdown = self.calculate_lot_breakdown(
-                            holding,
-                            price_data,
-                            date.to_pydatetime(),
-                            start_date
-                        )
-                        all_lot_breakdowns.extend(lot_breakdown)
-
-                # Include all dates, even when portfolio value is zero (e.g., fully liquidated)
-                # Calculate daily return
-                daily_return = None
-                if prev_value is not None and prev_value > 0:
-                    daily_return = ((portfolio_value - prev_value) / prev_value) * 100
-
-                # Include time fields for intraday data (1D, 1W)
-                if timeframe in ["1D", "1W"]:
-                    data_points.append({
-                        "date": date.strftime("%Y-%m-%d"),
-                        "time": date.strftime("%H:%M:%S"),
-                        "datetime": date.strftime("%Y-%m-%d %H:%M:%S"),
-                        "portfolio_value": round(portfolio_value, 2),
-                        "daily_return": round(daily_return, 4) if daily_return is not None else None,
-                        "lot_breakdown": all_lot_breakdowns  # Include lot-level data
-                    })
-                else:
-                    # Regular daily data
-                    data_points.append({
-                        "date": date.strftime("%Y-%m-%d"),
-                        "portfolio_value": round(portfolio_value, 2),
-                        "daily_return": round(daily_return, 4) if daily_return is not None else None,
-                        "lot_breakdown": all_lot_breakdowns  # Include lot-level data
-                    })
-
-                prev_value = portfolio_value
-
-            # Calculate cumulative return from start to end
+            # Step 5: Add cumulative return to last data point
             if len(data_points) > 0:
                 start_value = data_points[0]["portfolio_value"]
                 end_value = data_points[-1]["portfolio_value"]
                 cumulative_return = ((end_value - start_value) / start_value) * 100 if start_value > 0 else 0
-
-                # Add cumulative return to last data point
                 data_points[-1]["cumulative_return"] = round(cumulative_return, 2)
 
             logger.debug("Generated %d data points", len(data_points))
 
-            # Add capital flow tracking and TWR calculation if db connection provided
+            # Step 6: Add capital flow tracking and TWR if db connection provided
             twr_data = None
             if db is not None and username and account_name:
-                try:
-                    # Query transactions for capital flows (DEPOSIT, WITHDRAWAL)
-                    from app.models.transaction import get_cash_flows_between_dates
-                    from app.services.twr_calculator_service import twr_calculator_service
-                    from datetime import date as date_type
+                twr_data = await self._add_capital_flow_tracking(
+                    data_points, db, username, account_name, start_date, end_date
+                )
 
-                    # Get cash flows for the period
-                    cash_flows = await get_cash_flows_between_dates(
-                        db,
-                        username,
-                        account_name,
-                        start_date.date() if isinstance(start_date, datetime) else start_date,
-                        end_date.date() if isinstance(end_date, datetime) else end_date
-                    )
-
-                    # Create a map of date -> capital_flow
-                    capital_flow_map = {}
-                    for flow in cash_flows:
-                        flow_date = flow["date"]
-                        date_str = flow_date.isoformat() if hasattr(flow_date, 'isoformat') else str(flow_date)
-                        if date_str not in capital_flow_map:
-                            capital_flow_map[date_str] = 0.0
-                        capital_flow_map[date_str] += flow["amount"]
-
-                    # Add capital_flow field to each data point
-                    for point in data_points:
-                        point_date = point["date"]
-                        point["capital_flow"] = capital_flow_map.get(point_date, 0.0)
-
-                    # Calculate TWR using the TWR calculator service
-                    twr_result = await twr_calculator_service.calculate_twr(
-                        username,
-                        account_name,
-                        start_date.date() if isinstance(start_date, datetime) else start_date,
-                        end_date.date() if isinstance(end_date, datetime) else end_date,
-                        db
-                    )
-
-                    twr_data = twr_result
-
-                    logger.info("Added capital flow tracking: %d flows", len(cash_flows))
-                    if twr_result.get("twr_return") is not None:
-                        logger.info("Calculated TWR: %.2f%%", twr_result['twr_return'])
-
-                except Exception as e:
-                    logger.warning("Error adding capital flow/TWR data: %s", e, exc_info=True)
-                    # Continue without capital flow data
-
+            # Build result
             result = {
                 "timeframe": timeframe,
                 "data_points": data_points,
@@ -618,7 +694,6 @@ class PortfolioTimeseriesService:
                 "missing_price_symbols": missing_price_symbols
             }
 
-            # Add TWR data if available
             if twr_data:
                 result["twr"] = twr_data
 

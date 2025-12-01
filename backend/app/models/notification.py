@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field, validator
 from bson import ObjectId
 from enum import Enum
 
+from app.core.alert_validators import (
+    validate_alert_condition,
+    check_price_condition,
+    AlertCondition as AlertConditionBase,
+)
+
 class NotificationType(str, Enum):
     """Notification type enumeration."""
     SUCCESS = "success"
@@ -31,12 +37,8 @@ class NotificationPriority(str, Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
-class AlertCondition(str, Enum):
-    """Price alert condition types."""
-    ABOVE = "above"
-    BELOW = "below"
-    PERCENT_INCREASE = "percent_increase"
-    PERCENT_DECREASE = "percent_decrease"
+# Re-export AlertCondition from the validators module for backward compatibility
+AlertCondition = AlertConditionBase
 
 
 class NotificationModel(BaseModel):
@@ -250,35 +252,20 @@ class PriceAlertModel(BaseModel):
     @validator('condition')
     def validate_condition_fields(cls, v, values):
         """Validate that required fields are present for the condition."""
-        if v in [AlertCondition.ABOVE, AlertCondition.BELOW]:
-            if 'target_price' not in values or values['target_price'] is None:
-                raise ValueError(f"target_price is required for {v} condition")
-        elif v in [AlertCondition.PERCENT_INCREASE, AlertCondition.PERCENT_DECREASE]:
-            if 'percent_change' not in values or values['percent_change'] is None:
-                raise ValueError(f"percent_change is required for {v} condition")
-            if 'base_price' not in values or values['base_price'] is None:
-                raise ValueError(f"base_price is required for {v} condition")
-        return v
+        return validate_alert_condition(v, values)
 
     def check_condition(self, current_price: float) -> bool:
         """Check if the alert condition is met."""
         if not self.is_active or self.triggered:
             return False
 
-        if self.condition == AlertCondition.ABOVE:
-            return current_price >= self.target_price
-        elif self.condition == AlertCondition.BELOW:
-            return current_price <= self.target_price
-        elif self.condition == AlertCondition.PERCENT_INCREASE:
-            if self.base_price:
-                percent_change = ((current_price - self.base_price) / self.base_price) * 100
-                return percent_change >= self.percent_change
-        elif self.condition == AlertCondition.PERCENT_DECREASE:
-            if self.base_price:
-                percent_change = ((current_price - self.base_price) / self.base_price) * 100
-                return percent_change <= -abs(self.percent_change)
-
-        return False
+        return check_price_condition(
+            condition=self.condition,
+            current_price=current_price,
+            target_price=self.target_price,
+            base_price=self.base_price,
+            percent_change=self.percent_change,
+        )
 
     def to_mongo(self) -> Dict:
         """Convert to MongoDB document format."""

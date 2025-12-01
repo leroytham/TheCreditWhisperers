@@ -29,6 +29,13 @@ from app.services.stock_data_service import StockDataService
 from app.services.sentiment_service import SentimentService
 from app.services.sector_service import SectorService
 from app.services.sector_sentiment_service import SectorSentimentService
+from app.services.rolling_sentiment_service import (
+    get_timeframe_config,
+    get_effective_sector_timeframe,
+    calculate_rolling_stock_sentiment,
+    build_rolling_sentiment_response,
+    build_empty_response,
+)
 from app.core.dependencies import (
     get_news_service,
     get_sentiment_service,
@@ -433,191 +440,101 @@ async def get_rolling_sentiment(
     Example: /rolling-sentiment?ticker=AAPL&timeframe=1W
     """
     try:
-        # Validate timeframe (ticker validation skipped - may be sector identifier)
         timeframe = validate_timeframe(timeframe)
+        score_defs = get_score_definitions()
 
         # Try to resolve as sector identifier first
         is_sector = False
         sector_key = None
-
         try:
             sector_key = sector_service.resolve_sector_key(ticker)
             is_sector = True
             logger.debug(f"Resolved '{ticker}' as sector: {sector_key}")
         except ValueError:
-            is_sector = False
-
-        # Configure timeframe parameters
-        timeframe_configs = {
-            '1D': {'hours': 24, 'interval_hours': 1, 'window_hours': 24},
-            '1W': {'hours': 168, 'interval_hours': 6, 'window_hours': 24},
-            '1M': {'hours': 720, 'interval_hours': 12, 'window_hours': 24},
-            '3M': {'days': 90, 'interval_hours': 24, 'window_hours': 24},
-            '6M': {'days': 180, 'interval_hours': 24, 'window_hours': 24},
-            'YTD': {'days': (datetime.now(timezone.utc) - datetime(datetime.now(timezone.utc).year, 1, 1, tzinfo=timezone.utc)).days, 'interval_hours': 24, 'window_hours': 24},
-            '1Y': {'days': 365, 'interval_hours': 24, 'window_hours': 24},
-            '5Y': {'days': 1825, 'interval_hours': 24, 'window_hours': 24},
-            '10Y': {'days': 3650, 'interval_hours': 48, 'window_hours': 168},
-            'MAX': {'days': 7300, 'interval_hours': 168, 'window_hours': 720}
-        }
-
-        config = timeframe_configs.get(timeframe, timeframe_configs['1W'])
-
-        # SECTOR LIMIT: Cap at 1M for sectors
-        effective_timeframe = timeframe
-        if is_sector:
-            effective_timeframe = timeframe if timeframe in ['1D', '1W', '1M'] else '1M'
-
-        score_defs = get_score_definitions()
+            pass
 
         if is_sector:
-            # SECTOR PATH
-            tickers, _ = sector_service.get_sector_tickers(sector_key)
-
-            news_result = await news_service.get_sector_news(
-                sector_key=sector_key,
-                limit=5000,
-                timeframe=effective_timeframe
+            return await _get_sector_rolling_sentiment(
+                ticker, sector_key, timeframe, news_service,
+                sector_service, sector_sentiment_service, score_defs
             )
-
-            articles = news_result.get('articles', [])
-
-            if not articles:
-                return {
-                    "ticker": ticker,
-                    "timeframe": effective_timeframe,
-                    "data": [],
-                    "has_data": False,
-                    "message": "No news articles found for sector",
-                    **score_defs
-                }
-
-            sector_config = timeframe_configs.get(effective_timeframe, timeframe_configs['1W'])
-            data_points = sector_sentiment_service.calculate_rolling_sector_sentiment(
-                articles=articles,
-                sector_tickers=tickers,
-                timeframe=effective_timeframe,
-                interval_hours=sector_config['interval_hours'],
-                window_hours=sector_config['window_hours']
-            )
-
-            has_data = any(point["volume"] > 0 for point in data_points)
-            source_earliest_dates = None
-
         else:
-            # STOCK PATH
-            news_articles = await news_service.get_ticker_news_for_timeframe(
-                ticker, timeframe=timeframe, trigger_progressive=True
+            return await _get_stock_rolling_sentiment(
+                ticker, timeframe, news_service, sentiment_service, score_defs
             )
-
-            if not news_articles:
-                return {
-                    "ticker": ticker,
-                    "timeframe": timeframe,
-                    "data": [],
-                    "message": "No news articles found",
-                    **score_defs
-                }
-
-            sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
-            articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
-
-            now = datetime.now(timezone.utc)
-            data_points = []
-
-            if 'days' in config:
-                num_points = config['days'] * (24 // config['interval_hours'])
-            else:
-                num_points = config['hours'] // config['interval_hours']
-
-            for i in range(num_points):
-                point_time = now - timedelta(hours=i * config['interval_hours'])
-                window_start = point_time - timedelta(hours=config['window_hours'])
-
-                window_articles = []
-                for a in articles_with_sentiment:
-                    pub_timestamp_str = a.get("publish_timestamp")
-                    if pub_timestamp_str:
-                        try:
-                            pub_timestamp = datetime.fromisoformat(pub_timestamp_str)
-                            if pub_timestamp.tzinfo is None:
-                                pub_timestamp = pub_timestamp.replace(tzinfo=timezone.utc)
-                            if window_start <= pub_timestamp <= point_time:
-                                window_articles.append(a)
-                        except Exception:
-                            publish_date = a.get("publish_date")
-                            if publish_date:
-                                window_start_date = window_start.date()
-                                window_end_date = point_time.date()
-                                if window_start_date <= datetime.strptime(publish_date, "%Y-%m-%d").date() <= window_end_date:
-                                    window_articles.append(a)
-
-                volume = len(window_articles)
-                avg_sentiment = sum(a.get("sentiment_score_raw", 0) for a in window_articles) / volume if volume > 0 else 0
-
-                top_headlines = sorted(
-                    window_articles,
-                    key=lambda x: abs(x.get("sentiment_score_raw", 0)) * x.get("relevance_score", 1.0),
-                    reverse=True
-                )
-
-                # Format label based on timeframe
-                hour = point_time.strftime("%I").lstrip("0")
-                day = str(point_time.day)
-
-                if timeframe == '1D':
-                    label = f"{hour}{point_time.strftime('%p')}"
-                elif timeframe == '1W':
-                    label = f"{point_time.strftime('%a')} {hour}{point_time.strftime('%p')}"
-                elif timeframe == '1M':
-                    label = f"{point_time.strftime('%b')} {day} {hour}{point_time.strftime('%p')}"
-                elif timeframe in ['3M', '6M', 'YTD', '1Y']:
-                    label = f"{point_time.strftime('%b')} {day}"
-                elif timeframe == '5Y':
-                    label = f"{point_time.strftime('%b')} {day}, {point_time.year}"
-                else:
-                    label = f"{point_time.strftime('%b')} {day}"
-
-                data_points.append({
-                    "timestamp": point_time.isoformat(),
-                    "label": label,
-                    "volume": volume,
-                    "sentiment": avg_sentiment,
-                    "headlines": [{
-                        "title": h.get("title", ""),
-                        "provider": h.get("provider", "Unknown"),
-                        "sentiment_score": h.get("sentiment_score_raw", 0),
-                        "relevance_score": h.get("relevance_score", 1.0),
-                        "link": h.get("link", "")
-                    } for h in top_headlines]
-                })
-
-            data_points.reverse()
-            has_data = any(point["volume"] > 0 for point in data_points)
-
-            source_earliest_dates = None
-            if articles_with_sentiment:
-                for article in articles_with_sentiment:
-                    if '_source_earliest_dates' in article:
-                        source_earliest_dates = article['_source_earliest_dates']
-                        break
-
-        response_data = {
-            "ticker": ticker,
-            "timeframe": effective_timeframe,
-            "data": data_points,
-            "has_data": has_data,
-            **score_defs
-        }
-
-        if source_earliest_dates:
-            response_data["source_earliest_dates"] = source_earliest_dates
-
-        return response_data
 
     except Exception as e:
         logger.error(f"Error fetching rolling sentiment for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
+
+
+async def _get_sector_rolling_sentiment(
+    ticker: str,
+    sector_key: str,
+    timeframe: str,
+    news_service: NewsService,
+    sector_service: SectorService,
+    sector_sentiment_service: SectorSentimentService,
+    score_defs: dict,
+) -> dict:
+    """Handle rolling sentiment for sector identifiers."""
+    effective_timeframe = get_effective_sector_timeframe(timeframe)
+    config = get_timeframe_config(effective_timeframe)
+
+    tickers, _ = sector_service.get_sector_tickers(sector_key)
+    news_result = await news_service.get_sector_news(
+        sector_key=sector_key,
+        limit=5000,
+        timeframe=effective_timeframe
+    )
+
+    articles = news_result.get('articles', [])
+    if not articles:
+        return build_empty_response(
+            ticker, effective_timeframe, score_defs,
+            message="No news articles found for sector"
+        )
+
+    data_points = sector_sentiment_service.calculate_rolling_sector_sentiment(
+        articles=articles,
+        sector_tickers=tickers,
+        timeframe=effective_timeframe,
+        interval_hours=config['interval_hours'],
+        window_hours=config['window_hours']
+    )
+
+    return build_rolling_sentiment_response(
+        ticker, effective_timeframe, data_points, None, score_defs
+    )
+
+
+async def _get_stock_rolling_sentiment(
+    ticker: str,
+    timeframe: str,
+    news_service: NewsService,
+    sentiment_service: SentimentService,
+    score_defs: dict,
+) -> dict:
+    """Handle rolling sentiment for stock tickers."""
+    config = get_timeframe_config(timeframe)
+
+    news_articles = await news_service.get_ticker_news_for_timeframe(
+        ticker, timeframe=timeframe, trigger_progressive=True
+    )
+
+    if not news_articles:
+        return build_empty_response(ticker, timeframe, score_defs)
+
+    sentiment_results = sentiment_service.analyze_sentiment_with_weights(news_articles)
+    articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
+
+    data_points, source_earliest_dates = calculate_rolling_stock_sentiment(
+        articles_with_sentiment, timeframe, config
+    )
+
+    return build_rolling_sentiment_response(
+        ticker, timeframe, data_points, source_earliest_dates, score_defs
+    )
 
 
 @router.get("/news-models")
