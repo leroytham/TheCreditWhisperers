@@ -1204,29 +1204,33 @@ class NewsService:
 
         return unique_articles, stats
 
-    async def _assemble_sector_news_response(
+    # Timeframe to days mapping for filtering articles
+    TIMEFRAME_DAYS_MAP = {
+        '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180,
+        'YTD': None, '1Y': 365, '5Y': 1825, '10Y': 3650, 'MAX': None
+    }
+
+    async def _fetch_news_in_batches(
         self,
-        response_sector_key: str,
-        display_name: str,
         tickers: List[str],
-        sector_timeframe: str,
-        limit: int,
-    market_weight_coverage: Optional[float] = None
-    ) -> Dict[str, any]:
-        """Fetches and aggregates news for a provided ticker basket."""
+        timeframe: str,
+        batch_size: int = 10
+    ) -> Tuple[List[dict], List[str], List[str]]:
+        """
+        Fetch news for multiple tickers in batches.
 
-        if not tickers:
-            raise ValueError("No tickers available for sector aggregation.")
+        Args:
+            tickers: List of ticker symbols
+            timeframe: Timeframe for news fetch
+            batch_size: Number of tickers per batch
 
-        logger.info(
-            "Aggregating news for '%s' (key: %s) with %d tickers", display_name, response_sector_key, len(tickers)
-        )
-
+        Returns:
+            Tuple of (all_articles, successful_tickers, failed_tickers)
+        """
         failed_tickers: List[str] = []
         successful_tickers: List[str] = []
         all_articles: List[dict] = []
 
-        batch_size = 10
         total_batches = (len(tickers) + batch_size - 1) // batch_size
 
         for index in range(0, len(tickers), batch_size):
@@ -1236,7 +1240,7 @@ class NewsService:
             tasks = [
                 self.get_ticker_news_for_timeframe(
                     ticker=ticker,
-                    timeframe=sector_timeframe,
+                    timeframe=timeframe,
                     trigger_progressive=False,
                     preserve_all_tickers=True,
                     is_sector=True
@@ -1253,7 +1257,6 @@ class NewsService:
                     continue
 
                 successful_tickers.append(ticker)
-
                 if result:
                     all_articles.extend(result)
                     logger.debug("  %s: %d articles", ticker, len(result))
@@ -1263,87 +1266,84 @@ class NewsService:
             if index + batch_size < len(tickers):
                 await asyncio.sleep(0.2)
 
-        logger.info("Total articles fetched before deduplication: %d", len(all_articles))
+        return all_articles, successful_tickers, failed_tickers
 
-        unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
+    def _filter_articles_by_timeframe(
+        self,
+        articles: List[dict],
+        timeframe: str
+    ) -> List[dict]:
+        """
+        Filter articles to only include those within the specified timeframe.
 
-        logger.info("Unique articles after deduplication: %d", len(unique_articles))
-        logger.debug("Deduplication stats: %s", dedup_stats)
+        Args:
+            articles: List of articles to filter
+            timeframe: Timeframe string (1D, 1W, 1M, etc.)
 
-        # Filter articles by timeframe to ensure consistent datasets
+        Returns:
+            Filtered list of articles
+        """
+        days_back = self.TIMEFRAME_DAYS_MAP.get(timeframe)
+        if days_back is None:
+            return articles
+
         now_utc = datetime.now(timezone.utc)
-        timeframe_days_map = {
-            '1D': 1,
-            '1W': 7,
-            '1M': 30,
-            '3M': 90,
-            '6M': 180,
-            'YTD': None,
-            '1Y': 365,
-            '5Y': 1825,
-            '10Y': 3650,
-            'MAX': None
-        }
+        cutoff_date = now_utc - timedelta(days=days_back)
+        filtered_articles: List[dict] = []
 
-        days_back = timeframe_days_map.get(sector_timeframe)
+        for article in articles:
+            pub_datetime = self._parse_article_datetime(article)
+            if pub_datetime and pub_datetime >= cutoff_date:
+                filtered_articles.append(article)
 
-        if days_back is not None:
-            cutoff_date = now_utc - timedelta(days=days_back)
-            filtered_articles: List[dict] = []
+        logger.info(
+            "Filtered to %d articles within %s timeframe (cutoff: %s)",
+            len(filtered_articles), timeframe, cutoff_date.date()
+        )
+        return filtered_articles
 
-            for article in unique_articles:
-                pub_timestamp_str = article.get("publish_timestamp")
-                pub_datetime = None
+    def _parse_article_datetime(self, article: dict) -> Optional[datetime]:
+        """Parse datetime from article's publish_timestamp or publish_date fields."""
+        pub_timestamp_str = article.get("publish_timestamp")
+        if pub_timestamp_str:
+            try:
+                pub_datetime = datetime.fromisoformat(pub_timestamp_str)
+                if pub_datetime.tzinfo is None:
+                    pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
+                return pub_datetime
+            except (ValueError, AttributeError):
+                pass
 
-                if pub_timestamp_str:
-                    try:
-                        pub_datetime = datetime.fromisoformat(pub_timestamp_str)
-                        if pub_datetime.tzinfo is None:
-                            pub_datetime = pub_datetime.replace(tzinfo=timezone.utc)
-                    except (ValueError, AttributeError):
-                        pub_datetime = None
+        pub_date_str = article.get("publish_date")
+        if pub_date_str:
+            try:
+                return datetime.strptime(pub_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
 
-                if pub_datetime is None:
-                    pub_date_str = article.get("publish_date")
-                    if pub_date_str:
-                        try:
-                            pub_datetime = datetime.strptime(pub_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                        except ValueError:
-                            continue
+        return None
 
-                if pub_datetime and pub_datetime >= cutoff_date:
-                    filtered_articles.append(article)
-
-            unique_articles = filtered_articles
-            logger.info(
-                "Filtered to %d articles within %s timeframe (cutoff: %s)",
-                len(unique_articles), sector_timeframe, cutoff_date.date()
-            )
-
-        unique_articles.sort(key=lambda x: x.get('publish_date', ''), reverse=True)
-
-        limited_articles = unique_articles[:limit] if limit else unique_articles
-
+    def _build_sector_response(
+        self,
+        response_sector_key: str,
+        display_name: str,
+        tickers: List[str],
+        successful_tickers: List[str],
+        failed_tickers: List[str],
+        all_articles: List[dict],
+        unique_articles: List[dict],
+        limited_articles: List[dict],
+        timeframe: str,
+        dedup_stats: dict,
+        sentiment_metrics: dict,
+        market_weight_coverage: Optional[float]
+    ) -> Dict[str, any]:
+        """Build the sector news response dictionary."""
         total_fetched = len(all_articles)
         total_unique = len(unique_articles)
         duplicates_removed = dedup_stats.get('total_duplicates_removed', 0)
         dedup_rate = (duplicates_removed / total_fetched * 100) if total_fetched > 0 else 0.0
         success_rate = (len(successful_tickers) / len(tickers) * 100) if tickers else 0.0
-
-        logger.info(
-            "Calculating sector sentiment metrics from %d unique articles...", len(unique_articles)
-        )
-        sentiment_metrics = sector_sentiment_service.analyze_sector_sentiment_with_momentum(
-            articles=unique_articles,
-            sector_tickers=tickers
-        )
-        logger.info(
-            "Sentiment calculation complete: slow_score=%s, momentum=%s, quality=%s",
-            sentiment_metrics.get('slow_score'),
-            sentiment_metrics.get('sentiment_momentum'),
-            sentiment_metrics.get('data_quality')
-        )
-
         coverage_value = round(market_weight_coverage, 4) if market_weight_coverage is not None else None
 
         return {
@@ -1360,11 +1360,75 @@ class NewsService:
             'unique_articles': total_unique,
             'deduplication_rate': round(dedup_rate, 2),
             'articles': limited_articles,
-            'timeframe': sector_timeframe,
+            'timeframe': timeframe,
             'cached': False,
             'metadata': dedup_stats,
             'sentiment_metrics': sentiment_metrics
         }
+
+    async def _assemble_sector_news_response(
+        self,
+        response_sector_key: str,
+        display_name: str,
+        tickers: List[str],
+        sector_timeframe: str,
+        limit: int,
+        market_weight_coverage: Optional[float] = None
+    ) -> Dict[str, any]:
+        """Fetches and aggregates news for a provided ticker basket."""
+        if not tickers:
+            raise ValueError("No tickers available for sector aggregation.")
+
+        logger.info(
+            "Aggregating news for '%s' (key: %s) with %d tickers",
+            display_name, response_sector_key, len(tickers)
+        )
+
+        # Fetch news in batches
+        all_articles, successful_tickers, failed_tickers = await self._fetch_news_in_batches(
+            tickers, sector_timeframe
+        )
+        logger.info("Total articles fetched before deduplication: %d", len(all_articles))
+
+        # Deduplicate articles
+        unique_articles, dedup_stats = self._deduplicate_articles(all_articles)
+        logger.info("Unique articles after deduplication: %d", len(unique_articles))
+        logger.debug("Deduplication stats: %s", dedup_stats)
+
+        # Filter by timeframe
+        unique_articles = self._filter_articles_by_timeframe(unique_articles, sector_timeframe)
+
+        # Sort and limit
+        unique_articles.sort(key=lambda x: x.get('publish_date', ''), reverse=True)
+        limited_articles = unique_articles[:limit] if limit else unique_articles
+
+        # Calculate sentiment metrics
+        logger.info("Calculating sector sentiment metrics from %d unique articles...", len(unique_articles))
+        sentiment_metrics = sector_sentiment_service.analyze_sector_sentiment_with_momentum(
+            articles=unique_articles,
+            sector_tickers=tickers
+        )
+        logger.info(
+            "Sentiment calculation complete: slow_score=%s, momentum=%s, quality=%s",
+            sentiment_metrics.get('slow_score'),
+            sentiment_metrics.get('sentiment_momentum'),
+            sentiment_metrics.get('data_quality')
+        )
+
+        return self._build_sector_response(
+            response_sector_key=response_sector_key,
+            display_name=display_name,
+            tickers=tickers,
+            successful_tickers=successful_tickers,
+            failed_tickers=failed_tickers,
+            all_articles=all_articles,
+            unique_articles=unique_articles,
+            limited_articles=limited_articles,
+            timeframe=sector_timeframe,
+            dedup_stats=dedup_stats,
+            sentiment_metrics=sentiment_metrics,
+            market_weight_coverage=market_weight_coverage
+        )
 
     @async_cache_result(ttl=3600)  # Cache for 60 minutes (sector news is expensive to fetch)
     async def _get_all_sectors_news(

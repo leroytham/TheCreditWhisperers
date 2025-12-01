@@ -785,154 +785,179 @@ def get_price_data(ticker: str, timeframe: str = "1Y"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
 
+# --- Helper functions for news endpoint ---
+
+def _extract_ticker_sentiment(articles: list, ticker: str) -> None:
+    """
+    Extract ticker-specific sentiment from ticker_sentiment array to root level.
+
+    Args:
+        articles: List of articles to modify in-place
+        ticker: Target ticker symbol
+    """
+    ticker_upper = ticker.upper()
+    for article in articles:
+        ticker_sentiments = article.get("ticker_sentiment")
+        if isinstance(ticker_sentiments, list):
+            for ts in ticker_sentiments:
+                if ts.get("ticker", "").upper() == ticker_upper:
+                    article["ticker_sentiment_score"] = float(ts.get("ticker_sentiment_score", 0.0))
+                    article["ticker_sentiment_label"] = ts.get("ticker_sentiment_label", "Neutral")
+                    article["ticker_relevance_score"] = float(ts.get("relevance_score", 0.0))
+                    break
+
+
+def _format_news_for_frontend(articles_with_sentiment: list) -> list:
+    """
+    Format articles for frontend display.
+
+    Args:
+        articles_with_sentiment: Articles with sentiment analysis results
+
+    Returns:
+        List of formatted news items
+    """
+    formatted_news = []
+    for article in articles_with_sentiment:
+        news_item = {
+            "title": article.get("title", ""),
+            "provider": article.get("source_domain", article.get("provider", "Unknown")),
+            "sentiment_score": article.get("sentiment_score_raw", 0),
+            "sentiment_label": article.get("sentiment_label", "Neutral"),
+            "link": article.get("link", ""),
+            "publish_date": article.get("publish_date", ""),
+            "publish_timestamp": article.get("publish_timestamp", ""),
+            "image": article.get("banner_image", article.get("image", ""))
+        }
+
+        relevance_score = article.get("ticker_relevance_score")
+        if relevance_score is not None and relevance_score > 0:
+            news_item["relevance_score"] = relevance_score
+
+        formatted_news.append(news_item)
+
+    return formatted_news
+
+
+def _build_news_response(
+    ticker: str,
+    formatted_news: list,
+    raw_feed: list,
+    sentiment_results: dict
+) -> dict:
+    """
+    Build the complete news response with all sentiment metrics.
+
+    Args:
+        ticker: Stock ticker symbol
+        formatted_news: Formatted news items for frontend
+        raw_feed: Raw Alpha Vantage feed data
+        sentiment_results: Results from sentiment analysis
+
+    Returns:
+        Complete response dictionary
+    """
+    score_defs = get_score_definitions()
+
+    return {
+        "ticker": ticker,
+        "news": formatted_news,
+        "feed": raw_feed,
+        "items": str(len(raw_feed)),
+        "avg_score": sentiment_results.get("overall_weighted_score", 0),
+        # Momentum fields
+        "sentiment_momentum": sentiment_results.get("sentiment_momentum"),
+        "fast_score": sentiment_results.get("fast_score"),
+        "slow_score": sentiment_results.get("slow_score"),
+        "momentum_label": sentiment_results.get("momentum_label"),
+        "momentum_interpretation": sentiment_results.get("momentum_interpretation"),
+        "momentum_quality": sentiment_results.get("momentum_quality"),
+        "momentum_direction": sentiment_results.get("momentum_direction"),
+        "momentum_strength": sentiment_results.get("momentum_strength"),
+        "half_life_fast_hours": sentiment_results.get("half_life_fast_hours"),
+        "half_life_slow_hours": sentiment_results.get("half_life_slow_hours"),
+        "data_quality": sentiment_results.get("data_quality"),
+        # Volatility fields
+        "sentiment_volatility": sentiment_results.get("sentiment_volatility"),
+        "volatility_quality": sentiment_results.get("volatility_quality"),
+        # Volume fields
+        "effective_news_volume": sentiment_results.get("effective_news_volume"),
+        "volume_interpretation": sentiment_results.get("volume_interpretation"),
+        # Breadth metrics
+        "sentiment_breadth_score": sentiment_results.get("sentiment_breadth_score"),
+        "num_bullish_articles": sentiment_results.get("num_bullish_articles"),
+        "num_bearish_articles": sentiment_results.get("num_bearish_articles"),
+        "total_directional_articles": sentiment_results.get("total_directional_articles"),
+        "breadth_interpretation": sentiment_results.get("breadth_interpretation"),
+        "breadth_quality": sentiment_results.get("breadth_quality"),
+        # Z-Score metrics
+        "sentiment_z_score": sentiment_results.get("sentiment_z_score"),
+        "z_score_interpretation": sentiment_results.get("z_score_interpretation"),
+        "z_score_historical_mean": sentiment_results.get("z_score_historical_mean"),
+        "z_score_historical_std": sentiment_results.get("z_score_historical_std"),
+        "z_score_days_of_history": sentiment_results.get("z_score_days_of_history"),
+        "z_score_quality": sentiment_results.get("z_score_quality"),
+        # Source & Topic Analysis
+        "source_concentration_hhi": sentiment_results.get("source_concentration_hhi"),
+        "concentration_interpretation": sentiment_results.get("concentration_interpretation"),
+        "top_sources": sentiment_results.get("top_sources", []),
+        "dominant_topic": sentiment_results.get("dominant_topic"),
+        "dominant_topic_weight": sentiment_results.get("dominant_topic_weight"),
+        "dominant_topic_percentage": sentiment_results.get("dominant_topic_percentage"),
+        "topic_count": sentiment_results.get("topic_count", 0),
+        "sentiment_by_topic": sentiment_results.get("sentiment_by_topic", {}),
+        "topic_weights": sentiment_results.get("topic_weights", {}),
+        **score_defs
+    }
+
+
 @router.get("/news")
 async def get_news_data(ticker: str, timeframe: str = "1Y"):
     """
     API endpoint to get recent news and sentiment for a ticker with momentum analysis.
     Example: /api/news?ticker=AAPL&timeframe=1Y
-
-    Args:
-        ticker: Stock ticker symbol
-        timeframe: Time range for news data (1D, 1W, 1M, 3M, 6M, YTD, 1Y) - default: 1Y
-
-    Returns comprehensive sentiment data including:
-    - feed: Raw Alpha Vantage feed data with all details
-    - news: Formatted/simplified news articles for backward compatibility
-    - avg_score: Overall weighted sentiment score (slow/24h trend)
-    - fast_score: Current intraday sentiment (7h half-life)
-    - slow_score: Daily trend sentiment (24h half-life)
-    - sentiment_momentum: fast_score - slow_score
-    - momentum_label: Classification (e.g., "Positive Momentum")
-    - momentum_interpretation: Human-readable description
-    - momentum_quality: Data quality indicator
     """
     import time
-    import logging
-    logger = logging.getLogger(__name__)
+    import copy
 
     news_fetch_start = time.time()
     logger.info(f"[NEWS-API] Fetching news for ticker={ticker}, timeframe={timeframe}")
 
     try:
-        # Fetch news articles using the timeframe-aware news service
-        # Use preserve_all_tickers=True to get full data including all metadata
         news_articles = await news_service_instance.get_ticker_news_for_timeframe(
             ticker,
             timeframe=timeframe,
             trigger_progressive=True,
-            preserve_all_tickers=True  # Get full data with all tickers and metadata
+            preserve_all_tickers=True
         )
 
         news_fetch_elapsed = (time.time() - news_fetch_start) * 1000
         logger.info(f"[NEWS-API] Fetched {len(news_articles) if news_articles else 0} articles in {news_fetch_elapsed:.0f}ms")
 
-        # Preserve the original format for raw_feed (with ticker_sentiment arrays)
-        import copy
         raw_feed = copy.deepcopy(news_articles) if news_articles else []
-
-        # Extract ticker-specific sentiment from ticker_sentiment array for processing
-        # This is needed because preserve_all_tickers=True returns array format
-        if news_articles:
-            for article in news_articles:
-                if "ticker_sentiment" in article and isinstance(article["ticker_sentiment"], list):
-                    # Find the sentiment for the queried ticker
-                    for ts in article["ticker_sentiment"]:
-                        if ts.get("ticker", "").upper() == ticker.upper():
-                            # Extract sentiment data to root level for sentiment service
-                            article["ticker_sentiment_score"] = float(ts.get("ticker_sentiment_score", 0.0))
-                            article["ticker_sentiment_label"] = ts.get("ticker_sentiment_label", "Neutral")
-                            article["ticker_relevance_score"] = float(ts.get("relevance_score", 0.0))
-                            break
 
         if not news_articles:
             score_defs = get_score_definitions()
             return {
-                "ticker": ticker, 
-                "news": [], 
+                "ticker": ticker,
+                "news": [],
                 "feed": raw_feed,
                 "items": str(len(raw_feed)),
-                "avg_score": 0, 
+                "avg_score": 0,
                 **score_defs
             }
 
-        # Analyze sentiment WITH MOMENTUM - this includes fast/slow scores and momentum calculation
+        # Extract ticker-specific sentiment for sentiment service processing
+        _extract_ticker_sentiment(news_articles, ticker)
+
+        # Analyze sentiment with momentum
         sentiment_results = sentiment_service.analyze_sentiment_with_momentum(news_articles)
         articles_with_sentiment = sentiment_results.get("articles_with_sentiment", [])
 
-        # Format news for frontend - use field names that match frontend expectations
-        formatted_news = []
-        for article in articles_with_sentiment:
-            news_item = {
-                "title": article.get("title", ""),  # Frontend expects "title"
-                "provider": article.get("source_domain", article.get("provider", "Unknown")),  # Try source_domain first, fallback to provider
-                "sentiment_score": article.get("sentiment_score_raw", 0),  # Frontend expects "sentiment_score"
-                "sentiment_label": article.get("sentiment_label", "Neutral"),  # Bullish/Bearish format
-                "link": article.get("link", ""),
-                "publish_date": article.get("publish_date", ""),
-                "publish_timestamp": article.get("publish_timestamp", ""),  # Add full timestamp
-                "image": article.get("banner_image", article.get("image", ""))  # Try banner_image first, fallback to image
-            }
+        # Format and build response
+        formatted_news = _format_news_for_frontend(articles_with_sentiment)
 
-            # Add relevance score if available
-            relevance_score = article.get("ticker_relevance_score")
-            if relevance_score is not None and relevance_score > 0:
-                news_item["relevance_score"] = relevance_score
-
-            formatted_news.append(news_item)
-
-        # Add score definitions to response
-        score_defs = get_score_definitions()
-
-        return {
-            "ticker": ticker,
-            "news": formatted_news,
-            "feed": raw_feed,  # Add raw Alpha Vantage feed
-            "items": str(len(raw_feed)),  # Number of feed items
-            "avg_score": sentiment_results.get("overall_weighted_score", 0),
-            # Add momentum fields to response
-            "sentiment_momentum": sentiment_results.get("sentiment_momentum"),
-            "fast_score": sentiment_results.get("fast_score"),
-            "slow_score": sentiment_results.get("slow_score"),
-            "momentum_label": sentiment_results.get("momentum_label"),
-            "momentum_interpretation": sentiment_results.get("momentum_interpretation"),
-            "momentum_quality": sentiment_results.get("momentum_quality"),
-            "momentum_direction": sentiment_results.get("momentum_direction"),
-            "momentum_strength": sentiment_results.get("momentum_strength"),
-            "half_life_fast_hours": sentiment_results.get("half_life_fast_hours"),
-            "half_life_slow_hours": sentiment_results.get("half_life_slow_hours"),
-            "data_quality": sentiment_results.get("data_quality"),
-            # Add volatility fields to response
-            "sentiment_volatility": sentiment_results.get("sentiment_volatility"),
-            "volatility_quality": sentiment_results.get("volatility_quality"),
-            # Add effective news volume (quantity metric)
-            "effective_news_volume": sentiment_results.get("effective_news_volume"),
-            "volume_interpretation": sentiment_results.get("volume_interpretation"),
-            # Add breadth metrics (bull/bear ratio)
-            "sentiment_breadth_score": sentiment_results.get("sentiment_breadth_score"),
-            "num_bullish_articles": sentiment_results.get("num_bullish_articles"),
-            "num_bearish_articles": sentiment_results.get("num_bearish_articles"),
-            "total_directional_articles": sentiment_results.get("total_directional_articles"),
-            "breadth_interpretation": sentiment_results.get("breadth_interpretation"),
-            "breadth_quality": sentiment_results.get("breadth_quality"),
-            # Add Z-Score metrics (sentiment shock)
-            "sentiment_z_score": sentiment_results.get("sentiment_z_score"),
-            "z_score_interpretation": sentiment_results.get("z_score_interpretation"),
-            "z_score_historical_mean": sentiment_results.get("z_score_historical_mean"),
-            "z_score_historical_std": sentiment_results.get("z_score_historical_std"),
-            "z_score_days_of_history": sentiment_results.get("z_score_days_of_history"),
-            "z_score_quality": sentiment_results.get("z_score_quality"),
-            # Add Source & Topic Analysis metrics
-            "source_concentration_hhi": sentiment_results.get("source_concentration_hhi"),
-            "concentration_interpretation": sentiment_results.get("concentration_interpretation"),
-            "top_sources": sentiment_results.get("top_sources", []),
-            "dominant_topic": sentiment_results.get("dominant_topic"),
-            "dominant_topic_weight": sentiment_results.get("dominant_topic_weight"),
-            "dominant_topic_percentage": sentiment_results.get("dominant_topic_percentage"),
-            "topic_count": sentiment_results.get("topic_count", 0),
-            "sentiment_by_topic": sentiment_results.get("sentiment_by_topic", {}),
-            "topic_weights": sentiment_results.get("topic_weights", {}),
-            **score_defs
-        }
+        return _build_news_response(ticker, formatted_news, raw_feed, sentiment_results)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {str(e)}")
