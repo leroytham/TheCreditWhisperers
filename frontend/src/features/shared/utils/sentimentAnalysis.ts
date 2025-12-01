@@ -5,6 +5,8 @@
  * Used by sentiment components for metrics and insights
  */
 
+import { SENTIMENT_THRESHOLDS } from '../../../config/constants';
+
 // Interfaces for sentiment analysis
 export interface SentimentDataPoint {
   sentiment?: number;
@@ -92,20 +94,20 @@ export const calculateDistribution = (data: SentimentDataPoint[]): DistributionR
   // 0.15 <= x < 0.35: Somewhat-Bullish
   // x >= 0.35: Bullish
 
-  const bearishCount = data.filter(d => (d.sentiment || 0) < -0.35).length;
+  const bearishCount = data.filter(d => (d.sentiment || 0) < SENTIMENT_THRESHOLDS.BEARISH).length;
   const somewhatBearishCount = data.filter(d => {
     const s = d.sentiment || 0;
-    return s >= -0.35 && s < -0.15;
+    return s >= SENTIMENT_THRESHOLDS.BEARISH && s < SENTIMENT_THRESHOLDS.NEUTRAL_LOWER;
   }).length;
   const neutralCount = data.filter(d => {
     const s = d.sentiment || 0;
-    return s >= -0.15 && s < 0.15;
+    return s >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER && s < SENTIMENT_THRESHOLDS.NEUTRAL_UPPER;
   }).length;
   const somewhatBullishCount = data.filter(d => {
     const s = d.sentiment || 0;
-    return s >= 0.15 && s < 0.35;
+    return s >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH && s < SENTIMENT_THRESHOLDS.BULLISH;
   }).length;
-  const bullishCount = data.filter(d => (d.sentiment || 0) >= 0.35).length;
+  const bullishCount = data.filter(d => (d.sentiment || 0) >= SENTIMENT_THRESHOLDS.BULLISH).length;
 
   const total = data.length;
 
@@ -165,16 +167,16 @@ export const calculateOverallSentiment = (data: SentimentDataPoint[]): OverallSe
 
   // Classify sentiment
   let label, color;
-  if (avgScore >= 0.35) {
+  if (avgScore >= SENTIMENT_THRESHOLDS.BULLISH) {
     label = 'Bullish';
     color = 'green';
-  } else if (avgScore >= 0.15) {
+  } else if (avgScore >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) {
     label = 'Somewhat Bullish';
     color = 'yellow';
-  } else if (avgScore >= -0.15) {
+  } else if (avgScore >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) {
     label = 'Neutral';
     color = 'gray';
-  } else if (avgScore >= -0.35) {
+  } else if (avgScore >= SENTIMENT_THRESHOLDS.BEARISH) {
     label = 'Somewhat Bearish';
     color = 'yellow';
   } else {
@@ -267,10 +269,10 @@ export const generateSentimentInsights = (
  * Format sentiment score for display
  */
 export const formatSentimentLabel = (score: number): string => {
-  if (score >= 0.35) return 'Bullish';
-  if (score >= 0.15) return 'Somewhat Bullish';
-  if (score >= -0.15) return 'Neutral';
-  if (score >= -0.35) return 'Somewhat Bearish';
+  if (score >= SENTIMENT_THRESHOLDS.BULLISH) return 'Bullish';
+  if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'Somewhat Bullish';
+  if (score >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'Neutral';
+  if (score >= SENTIMENT_THRESHOLDS.BEARISH) return 'Somewhat Bearish';
   return 'Bearish';
 };
 
@@ -278,10 +280,10 @@ export const formatSentimentLabel = (score: number): string => {
  * Get sentiment color for a given score
  */
 export const getSentimentColorByScore = (score: number): string => {
-  if (score >= 0.35) return 'green';
-  if (score >= 0.15) return 'yellow';
-  if (score >= -0.15) return 'gray';
-  if (score >= -0.35) return 'yellow';
+  if (score >= SENTIMENT_THRESHOLDS.BULLISH) return 'green';
+  if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'yellow';
+  if (score >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'gray';
+  if (score >= SENTIMENT_THRESHOLDS.BEARISH) return 'yellow';
   return 'red';
 };
 

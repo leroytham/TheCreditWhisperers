@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X, ExternalLink, TrendingUp, BarChart3 } from 'lucide-react';
+import { SENTIMENT_THRESHOLDS } from '../../../config/constants';
 
 interface TickerSentimentItem {
   ticker: string;
@@ -94,10 +95,10 @@ const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
 
   const getSentimentColor = (score: number | undefined): string => {
     if (score === undefined) return 'text-gray-600 bg-gray-50 border-gray-200';
-    if (score >= 0.35) return 'text-green-600 bg-green-50 border-green-200';
-    if (score >= 0.15) return 'text-lime-600 bg-lime-50 border-lime-200';
-    if (score > -0.15) return 'text-gray-600 bg-gray-50 border-gray-200';
-    if (score > -0.35) return 'text-orange-600 bg-orange-50 border-orange-200';
+    if (score >= SENTIMENT_THRESHOLDS.BULLISH) return 'text-green-600 bg-green-50 border-green-200';
+    if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'text-lime-600 bg-lime-50 border-lime-200';
+    if (score > SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'text-gray-600 bg-gray-50 border-gray-200';
+    if (score > SENTIMENT_THRESHOLDS.BEARISH) return 'text-orange-600 bg-orange-50 border-orange-200';
     return 'text-red-600 bg-red-50 border-red-200';
   };
 

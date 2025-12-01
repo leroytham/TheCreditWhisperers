@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronUp, TrendingUp, BarChart3 } from 'lucide-react';
 import SentimentBadge from './SentimentBadge';
 import { formatRelativeTime } from '../utils/dateFormatters';
+import { SENTIMENT_THRESHOLDS } from '../../../config/constants';
 
 // Type definitions
 interface TopicItem {
@@ -78,10 +79,10 @@ const DetailedNewsCard: React.FC<DetailedNewsCardProps> = ({
   const getSentimentColor = (score: number | string): string => {
     const numScore = typeof score === 'string' ? parseFloat(score) : score;
     if (isNaN(numScore)) return 'text-gray-600 bg-gray-50 border-gray-200';
-    if (numScore >= 0.35) return 'text-green-600 bg-green-50 border-green-200';
-    if (numScore >= 0.15) return 'text-lime-600 bg-lime-50 border-lime-200';
-    if (numScore > -0.15) return 'text-gray-600 bg-gray-50 border-gray-200';
-    if (numScore > -0.35) return 'text-orange-600 bg-orange-50 border-orange-200';
+    if (numScore >= SENTIMENT_THRESHOLDS.BULLISH) return 'text-green-600 bg-green-50 border-green-200';
+    if (numScore >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'text-lime-600 bg-lime-50 border-lime-200';
+    if (numScore > SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'text-gray-600 bg-gray-50 border-gray-200';
+    if (numScore > SENTIMENT_THRESHOLDS.BEARISH) return 'text-orange-600 bg-orange-50 border-orange-200';
     return 'text-red-600 bg-red-50 border-red-200';
   };
 

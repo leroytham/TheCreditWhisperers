@@ -6,6 +6,7 @@ import {
   getMonthKeyInTimezone,
   getMonthStartInTimezone
 } from '../../utils/formatters';
+import { SENTIMENT_THRESHOLDS } from '../../../../config/constants';
 
 export interface SentimentHeadline {
   link?: string;
@@ -65,18 +66,18 @@ export const processAggregatedHeadlines = (
 };
 
 export const getSentimentLabel = (sentiment: number): string => {
-  if (sentiment >= 0.35) return 'Bullish';
-  if (sentiment >= 0.15) return 'Somewhat-Bullish';
-  if (sentiment >= -0.15) return 'Neutral';
-  if (sentiment >= -0.35) return 'Somewhat-Bearish';
+  if (sentiment >= SENTIMENT_THRESHOLDS.BULLISH) return 'Bullish';
+  if (sentiment >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'Somewhat-Bullish';
+  if (sentiment >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return 'Neutral';
+  if (sentiment >= SENTIMENT_THRESHOLDS.BEARISH) return 'Somewhat-Bearish';
   return 'Bearish';
 };
 
 export const getSentimentColor = (sentiment: number): string => {
-  if (sentiment >= 0.35) return '#10b981';
-  if (sentiment >= 0.15) return '#34d399';
-  if (sentiment >= -0.15) return '#9ca3af';
-  if (sentiment >= -0.35) return '#fb923c';
+  if (sentiment >= SENTIMENT_THRESHOLDS.BULLISH) return '#10b981';
+  if (sentiment >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return '#34d399';
+  if (sentiment >= SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) return '#9ca3af';
+  if (sentiment >= SENTIMENT_THRESHOLDS.BEARISH) return '#fb923c';
   return '#ef4444';
 };
 

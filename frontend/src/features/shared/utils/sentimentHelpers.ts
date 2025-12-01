@@ -8,6 +8,7 @@ import {
   ArrowDown,
   LucideIcon,
 } from 'lucide-react';
+import { SENTIMENT_THRESHOLDS } from '../../../config/constants';
 
 // Type definitions
 interface SentimentDetails {
@@ -60,28 +61,28 @@ export const getSentimentDetails = (score: number | null | undefined): Sentiment
       colorClasses: 'text-gray-600 bg-gray-100 border-gray-200',
     };
   }
-  if (score >= 0.35) {
+  if (score >= SENTIMENT_THRESHOLDS.BULLISH) {
     return {
       label: 'Bullish',
       Icon: ArrowUp,
       colorClasses: 'text-green-700 bg-green-100 border-green-200',
     };
   }
-  if (score >= 0.15) {
+  if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) {
     return {
       label: 'Somewhat-Bullish',
       Icon: ArrowUpRight,
       colorClasses: 'text-green-600 bg-green-50 border-green-100',
     };
   }
-  if (score > -0.15) {
+  if (score > SENTIMENT_THRESHOLDS.NEUTRAL_LOWER) {
     return {
       label: 'Neutral',
       Icon: ArrowRight,
       colorClasses: 'text-gray-600 bg-gray-100 border-gray-200',
     };
   }
-  if (score > -0.35) {
+  if (score > SENTIMENT_THRESHOLDS.BEARISH) {
     return {
       label: 'Somewhat-Bearish',
       Icon: ArrowDownRight,

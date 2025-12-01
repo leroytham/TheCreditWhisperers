@@ -15,6 +15,18 @@ from app.core.cache import async_cache_result
 logger = logging.getLogger(__name__)
 
 
+# Sentiment classification thresholds - centralized constants
+# Keep in sync with sentiment-service and backend/app/core/sentiment_constants.py
+BULLISH_STRONG_THRESHOLD = 0.35
+BULLISH_WEAK_THRESHOLD = 0.15
+BEARISH_WEAK_THRESHOLD = -0.15
+BEARISH_STRONG_THRESHOLD = -0.35
+
+# Momentum thresholds
+MOMENTUM_THRESHOLD_WEAK = 0.05
+MOMENTUM_THRESHOLD_STRONG = 0.15
+
+
 class PortfolioSentimentService:
     """
     Aggregates sentiment data across portfolio holdings with position weighting.
@@ -203,16 +215,16 @@ class PortfolioSentimentService:
 
             # Classify momentum
             momentum_value = aggregated["sentiment_momentum"]
-            if abs(momentum_value) < 0.05:
+            if abs(momentum_value) < MOMENTUM_THRESHOLD_WEAK:
                 aggregated["momentum_label"] = "Stable"
                 aggregated["momentum_interpretation"] = "Sentiment is stable"
-            elif momentum_value >= 0.15:
+            elif momentum_value >= MOMENTUM_THRESHOLD_STRONG:
                 aggregated["momentum_label"] = "Strong Positive Momentum"
                 aggregated["momentum_interpretation"] = "Sentiment is significantly improving"
             elif momentum_value > 0:
                 aggregated["momentum_label"] = "Weak Positive Momentum"
                 aggregated["momentum_interpretation"] = "Sentiment is slightly improving"
-            elif momentum_value <= -0.15:
+            elif momentum_value <= -MOMENTUM_THRESHOLD_STRONG:
                 aggregated["momentum_label"] = "Strong Negative Momentum"
                 aggregated["momentum_interpretation"] = "Sentiment is significantly deteriorating"
             else:

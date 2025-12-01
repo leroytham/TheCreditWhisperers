@@ -17,7 +17,12 @@ from app.core.cache import redis_cache
 logger = logging.getLogger(__name__)
 
 
-# Sentiment classification thresholds
+# Sentiment classification thresholds - centralized constants
+# These values define the boundaries for sentiment classification:
+# - BULLISH_STRONG_THRESHOLD (0.35): Strong bullish sentiment
+# - BULLISH_WEAK_THRESHOLD (0.15): Somewhat bullish sentiment
+# - BEARISH_WEAK_THRESHOLD (-0.15): Somewhat bearish sentiment
+# - BEARISH_STRONG_THRESHOLD (-0.35): Strong bearish sentiment
 BULLISH_STRONG_THRESHOLD = 0.35
 BULLISH_WEAK_THRESHOLD = 0.15
 BEARISH_WEAK_THRESHOLD = -0.15

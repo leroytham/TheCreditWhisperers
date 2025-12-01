@@ -4,13 +4,15 @@
  * Functions for getting colors based on sentiment, price changes, etc.
  */
 
+import { SENTIMENT_THRESHOLDS } from '../../../config/constants';
+
 /**
  * Get sentiment text color class
  */
 export const getSentimentColor = (score: number | null | undefined): string => {
   if (score == null) return 'text-gray-600';
-  if (score >= 0.15) return 'text-green-600';
-  if (score <= -0.15) return 'text-red-600';
+  if (score >= SENTIMENT_THRESHOLDS.SOMEWHAT_BULLISH) return 'text-green-600';
+  if (score <= SENTIMENT_THRESHOLDS.SOMEWHAT_BEARISH) return 'text-red-600';
   return 'text-gray-600';
 };
 
